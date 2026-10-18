@@ -22,8 +22,9 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Accept Pre-installed Android SDK Licenses
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
 
       - name: Generate Complete PlayNova Project Structure
         run: |
@@ -32,7 +33,6 @@ jobs:
           mkdir -p app/src/main/res/drawable
           mkdir -p app/src/main/res/xml
 
-          # 1. settings.gradle.kts
           cat << 'EOF' > settings.gradle.kts
           pluginManagement {
               repositories {
@@ -52,7 +52,6 @@ jobs:
           include(":app")
           EOF
 
-          # 2. Root build.gradle.kts
           cat << 'EOF' > build.gradle.kts
           plugins {
               id("com.android.application") version "8.2.2" apply false
@@ -60,7 +59,6 @@ jobs:
           }
           EOF
 
-          # 3. gradle.properties
           cat << 'EOF' > gradle.properties
           org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
           android.useAndroidX=true
@@ -68,7 +66,6 @@ jobs:
           kotlin.code.style=official
           EOF
 
-          # 4. app/build.gradle.kts (Optimized for Redmi 9 Prime / Helio G80 arm64-v8a)
           cat << 'EOF' > app/build.gradle.kts
           plugins {
               id("com.android.application")
@@ -87,7 +84,6 @@ jobs:
                   versionName = "1.0.0-HelioG80"
 
                   ndk {
-                      // Redmi 9 Prime uses MediaTek Helio G80 (64-bit ARM)
                       abiFilters.add("arm64-v8a")
                       abiFilters.add("armeabi-v7a")
                   }
@@ -129,7 +125,6 @@ jobs:
               implementation("androidx.compose.material3:material3")
               implementation("androidx.compose.material:material-icons-extended")
 
-              // Media3 ExoPlayer - Hardware + Software Fallback for Redmi 9 Prime
               val media3Version = "1.3.0"
               implementation("androidx.media3:media3-exoplayer:$media3Version")
               implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
@@ -138,13 +133,11 @@ jobs:
               implementation("androidx.media3:media3-session:$media3Version")
               implementation("androidx.media3:media3-common:$media3Version")
 
-              // Coil for fast video thumbnail loading
               implementation("io.coil-kt:coil-compose:2.6.0")
               implementation("io.coil-kt:coil-video:2.6.0")
           }
           EOF
 
-          # 5. AndroidManifest.xml
           cat << 'EOF' > app/src/main/AndroidManifest.xml
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
@@ -203,7 +196,6 @@ jobs:
           import android.provider.MediaStore
           import android.util.Rational
           import android.view.ViewGroup
-          import android.view.WindowManager
           import android.widget.FrameLayout
           import androidx.activity.ComponentActivity
           import androidx.activity.compose.BackHandler
@@ -241,11 +233,9 @@ jobs:
           import androidx.compose.ui.unit.sp
           import androidx.compose.ui.viewinterop.AndroidView
           import androidx.core.content.ContextCompat
-          import androidx.media3.common.C
           import androidx.media3.common.MediaItem
           import androidx.media3.common.PlaybackException
           import androidx.media3.common.Player
-          import androidx.media3.common.Tracks
           import androidx.media3.common.util.UnstableApi
           import androidx.media3.exoplayer.DefaultLoadControl
           import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -254,11 +244,8 @@ jobs:
           import androidx.media3.ui.AspectRatioFrameLayout
           import androidx.media3.ui.PlayerView
           import kotlinx.coroutines.delay
-          import kotlinx.coroutines.launch
-          import java.io.File
           import kotlin.math.abs
 
-          // --- DATA MODELS ---
           data class VideoItem(
               val id: Long,
               val uri: Uri,
@@ -275,7 +262,6 @@ jobs:
               val videoIds: MutableList<Long> = mutableListOf()
           )
 
-          // --- THEME COLORS (PlayNova Electric Purple & Deep Charcoal) ---
           val BgDark = Color(0xFF0B0C10)
           val SurfaceCard = Color(0xFF161821)
           val ElectricPurple = Color(0xFF8B5CF6)
@@ -338,19 +324,16 @@ jobs:
                   mutableStateOf(listOf(Playlist("Watch Later"), Playlist("Movies"), Playlist("Music Videos")))
               }
 
-              // Navigation & UI state
-              var currentTab by remember { mutableStateOf(0) } // 0:Home, 1:Videos, 2:Folders, 3:Playlists, 4:Settings
+              var currentTab by remember { mutableStateOf(0) }
               var selectedFolder by remember { mutableStateOf<String?>(null) }
               var searchQuery by remember { mutableStateOf("") }
               var isSearchActive by remember { mutableStateOf(false) }
               var isGridView by remember { mutableStateOf(true) }
-              var sortOption by remember { mutableStateOf("Date") } // Name, Date, Duration, Size
+              var sortOption by remember { mutableStateOf("Date") }
 
-              // Active Playback State
               var activeVideo by remember { mutableStateOf<VideoItem?>(null) }
               var isMiniPlayer by remember { mutableStateOf(false) }
 
-              // Settings State
               var defaultSpeed by remember { mutableStateOf(prefs.getFloat("default_speed", 1.0f)) }
               var resumePlayback by remember { mutableStateOf(prefs.getBoolean("resume_playback", true)) }
               var doubleTapSeekSec by remember { mutableStateOf(prefs.getInt("seek_sec", 10)) }
@@ -379,7 +362,6 @@ jobs:
                   isMiniPlayer = false
               }
 
-              // Fullscreen Player Overlay
               if (activeVideo != null && !isMiniPlayer) {
                   AdvancedVideoPlayerScreen(
                       video = activeVideo!!,
@@ -443,7 +425,6 @@ jobs:
                               }
                           }
                       } else {
-                          // Search Bar
                           Row(
                               modifier = Modifier
                                   .fillMaxWidth()
@@ -471,7 +452,6 @@ jobs:
                   },
                   bottomBar = {
                       Column {
-                          // Mini-Player Bar
                           if (activeVideo != null && isMiniPlayer) {
                               Surface(
                                   color = Color(0xFF1E2230),
@@ -647,7 +627,6 @@ jobs:
                   contentPadding = PaddingValues(16.dp),
                   verticalArrangement = Arrangement.spacedBy(20.dp)
               ) {
-                  // Quick Access Cards
                   item {
                       Row(
                           modifier = Modifier.fillMaxWidth(),
@@ -659,7 +638,6 @@ jobs:
                       }
                   }
 
-                  // Continue Watching
                   val historyVideos = historyIds.mapNotNull { id -> videos.find { it.id == id } }
                   if (historyVideos.isNotEmpty()) {
                       item {
@@ -712,7 +690,6 @@ jobs:
                       }
                   }
 
-                  // Recently Added
                   item {
                       Text("Recently Added", fontSize = 18.sp, fontWeight = FontWeight.Bold)
                   }
@@ -1081,9 +1058,6 @@ jobs:
               }
           }
 
-          // =========================================================================
-          // 5. ADVANCED VIDEO PLAYER SCREEN (Full Gestures, Hardware+SW Fallback, PiP)
-          // =========================================================================
           @OptIn(UnstableApi::class)
           @Composable
           fun AdvancedVideoPlayerScreen(
@@ -1104,10 +1078,9 @@ jobs:
               val context = LocalContext.current
               val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
 
-              // Configure RenderersFactory specifically for MediaTek Helio G80 (Redmi 9 Prime)
               val exoPlayer = remember(video.uri) {
                   val renderersFactory = DefaultRenderersFactory(context)
-                      .setEnableDecoderFallback(true) // Crucial for Redmi 9 Prime MKV/HEVC stability
+                      .setEnableDecoderFallback(true)
                       .setExtensionRendererMode(
                           if (hwPriority) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
                           else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
@@ -1150,7 +1123,6 @@ jobs:
               var abStart by remember { mutableStateOf<Long?>(null) }
               var abEnd by remember { mutableStateOf<Long?>(null) }
 
-              // Track position & save progress
               LaunchedEffect(exoPlayer) {
                   while (true) {
                       currentPosition = exoPlayer.currentPosition
@@ -1158,7 +1130,6 @@ jobs:
                       isPlaying = exoPlayer.isPlaying
                       prefs.edit().putLong("pos_${video.id}", currentPosition).apply()
 
-                      // A-B Repeat check
                       if (abStart != null && abEnd != null && currentPosition >= abEnd!!) {
                           exoPlayer.seekTo(abStart!!)
                       }
@@ -1166,7 +1137,6 @@ jobs:
                   }
               }
 
-              // Listener for Decoder Errors
               DisposableEffect(exoPlayer) {
                   val listener = object : Player.Listener {
                       override fun onPlayerError(error: PlaybackException) {
@@ -1188,7 +1158,6 @@ jobs:
               }
 
               Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
-                  // Video Surface
                   AndroidView(
                       factory = { ctx ->
                           PlayerView(ctx).apply {
@@ -1209,7 +1178,6 @@ jobs:
                       modifier = Modifier.fillMaxSize()
                   )
 
-                  // Gesture Detector Layer (Double-tap seek, Long-press 2x speed, Swipe Volume/Brightness/Seek)
                   if (!isLocked) {
                       Box(
                           modifier = Modifier
@@ -1253,13 +1221,11 @@ jobs:
                                           val dy = dragAmount.y
 
                                           if (abs(dx) > abs(dy)) {
-                                              // Horizontal Seek
                                               val deltaMs = (dx * 150).toLong()
                                               val nextPos = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, duration)
                                               exoPlayer.seekTo(nextPos)
                                               gestureStatusText = "Seek: ${formatDuration(nextPos)}"
                                           } else {
-                                              // Vertical Brightness (Left) or Volume (Right)
                                               if (change.position.x < w / 2) {
                                                   val lp = activity.window.attributes
                                                   val currentB = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
@@ -1283,13 +1249,11 @@ jobs:
                               }
                       )
                   } else {
-                      // Locked Mode Tap
                       Box(
                           modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
                       )
                   }
 
-                  // Auto clear gesture indicator
                   LaunchedEffect(gestureStatusText) {
                       if (gestureStatusText != null && !gestureStatusText!!.contains("2.0x")) {
                           delay(900)
@@ -1297,7 +1261,6 @@ jobs:
                       }
                   }
 
-                  // Center Gesture Badge
                   if (gestureStatusText != null) {
                       Surface(
                           color = Color.Black.copy(alpha = 0.75f),
@@ -1314,7 +1277,6 @@ jobs:
                       }
                   }
 
-                  // Decoder Alert Banner
                   if (decoderErrorText != null) {
                       Surface(
                           color = Color(0xFFB91C1C).copy(alpha = 0.9f),
@@ -1325,7 +1287,6 @@ jobs:
                       }
                   }
 
-                  // Locked Screen Button Only
                   if (isLocked && showControls) {
                       IconButton(
                           onClick = { isLocked = false },
@@ -1338,7 +1299,6 @@ jobs:
                       }
                   }
 
-                  // Full Player Overlay Controls
                   AnimatedVisibility(
                       visible = showControls && !isLocked,
                       enter = fadeIn(),
@@ -1349,7 +1309,6 @@ jobs:
                               .fillMaxSize()
                               .background(Color.Black.copy(alpha = 0.45f))
                       ) {
-                          // TOP BAR
                           Row(
                               modifier = Modifier
                                   .fillMaxWidth()
@@ -1385,7 +1344,6 @@ jobs:
                               }
                           }
 
-                          // CENTER PLAY/PAUSE & SEEK CONTROLS
                           Row(
                               modifier = Modifier.align(Alignment.Center),
                               horizontalArrangement = Arrangement.spacedBy(28.dp),
@@ -1437,7 +1395,6 @@ jobs:
                               }
                           }
 
-                          // BOTTOM TIMELINE & QUICK ACTIONS
                           Column(
                               modifier = Modifier
                                   .fillMaxWidth()
@@ -1512,7 +1469,6 @@ jobs:
                       }
                   }
 
-                  // PLAYBACK SETTINGS BOTTOM SHEET (Audio Tracks, Subtitles, A-B Repeat, Speed)
                   if (showSettingsSheet) {
                       AlertDialog(
                           onDismissRequest = { showSettingsSheet = false },
@@ -1565,7 +1521,6 @@ jobs:
               }
           }
 
-          // --- MEDIASTORE SCANNER ---
           fun loadDeviceVideos(context: Context): List<VideoItem> {
               val list = mutableListOf<VideoItem>()
               val projection = arrayOf(
@@ -1642,7 +1597,7 @@ jobs:
           gradle assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk PlayNova-v1.0.${{ github.run_number }}-Redmi9Prime.apk
 
-      - name: Upload APK directly to GitHub Releases (Zero Artifacts Storage Used!)
+      - name: Upload APK directly to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v1.0.${{ github.run_number }}
@@ -1651,14 +1606,6 @@ jobs:
             ### 🚀 PlayNova Next-Gen Video Player
             - **Target Device:** Optimized for Redmi 9 Prime (MediaTek Helio G80 `arm64-v8a`)
             - **Decoder Engine:** Media3 ExoPlayer with Hardware Acceleration + Automatic Software Fallback (`setEnableDecoderFallback(true)`)
-            - **Features Included:**
-              - Electric Purple & Deep Charcoal Dark UI
-              - Home Dashboard (Continue Watching with progress bars, Recently Added)
-              - All Videos (Grid/List toggle, Sort by Date, Name, Duration, Size)
-              - Folder Browser & Custom Playlists + Favorites
-              - Full Gesture Controls (Double-tap seek, Vertical Volume/Brightness swipe, Horizontal seek, Long-press 2x speed)
-              - In-App Mini-Player & System Picture-in-Picture (PiP)
-              - A-B Repeat & Screen Lock
           files: PlayNova-v1.0.${{ github.run_number }}-Redmi9Prime.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
