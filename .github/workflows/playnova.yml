@@ -1,0 +1,1664 @@
+name: Build PlayNova & Publish to Releases
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate Complete PlayNova Project Structure
+        run: |
+          mkdir -p app/src/main/java/com/playnova/player
+          mkdir -p app/src/main/res/values
+          mkdir -p app/src/main/res/drawable
+          mkdir -p app/src/main/res/xml
+
+          # 1. settings.gradle.kts
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PlayNova"
+          include(":app")
+          EOF
+
+          # 2. Root build.gradle.kts
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.2.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+          }
+          EOF
+
+          # 3. gradle.properties
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          android.nonTransitiveRClass=true
+          kotlin.code.style=official
+          EOF
+
+          # 4. app/build.gradle.kts (Optimized for Redmi 9 Prime / Helio G80 arm64-v8a)
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+
+          android {
+              namespace = "com.playnova.player"
+              compileSdk = 34
+
+              defaultConfig {
+                  applicationId = "com.playnova.player"
+                  minSdk = 24
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "1.0.0-HelioG80"
+
+                  ndk {
+                      // Redmi 9 Prime uses MediaTek Helio G80 (64-bit ARM)
+                      abiFilters.add("arm64-v8a")
+                      abiFilters.add("armeabi-v7a")
+                  }
+              }
+
+              buildTypes {
+                  release {
+                      isMinifyEnabled = false
+                      signingConfig = signingConfigs.getByName("debug")
+                  }
+              }
+
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+
+              buildFeatures {
+                  compose = true
+              }
+
+              composeOptions {
+                  kotlinCompilerExtensionVersion = "1.5.10"
+              }
+          }
+
+          dependencies {
+              val composeBom = platform("androidx.compose:compose-bom:2024.02.01")
+              implementation(composeBom)
+              implementation("androidx.core:core-ktx:1.12.0")
+              implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+              implementation("androidx.activity:activity-compose:1.8.2")
+              implementation("androidx.compose.ui:ui")
+              implementation("androidx.compose.ui:ui-graphics")
+              implementation("androidx.compose.material3:material3")
+              implementation("androidx.compose.material:material-icons-extended")
+
+              // Media3 ExoPlayer - Hardware + Software Fallback for Redmi 9 Prime
+              val media3Version = "1.3.0"
+              implementation("androidx.media3:media3-exoplayer:$media3Version")
+              implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
+              implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+              implementation("androidx.media3:media3-ui:$media3Version")
+              implementation("androidx.media3:media3-session:$media3Version")
+              implementation("androidx.media3:media3-common:$media3Version")
+
+              // Coil for fast video thumbnail loading
+              implementation("io.coil-kt:coil-compose:2.6.0")
+              implementation("io.coil-kt:coil-video:2.6.0")
+          }
+          EOF
+
+          # 5. AndroidManifest.xml
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
+              <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+              <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+              <application
+                  android:allowBackup="true"
+                  android:label="PlayNova"
+                  android:supportsRtl="true"
+                  android:hardwareAccelerated="true"
+                  android:largeHeap="true"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:supportsPictureInPicture="true"
+                      android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboardHidden">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                      <intent-filter>
+                          <action android:name="android.intent.action.VIEW" />
+                          <category android:name="android.intent.category.DEFAULT" />
+                          <category android:name="android.intent.category.BROWSABLE" />
+                          <data android:scheme="content" />
+                          <data android:scheme="file" />
+                          <data android:mimeType="video/*" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+      - name: Generate PlayNova Kotlin Source Code
+        run: |
+          cat << 'EOF' > app/src/main/java/com/playnova/player/MainActivity.kt
+          package com.playnova.player
+
+          import android.Manifest
+          import android.app.Activity
+          import android.app.PictureInPictureParams
+          import android.content.ContentUris
+          import android.content.Context
+          import android.content.pm.ActivityInfo
+          import android.content.pm.PackageManager
+          import android.media.AudioManager
+          import android.net.Uri
+          import android.os.Build
+          import android.os.Bundle
+          import android.provider.MediaStore
+          import android.util.Rational
+          import android.view.ViewGroup
+          import android.view.WindowManager
+          import android.widget.FrameLayout
+          import androidx.activity.ComponentActivity
+          import androidx.activity.compose.BackHandler
+          import androidx.activity.compose.rememberLauncherForActivityResult
+          import androidx.activity.compose.setContent
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.annotation.OptIn
+          import androidx.compose.animation.*
+          import androidx.compose.foundation.*
+          import androidx.compose.foundation.gestures.detectDragGestures
+          import androidx.compose.foundation.gestures.detectTapGestures
+          import androidx.compose.foundation.layout.*
+          import androidx.compose.foundation.lazy.LazyColumn
+          import androidx.compose.foundation.lazy.LazyRow
+          import androidx.compose.foundation.lazy.grid.GridCells
+          import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+          import androidx.compose.foundation.lazy.grid.items
+          import androidx.compose.foundation.lazy.items
+          import androidx.compose.foundation.shape.CircleShape
+          import androidx.compose.foundation.shape.RoundedCornerShape
+          import androidx.compose.material.icons.Icons
+          import androidx.compose.material.icons.filled.*
+          import androidx.compose.material3.*
+          import androidx.compose.runtime.*
+          import androidx.compose.ui.Alignment
+          import androidx.compose.ui.Modifier
+          import androidx.compose.ui.draw.clip
+          import androidx.compose.ui.graphics.Brush
+          import androidx.compose.ui.graphics.Color
+          import androidx.compose.ui.input.pointer.pointerInput
+          import androidx.compose.ui.platform.LocalContext
+          import androidx.compose.ui.text.font.FontWeight
+          import androidx.compose.ui.text.style.TextOverflow
+          import androidx.compose.ui.unit.dp
+          import androidx.compose.ui.unit.sp
+          import androidx.compose.ui.viewinterop.AndroidView
+          import androidx.core.content.ContextCompat
+          import androidx.media3.common.C
+          import androidx.media3.common.MediaItem
+          import androidx.media3.common.PlaybackException
+          import androidx.media3.common.Player
+          import androidx.media3.common.Tracks
+          import androidx.media3.common.util.UnstableApi
+          import androidx.media3.exoplayer.DefaultLoadControl
+          import androidx.media3.exoplayer.DefaultRenderersFactory
+          import androidx.media3.exoplayer.ExoPlayer
+          import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
+          import androidx.media3.ui.AspectRatioFrameLayout
+          import androidx.media3.ui.PlayerView
+          import kotlinx.coroutines.delay
+          import kotlinx.coroutines.launch
+          import java.io.File
+          import kotlin.math.abs
+
+          // --- DATA MODELS ---
+          data class VideoItem(
+              val id: Long,
+              val uri: Uri,
+              val title: String,
+              val folderName: String,
+              val duration: Long,
+              val size: Long,
+              val resolution: String,
+              val dateAdded: Long
+          )
+
+          data class Playlist(
+              val name: String,
+              val videoIds: MutableList<Long> = mutableListOf()
+          )
+
+          // --- THEME COLORS (PlayNova Electric Purple & Deep Charcoal) ---
+          val BgDark = Color(0xFF0B0C10)
+          val SurfaceCard = Color(0xFF161821)
+          val ElectricPurple = Color(0xFF8B5CF6)
+          val VibrantBlue = Color(0xFF3B82F6)
+          val TextWhite = Color(0xFFF3F4F6)
+          val TextGray = Color(0xFF9CA3AF)
+
+          class MainActivity : ComponentActivity() {
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+                  setContent {
+                      PlayNovaTheme {
+                          PlayNovaApp(activity = this)
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun PlayNovaTheme(content: @Composable () -> Unit) {
+              val colorScheme = darkColorScheme(
+                  primary = ElectricPurple,
+                  secondary = VibrantBlue,
+                  background = BgDark,
+                  surface = SurfaceCard,
+                  onPrimary = Color.White,
+                  onBackground = TextWhite,
+                  onSurface = TextWhite
+              )
+              MaterialTheme(colorScheme = colorScheme, content = content)
+          }
+
+          @Composable
+          fun PlayNovaApp(activity: Activity) {
+              val context = LocalContext.current
+              val prefs = remember { context.getSharedPreferences("playnova_prefs", Context.MODE_PRIVATE) }
+
+              var hasPermission by remember {
+                  mutableStateOf(
+                      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                          ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED
+                      } else {
+                          ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                      }
+                  )
+              }
+
+              val permissionLauncher = rememberLauncherForActivityResult(
+                  ActivityResultContracts.RequestPermission()
+              ) { granted -> hasPermission = granted }
+
+              var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
+              var favoriteIds by remember {
+                  mutableStateOf(prefs.getStringSet("favorites", emptySet())?.mapNotNull { it.toLongOrNull() }?.toSet() ?: emptySet())
+              }
+              var historyIds by remember {
+                  mutableStateOf(prefs.getString("history", "")?.split(",")?.mapNotNull { it.toLongOrNull() } ?: emptyList())
+              }
+              var playlists by remember {
+                  mutableStateOf(listOf(Playlist("Watch Later"), Playlist("Movies"), Playlist("Music Videos")))
+              }
+
+              // Navigation & UI state
+              var currentTab by remember { mutableStateOf(0) } // 0:Home, 1:Videos, 2:Folders, 3:Playlists, 4:Settings
+              var selectedFolder by remember { mutableStateOf<String?>(null) }
+              var searchQuery by remember { mutableStateOf("") }
+              var isSearchActive by remember { mutableStateOf(false) }
+              var isGridView by remember { mutableStateOf(true) }
+              var sortOption by remember { mutableStateOf("Date") } // Name, Date, Duration, Size
+
+              // Active Playback State
+              var activeVideo by remember { mutableStateOf<VideoItem?>(null) }
+              var isMiniPlayer by remember { mutableStateOf(false) }
+
+              // Settings State
+              var defaultSpeed by remember { mutableStateOf(prefs.getFloat("default_speed", 1.0f)) }
+              var resumePlayback by remember { mutableStateOf(prefs.getBoolean("resume_playback", true)) }
+              var doubleTapSeekSec by remember { mutableStateOf(prefs.getInt("seek_sec", 10)) }
+              var hardwareDecodePriority by remember { mutableStateOf(prefs.getBoolean("hw_decode", true)) }
+
+              LaunchedEffect(hasPermission) {
+                  if (hasPermission) {
+                      videos = loadDeviceVideos(context)
+                  }
+              }
+
+              fun saveFavorite(id: Long) {
+                  favoriteIds = if (favoriteIds.contains(id)) favoriteIds - id else favoriteIds + id
+                  prefs.edit().putStringSet("favorites", favoriteIds.map { it.toString() }.toSet()).apply()
+              }
+
+              fun addToHistory(id: Long) {
+                  val updated = (listOf(id) + historyIds.filter { it != id }).take(30)
+                  historyIds = updated
+                  prefs.edit().putString("history", updated.joinToString(",")).apply()
+              }
+
+              fun startVideo(video: VideoItem) {
+                  addToHistory(video.id)
+                  activeVideo = video
+                  isMiniPlayer = false
+              }
+
+              // Fullscreen Player Overlay
+              if (activeVideo != null && !isMiniPlayer) {
+                  AdvancedVideoPlayerScreen(
+                      video = activeVideo!!,
+                      allVideos = videos,
+                      activity = activity,
+                      prefs = prefs,
+                      resumeEnabled = resumePlayback,
+                      defaultSpeed = defaultSpeed,
+                      seekSeconds = doubleTapSeekSec,
+                      hwPriority = hardwareDecodePriority,
+                      isFavorite = favoriteIds.contains(activeVideo!!.id),
+                      onToggleFavorite = { saveFavorite(activeVideo!!.id) },
+                      onSwitchVideo = { nextVid -> startVideo(nextVid) },
+                      onMinimizeToMiniPlayer = {
+                          activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                          isMiniPlayer = true
+                      },
+                      onClosePlayer = {
+                          activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                          activeVideo = null
+                          isMiniPlayer = false
+                      }
+                  )
+                  return
+              }
+
+              Scaffold(
+                  containerColor = BgDark,
+                  topBar = {
+                      if (!isSearchActive) {
+                          Row(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .padding(horizontal = 16.dp, vertical = 14.dp),
+                              verticalAlignment = Alignment.CenterVertically,
+                              horizontalArrangement = Arrangement.SpaceBetween
+                          ) {
+                              Row(verticalAlignment = Alignment.CenterVertically) {
+                                  Box(
+                                      modifier = Modifier
+                                          .size(38.dp)
+                                          .clip(RoundedCornerShape(12.dp))
+                                          .background(Brush.linearGradient(listOf(ElectricPurple, VibrantBlue))),
+                                      contentAlignment = Alignment.Center
+                                  ) {
+                                      Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White)
+                                  }
+                                  Spacer(modifier = Modifier.width(10.dp))
+                                  Column {
+                                      Text("PlayNova", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextWhite)
+                                      Text("Helio G80 Engine Ready", fontSize = 10.sp, color = ElectricPurple)
+                                  }
+                              }
+                              Row {
+                                  IconButton(onClick = { isSearchActive = true }) {
+                                      Icon(Icons.Default.Search, contentDescription = "Search", tint = TextWhite)
+                                  }
+                                  IconButton(onClick = { if (hasPermission) videos = loadDeviceVideos(context) }) {
+                                      Icon(Icons.Default.Refresh, contentDescription = "Rescan", tint = TextWhite)
+                                  }
+                              }
+                          }
+                      } else {
+                          // Search Bar
+                          Row(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .padding(12.dp),
+                              verticalAlignment = Alignment.CenterVertically
+                          ) {
+                              OutlinedTextField(
+                                  value = searchQuery,
+                                  onValueChange = { searchQuery = it },
+                                  placeholder = { Text("Search videos, MKV, MP4...", color = TextGray) },
+                                  modifier = Modifier.weight(1f),
+                                  singleLine = true,
+                                  leadingIcon = { Icon(Icons.Default.Search, null, tint = ElectricPurple) },
+                                  trailingIcon = {
+                                      IconButton(onClick = {
+                                          searchQuery = ""
+                                          isSearchActive = false
+                                      }) {
+                                          Icon(Icons.Default.Close, null, tint = TextGray)
+                                      }
+                                  }
+                              )
+                          }
+                      }
+                  },
+                  bottomBar = {
+                      Column {
+                          // Mini-Player Bar
+                          if (activeVideo != null && isMiniPlayer) {
+                              Surface(
+                                  color = Color(0xFF1E2230),
+                                  modifier = Modifier
+                                      .fillMaxWidth()
+                                      .padding(horizontal = 8.dp, vertical = 4.dp)
+                                      .clip(RoundedCornerShape(14.dp))
+                                      .clickable { isMiniPlayer = false }
+                              ) {
+                                  Row(
+                                      modifier = Modifier.padding(12.dp),
+                                      verticalAlignment = Alignment.CenterVertically
+                                  ) {
+                                      Icon(Icons.Default.PlayCircleFilled, null, tint = ElectricPurple, modifier = Modifier.size(34.dp))
+                                      Spacer(Modifier.width(10.dp))
+                                      Column(modifier = Modifier.weight(1f)) {
+                                          Text(activeVideo!!.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                          Text("Tap to expand player", fontSize = 11.sp, color = TextGray)
+                                      }
+                                      IconButton(onClick = { activeVideo = null; isMiniPlayer = false }) {
+                                          Icon(Icons.Default.Close, null, tint = TextWhite)
+                                      }
+                                  }
+                              }
+                          }
+
+                          NavigationBar(containerColor = SurfaceCard) {
+                              val items = listOf(
+                                  Triple(0, "Home", Icons.Default.Home),
+                                  Triple(1, "Videos", Icons.Default.VideoLibrary),
+                                  Triple(2, "Folders", Icons.Default.Folder),
+                                  Triple(3, "Playlists", Icons.Default.PlaylistPlay),
+                                  Triple(4, "Settings", Icons.Default.Settings)
+                              )
+                              items.forEach { (index, label, icon) ->
+                                  NavigationBarItem(
+                                      selected = currentTab == index,
+                                      onClick = {
+                                          currentTab = index
+                                          selectedFolder = null
+                                      },
+                                      icon = { Icon(icon, contentDescription = label) },
+                                      label = { Text(label, fontSize = 11.sp) },
+                                      colors = NavigationBarItemDefaults.colors(
+                                          selectedIconColor = ElectricPurple,
+                                          selectedTextColor = ElectricPurple,
+                                          unselectedIconColor = TextGray,
+                                          unselectedTextColor = TextGray,
+                                          indicatorColor = ElectricPurple.copy(alpha = 0.15f)
+                                      )
+                                  )
+                              }
+                          }
+                      }
+                  }
+              ) { padding ->
+                  Box(modifier = Modifier.padding(padding).fillMaxSize()) {
+                      if (!hasPermission) {
+                          PermissionScreen {
+                              val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                  Manifest.permission.READ_MEDIA_VIDEO
+                              } else {
+                                  Manifest.permission.READ_EXTERNAL_STORAGE
+                              }
+                              permissionLauncher.launch(perm)
+                          }
+                      } else if (isSearchActive && searchQuery.isNotEmpty()) {
+                          val filtered = videos.filter { it.title.contains(searchQuery, ignoreCase = true) }
+                          VideoListSection(
+                              videos = filtered,
+                              isGrid = false,
+                              favoriteIds = favoriteIds,
+                              onPlay = { startVideo(it) },
+                              onToggleFav = { saveFavorite(it.id) }
+                          )
+                      } else {
+                          when (currentTab) {
+                              0 -> HomeScreen(
+                                  videos = videos,
+                                  historyIds = historyIds,
+                                  favoriteIds = favoriteIds,
+                                  prefs = prefs,
+                                  onPlay = { startVideo(it) },
+                                  onNavigateTab = { currentTab = it }
+                              )
+                              1 -> AllVideosScreen(
+                                  videos = videos,
+                                  isGrid = isGridView,
+                                  sortOption = sortOption,
+                                  favoriteIds = favoriteIds,
+                                  onToggleGrid = { isGridView = !isGridView },
+                                  onChangeSort = { sortOption = it },
+                                  onPlay = { startVideo(it) },
+                                  onToggleFav = { saveFavorite(it.id) }
+                              )
+                              2 -> FoldersScreen(
+                                  videos = videos,
+                                  selectedFolder = selectedFolder,
+                                  favoriteIds = favoriteIds,
+                                  onSelectFolder = { selectedFolder = it },
+                                  onPlay = { startVideo(it) },
+                                  onToggleFav = { saveFavorite(it.id) }
+                              )
+                              3 -> PlaylistsScreen(
+                                  videos = videos,
+                                  favoriteIds = favoriteIds,
+                                  playlists = playlists,
+                                  onCreatePlaylist = { name ->
+                                      if (name.isNotBlank()) playlists = playlists + Playlist(name)
+                                  },
+                                  onPlay = { startVideo(it) }
+                              )
+                              4 -> SettingsScreen(
+                                  defaultSpeed = defaultSpeed,
+                                  resumePlayback = resumePlayback,
+                                  doubleTapSeekSec = doubleTapSeekSec,
+                                  hardwareDecodePriority = hardwareDecodePriority,
+                                  onSpeedChange = { defaultSpeed = it; prefs.edit().putFloat("default_speed", it).apply() },
+                                  onResumeChange = { resumePlayback = it; prefs.edit().putBoolean("resume_playback", it).apply() },
+                                  onSeekSecChange = { doubleTapSeekSec = it; prefs.edit().putInt("seek_sec", it).apply() },
+                                  onHwDecodeChange = { hardwareDecodePriority = it; prefs.edit().putBoolean("hw_decode", it).apply() },
+                                  onClearHistory = {
+                                      historyIds = emptyList()
+                                      prefs.edit().remove("history").apply()
+                                  }
+                              )
+                          }
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun PermissionScreen(onRequest: () -> Unit) {
+              Column(
+                  modifier = Modifier.fillMaxSize().padding(32.dp),
+                  verticalArrangement = Arrangement.Center,
+                  horizontalAlignment = Alignment.CenterHorizontally
+              ) {
+                  Icon(Icons.Default.VideoLibrary, contentDescription = null, tint = ElectricPurple, modifier = Modifier.size(72.dp))
+                  Spacer(Modifier.height(16.dp))
+                  Text("Storage Access Required", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                  Spacer(Modifier.height(8.dp))
+                  Text(
+                      "PlayNova needs permission to scan and play local MP4, MKV, and WebM videos on your Redmi 9 Prime.",
+                      color = TextGray,
+                      fontSize = 14.sp
+                  )
+                  Spacer(Modifier.height(24.dp))
+                  Button(
+                      onClick = onRequest,
+                      colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple),
+                      shape = RoundedCornerShape(14.dp)
+                  ) {
+                      Icon(Icons.Default.FolderOpen, null)
+                      Spacer(Modifier.width(8.dp))
+                      Text("Grant Video Permission")
+                  }
+              }
+          }
+
+          @Composable
+          fun HomeScreen(
+              videos: List<VideoItem>,
+              historyIds: List<Long>,
+              favoriteIds: Set<Long>,
+              prefs: android.content.SharedPreferences,
+              onPlay: (VideoItem) -> Unit,
+              onNavigateTab: (Int) -> Unit
+          ) {
+              LazyColumn(
+                  modifier = Modifier.fillMaxSize(),
+                  contentPadding = PaddingValues(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(20.dp)
+              ) {
+                  // Quick Access Cards
+                  item {
+                      Row(
+                          modifier = Modifier.fillMaxWidth(),
+                          horizontalArrangement = Arrangement.spacedBy(12.dp)
+                      ) {
+                          QuickCard("All Videos", "${videos.size} files", Icons.Default.VideoLibrary, Modifier.weight(1f)) { onNavigateTab(1) }
+                          QuickCard("Folders", "${videos.map { it.folderName }.distinct().size} dirs", Icons.Default.Folder, Modifier.weight(1f)) { onNavigateTab(2) }
+                          QuickCard("Favorites", "${favoriteIds.size} saved", Icons.Default.Favorite, Modifier.weight(1f)) { onNavigateTab(3) }
+                      }
+                  }
+
+                  // Continue Watching
+                  val historyVideos = historyIds.mapNotNull { id -> videos.find { it.id == id } }
+                  if (historyVideos.isNotEmpty()) {
+                      item {
+                          Text("Continue Watching", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                          Spacer(Modifier.height(10.dp))
+                          LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                              items(historyVideos) { video ->
+                                  val savedPos = prefs.getLong("pos_${video.id}", 0L)
+                                  val progress = if (video.duration > 0) (savedPos.toFloat() / video.duration.toFloat()).coerceIn(0f, 1f) else 0f
+                                  Surface(
+                                      color = SurfaceCard,
+                                      shape = RoundedCornerShape(16.dp),
+                                      modifier = Modifier
+                                          .width(220.dp)
+                                          .clickable { onPlay(video) }
+                                  ) {
+                                      Column(modifier = Modifier.padding(12.dp)) {
+                                          Box(
+                                              modifier = Modifier
+                                                  .fillMaxWidth()
+                                                  .height(100.dp)
+                                                  .clip(RoundedCornerShape(12.dp))
+                                                  .background(Brush.linearGradient(listOf(Color(0xFF232738), Color(0xFF151824)))),
+                                              contentAlignment = Alignment.Center
+                                          ) {
+                                              Icon(Icons.Default.PlayCircleOutline, null, tint = ElectricPurple, modifier = Modifier.size(42.dp))
+                                              Text(
+                                                  formatDuration(video.duration),
+                                                  fontSize = 11.sp,
+                                                  modifier = Modifier
+                                                      .align(Alignment.BottomEnd)
+                                                      .padding(6.dp)
+                                                      .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                                      .padding(horizontal = 4.dp, vertical = 2.dp)
+                                              )
+                                          }
+                                          Spacer(Modifier.height(8.dp))
+                                          Text(video.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                                          Spacer(Modifier.height(6.dp))
+                                          LinearProgressIndicator(
+                                              progress = progress,
+                                              modifier = Modifier.fillMaxWidth().height(4.dp).clip(RoundedCornerShape(2.dp)),
+                                              color = ElectricPurple,
+                                              trackColor = Color.DarkGray
+                                          )
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  // Recently Added
+                  item {
+                      Text("Recently Added", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                  }
+
+                  if (videos.isEmpty()) {
+                      item {
+                          Box(modifier = Modifier.fillMaxWidth().padding(40.dp), contentAlignment = Alignment.Center) {
+                              Text("No videos found on device.", color = TextGray)
+                          }
+                      }
+                  } else {
+                      items(videos.take(15)) { video ->
+                          VideoRowCard(
+                              video = video,
+                              isFav = favoriteIds.contains(video.id),
+                              onClick = { onPlay(video) },
+                              onFavClick = {}
+                          )
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun QuickCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {
+              Surface(
+                  color = SurfaceCard,
+                  shape = RoundedCornerShape(16.dp),
+                  modifier = modifier.clickable { onClick() }
+              ) {
+                  Column(modifier = Modifier.padding(14.dp)) {
+                      Icon(icon, contentDescription = title, tint = ElectricPurple, modifier = Modifier.size(28.dp))
+                      Spacer(Modifier.height(8.dp))
+                      Text(title, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                      Text(subtitle, color = TextGray, fontSize = 11.sp)
+                  }
+              }
+          }
+
+          @Composable
+          fun AllVideosScreen(
+              videos: List<VideoItem>,
+              isGrid: Boolean,
+              sortOption: String,
+              favoriteIds: Set<Long>,
+              onToggleGrid: () -> Unit,
+              onChangeSort: (String) -> Unit,
+              onPlay: (VideoItem) -> Unit,
+              onToggleFav: (VideoItem) -> Unit
+          ) {
+              val sorted = remember(videos, sortOption) {
+                  when (sortOption) {
+                      "Name" -> videos.sortedBy { it.title.lowercase() }
+                      "Duration" -> videos.sortedByDescending { it.duration }
+                      "Size" -> videos.sortedByDescending { it.size }
+                      else -> videos.sortedByDescending { it.dateAdded }
+                  }
+              }
+
+              Column(modifier = Modifier.fillMaxSize()) {
+                  Row(
+                      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                      horizontalArrangement = Arrangement.SpaceBetween,
+                      verticalAlignment = Alignment.CenterVertically
+                  ) {
+                      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                          listOf("Date", "Name", "Duration", "Size").forEach { sort ->
+                              FilterChip(
+                                  selected = sortOption == sort,
+                                  onClick = { onChangeSort(sort) },
+                                  label = { Text(sort, fontSize = 12.sp) }
+                              )
+                          }
+                      }
+                      IconButton(onClick = onToggleGrid) {
+                          Icon(if (isGrid) Icons.Default.ViewList else Icons.Default.GridView, null, tint = ElectricPurple)
+                      }
+                  }
+                  VideoListSection(sorted, isGrid, favoriteIds, onPlay, onToggleFav)
+              }
+          }
+
+          @Composable
+          fun VideoListSection(
+              videos: List<VideoItem>,
+              isGrid: Boolean,
+              favoriteIds: Set<Long>,
+              onPlay: (VideoItem) -> Unit,
+              onToggleFav: (VideoItem) -> Unit
+          ) {
+              if (isGrid) {
+                  LazyVerticalGrid(
+                      columns = GridCells.Fixed(2),
+                      contentPadding = PaddingValues(14.dp),
+                      horizontalArrangement = Arrangement.spacedBy(12.dp),
+                      verticalArrangement = Arrangement.spacedBy(12.dp)
+                  ) {
+                      items(videos) { video ->
+                          Surface(
+                              color = SurfaceCard,
+                              shape = RoundedCornerShape(16.dp),
+                              modifier = Modifier.fillMaxWidth().clickable { onPlay(video) }
+                          ) {
+                              Column(modifier = Modifier.padding(10.dp)) {
+                                  Box(
+                                      modifier = Modifier
+                                          .fillMaxWidth()
+                                          .height(95.dp)
+                                          .clip(RoundedCornerShape(12.dp))
+                                          .background(Color(0xFF222533)),
+                                      contentAlignment = Alignment.Center
+                                  ) {
+                                      Icon(Icons.Default.Movie, null, tint = ElectricPurple, modifier = Modifier.size(36.dp))
+                                      Text(
+                                          formatDuration(video.duration),
+                                          fontSize = 10.sp,
+                                          modifier = Modifier
+                                              .align(Alignment.BottomEnd)
+                                              .padding(6.dp)
+                                              .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
+                                              .padding(horizontal = 4.dp, vertical = 2.dp)
+                                      )
+                                  }
+                                  Spacer(Modifier.height(8.dp))
+                                  Text(video.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+                                  Text("${formatSize(video.size)} • ${video.resolution}", color = TextGray, fontSize = 11.sp)
+                              }
+                          }
+                      }
+                  }
+              } else {
+                  LazyColumn(
+                      contentPadding = PaddingValues(16.dp),
+                      verticalArrangement = Arrangement.spacedBy(10.dp)
+                  ) {
+                      items(videos) { video ->
+                          VideoRowCard(video, favoriteIds.contains(video.id), { onPlay(video) }, { onToggleFav(video) })
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun VideoRowCard(video: VideoItem, isFav: Boolean, onClick: () -> Unit, onFavClick: () -> Unit) {
+              Surface(
+                  color = SurfaceCard,
+                  shape = RoundedCornerShape(16.dp),
+                  modifier = Modifier.fillMaxWidth().clickable { onClick() }
+              ) {
+                  Row(
+                      modifier = Modifier.padding(12.dp),
+                      verticalAlignment = Alignment.CenterVertically
+                  ) {
+                      Box(
+                          modifier = Modifier
+                              .size(72.dp, 52.dp)
+                              .clip(RoundedCornerShape(10.dp))
+                              .background(Color(0xFF222533)),
+                          contentAlignment = Alignment.Center
+                      ) {
+                          Icon(Icons.Default.PlayArrow, null, tint = ElectricPurple)
+                      }
+                      Spacer(Modifier.width(12.dp))
+                      Column(modifier = Modifier.weight(1f)) {
+                          Text(video.title, maxLines = 1, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                          Spacer(Modifier.height(4.dp))
+                          Text("${formatDuration(video.duration)} • ${formatSize(video.size)} • ${video.folderName}", color = TextGray, fontSize = 11.sp)
+                      }
+                      IconButton(onClick = onFavClick) {
+                          Icon(
+                              if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                              contentDescription = "Favorite",
+                              tint = if (isFav) Color(0xFFEC4899) else TextGray
+                          )
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun FoldersScreen(
+              videos: List<VideoItem>,
+              selectedFolder: String?,
+              favoriteIds: Set<Long>,
+              onSelectFolder: (String?) -> Unit,
+              onPlay: (VideoItem) -> Unit,
+              onToggleFav: (VideoItem) -> Unit
+          ) {
+              if (selectedFolder != null) {
+                  BackHandler { onSelectFolder(null) }
+                  Column(Modifier.fillMaxSize()) {
+                      Row(
+                          modifier = Modifier.fillMaxWidth().padding(12.dp),
+                          verticalAlignment = Alignment.CenterVertically
+                      ) {
+                          IconButton(onClick = { onSelectFolder(null) }) {
+                              Icon(Icons.Default.ArrowBack, null)
+                          }
+                          Text(selectedFolder, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                      }
+                      val folderVideos = videos.filter { it.folderName == selectedFolder }
+                      VideoListSection(folderVideos, false, favoriteIds, onPlay, onToggleFav)
+                  }
+              } else {
+                  val grouped = videos.groupBy { it.folderName }
+                  LazyColumn(
+                      contentPadding = PaddingValues(16.dp),
+                      verticalArrangement = Arrangement.spacedBy(10.dp)
+                  ) {
+                      items(grouped.entries.toList()) { (folder, list) ->
+                          Surface(
+                              color = SurfaceCard,
+                              shape = RoundedCornerShape(16.dp),
+                              modifier = Modifier.fillMaxWidth().clickable { onSelectFolder(folder) }
+                          ) {
+                              Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                  Icon(Icons.Default.Folder, null, tint = ElectricPurple, modifier = Modifier.size(36.dp))
+                                  Spacer(Modifier.width(14.dp))
+                                  Column(Modifier.weight(1f)) {
+                                      Text(folder, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                      Text("${list.size} videos", color = TextGray, fontSize = 12.sp)
+                                  }
+                                  Icon(Icons.Default.ChevronRight, null, tint = TextGray)
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun PlaylistsScreen(
+              videos: List<VideoItem>,
+              favoriteIds: Set<Long>,
+              playlists: List<Playlist>,
+              onCreatePlaylist: (String) -> Unit,
+              onPlay: (VideoItem) -> Unit
+          ) {
+              var newPlaylistName by remember { mutableStateOf("") }
+              val favVideos = videos.filter { favoriteIds.contains(it.id) }
+
+              LazyColumn(
+                  contentPadding = PaddingValues(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(16.dp)
+              ) {
+                  item {
+                      Row(verticalAlignment = Alignment.CenterVertically) {
+                          OutlinedTextField(
+                              value = newPlaylistName,
+                              onValueChange = { newPlaylistName = it },
+                              placeholder = { Text("New Playlist Name") },
+                              modifier = Modifier.weight(1f),
+                              singleLine = true
+                          )
+                          Spacer(Modifier.width(8.dp))
+                          Button(
+                              onClick = {
+                                  onCreatePlaylist(newPlaylistName)
+                                  newPlaylistName = ""
+                              },
+                              colors = ButtonDefaults.buttonColors(containerColor = ElectricPurple)
+                          ) {
+                              Text("Add")
+                          }
+                      }
+                  }
+
+                  item {
+                      Text("Favorites (${favVideos.size})", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                  }
+
+                  items(favVideos) { video ->
+                      VideoRowCard(video, true, { onPlay(video) }, {})
+                  }
+
+                  item {
+                      Text("Custom Playlists", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                  }
+
+                  items(playlists) { pl ->
+                      Surface(color = SurfaceCard, shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth()) {
+                          Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                              Icon(Icons.Default.QueueMusic, null, tint = VibrantBlue)
+                              Spacer(Modifier.width(12.dp))
+                              Text(pl.name, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                              Text("Ready", color = TextGray, fontSize = 12.sp)
+                          }
+                      }
+                  }
+              }
+          }
+
+          @Composable
+          fun SettingsScreen(
+              defaultSpeed: Float,
+              resumePlayback: Boolean,
+              doubleTapSeekSec: Int,
+              hardwareDecodePriority: Boolean,
+              onSpeedChange: (Float) -> Unit,
+              onResumeChange: (Boolean) -> Unit,
+              onSeekSecChange: (Int) -> Unit,
+              onHwDecodeChange: (Boolean) -> Unit,
+              onClearHistory: () -> Unit
+          ) {
+              LazyColumn(
+                  contentPadding = PaddingValues(16.dp),
+                  verticalArrangement = Arrangement.spacedBy(14.dp)
+              ) {
+                  item { Text("Playback & Decoder (Redmi 9 Prime)", color = ElectricPurple, fontWeight = FontWeight.Bold) }
+
+                  item {
+                      Surface(color = SurfaceCard, shape = RoundedCornerShape(16.dp)) {
+                          Column(Modifier.padding(16.dp)) {
+                              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                  Column(Modifier.weight(1f)) {
+                                      Text("Helio G80 Hardware + SW Fallback", fontWeight = FontWeight.SemiBold)
+                                      Text("Auto switch to software decoding if 1080p/HEVC lags", color = TextGray, fontSize = 12.sp)
+                                  }
+                                  Switch(checked = hardwareDecodePriority, onCheckedChange = onHwDecodeChange)
+                              }
+                              Divider(Modifier.padding(vertical = 10.dp), color = Color.DarkGray)
+                              Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                                  Text("Resume from last position", fontWeight = FontWeight.SemiBold)
+                                  Switch(checked = resumePlayback, onCheckedChange = onResumeChange)
+                              }
+                          }
+                      }
+                  }
+
+                  item { Text("Gestures & Controls", color = ElectricPurple, fontWeight = FontWeight.Bold) }
+
+                  item {
+                      Surface(color = SurfaceCard, shape = RoundedCornerShape(16.dp)) {
+                          Column(Modifier.padding(16.dp)) {
+                              Text("Double-Tap Seek Interval: ${doubleTapSeekSec}s", fontWeight = FontWeight.SemiBold)
+                              Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                  listOf(5, 10, 15, 30).forEach { sec ->
+                                      FilterChip(selected = doubleTapSeekSec == sec, onClick = { onSeekSecChange(sec) }, label = { Text("${sec}s") })
+                                  }
+                              }
+                              Spacer(Modifier.height(12.dp))
+                              Text("Default Playback Speed: ${defaultSpeed}x", fontWeight = FontWeight.SemiBold)
+                              Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                                  listOf(0.75f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                                      FilterChip(selected = defaultSpeed == spd, onClick = { onSpeedChange(spd) }, label = { Text("${spd}x") })
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  item { Text("Privacy & Storage", color = ElectricPurple, fontWeight = FontWeight.Bold) }
+
+                  item {
+                      Button(
+                          onClick = onClearHistory,
+                          colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                          modifier = Modifier.fillMaxWidth(),
+                          shape = RoundedCornerShape(12.dp)
+                      ) {
+                          Icon(Icons.Default.DeleteSweep, null)
+                          Spacer(Modifier.width(8.dp))
+                          Text("Clear Watch History")
+                      }
+                  }
+              }
+          }
+
+          // =========================================================================
+          // 5. ADVANCED VIDEO PLAYER SCREEN (Full Gestures, Hardware+SW Fallback, PiP)
+          // =========================================================================
+          @OptIn(UnstableApi::class)
+          @Composable
+          fun AdvancedVideoPlayerScreen(
+              video: VideoItem,
+              allVideos: List<VideoItem>,
+              activity: Activity,
+              prefs: android.content.SharedPreferences,
+              resumeEnabled: Boolean,
+              defaultSpeed: Float,
+              seekSeconds: Int,
+              hwPriority: Boolean,
+              isFavorite: Boolean,
+              onToggleFavorite: () -> Unit,
+              onSwitchVideo: (VideoItem) -> Unit,
+              onMinimizeToMiniPlayer: () -> Unit,
+              onClosePlayer: () -> Unit
+          ) {
+              val context = LocalContext.current
+              val audioManager = remember { context.getSystemService(Context.AUDIO_SERVICE) as AudioManager }
+
+              // Configure RenderersFactory specifically for MediaTek Helio G80 (Redmi 9 Prime)
+              val exoPlayer = remember(video.uri) {
+                  val renderersFactory = DefaultRenderersFactory(context)
+                      .setEnableDecoderFallback(true) // Crucial for Redmi 9 Prime MKV/HEVC stability
+                      .setExtensionRendererMode(
+                          if (hwPriority) DefaultRenderersFactory.EXTENSION_RENDERER_MODE_ON
+                          else DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER
+                      )
+
+                  val trackSelector = DefaultTrackSelector(context).apply {
+                      setParameters(buildUponParameters().setMaxVideoSizeSd().clearVideoSizeConstraints())
+                  }
+
+                  val loadControl = DefaultLoadControl.Builder()
+                      .setBufferDurationsMs(15000, 50000, 1500, 3000)
+                      .build()
+
+                  ExoPlayer.Builder(context, renderersFactory)
+                      .setTrackSelector(trackSelector)
+                      .setLoadControl(loadControl)
+                      .build().apply {
+                          setMediaItem(MediaItem.fromUri(video.uri))
+                          prepare()
+                          val savedPos = prefs.getLong("pos_${video.id}", 0L)
+                          if (resumeEnabled && savedPos > 2000L && savedPos < video.duration - 3000L) {
+                              seekTo(savedPos)
+                          }
+                          setPlaybackSpeed(defaultSpeed)
+                          playWhenReady = true
+                      }
+              }
+
+              var isPlaying by remember { mutableStateOf(true) }
+              var currentPosition by remember { mutableStateOf(0L) }
+              var duration by remember { mutableStateOf(video.duration.coerceAtLeast(1L)) }
+              var showControls by remember { mutableStateOf(true) }
+              var isLocked by remember { mutableStateOf(false) }
+              var playbackSpeed by remember { mutableStateOf(defaultSpeed) }
+              var resizeMode by remember { mutableStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+              var showSettingsSheet by remember { mutableStateOf(false) }
+              var gestureStatusText by remember { mutableStateOf<String?>(null) }
+              var decoderErrorText by remember { mutableStateOf<String?>(null) }
+              var isLandscape by remember { mutableStateOf(false) }
+              var abStart by remember { mutableStateOf<Long?>(null) }
+              var abEnd by remember { mutableStateOf<Long?>(null) }
+
+              // Track position & save progress
+              LaunchedEffect(exoPlayer) {
+                  while (true) {
+                      currentPosition = exoPlayer.currentPosition
+                      if (exoPlayer.duration > 0) duration = exoPlayer.duration
+                      isPlaying = exoPlayer.isPlaying
+                      prefs.edit().putLong("pos_${video.id}", currentPosition).apply()
+
+                      // A-B Repeat check
+                      if (abStart != null && abEnd != null && currentPosition >= abEnd!!) {
+                          exoPlayer.seekTo(abStart!!)
+                      }
+                      delay(500)
+                  }
+              }
+
+              // Listener for Decoder Errors
+              DisposableEffect(exoPlayer) {
+                  val listener = object : Player.Listener {
+                      override fun onPlayerError(error: PlaybackException) {
+                          decoderErrorText = "Decoder Alert: ${error.errorCodeName}. Trying safe recovery..."
+                          exoPlayer.prepare()
+                          exoPlayer.play()
+                      }
+                  }
+                  exoPlayer.addListener(listener)
+                  onDispose {
+                      prefs.edit().putLong("pos_${video.id}", exoPlayer.currentPosition).apply()
+                      exoPlayer.removeListener(listener)
+                      exoPlayer.release()
+                  }
+              }
+
+              BackHandler {
+                  onClosePlayer()
+              }
+
+              Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+                  // Video Surface
+                  AndroidView(
+                      factory = { ctx ->
+                          PlayerView(ctx).apply {
+                              useController = false
+                              player = exoPlayer
+                              this.resizeMode = resizeMode
+                              layoutParams = FrameLayout.LayoutParams(
+                                  ViewGroup.LayoutParams.MATCH_PARENT,
+                                  ViewGroup.LayoutParams.MATCH_PARENT
+                              )
+                              keepScreenOn = true
+                          }
+                      },
+                      update = { view ->
+                          view.player = exoPlayer
+                          view.resizeMode = resizeMode
+                      },
+                      modifier = Modifier.fillMaxSize()
+                  )
+
+                  // Gesture Detector Layer (Double-tap seek, Long-press 2x speed, Swipe Volume/Brightness/Seek)
+                  if (!isLocked) {
+                      Box(
+                          modifier = Modifier
+                              .fillMaxSize()
+                              .pointerInput(Unit) {
+                                  detectTapGestures(
+                                      onTap = { showControls = !showControls },
+                                      onDoubleTap = { offset ->
+                                          val width = size.width
+                                          if (offset.x < width / 2) {
+                                              val target = (exoPlayer.currentPosition - seekSeconds * 1000L).coerceAtLeast(0L)
+                                              exoPlayer.seekTo(target)
+                                              gestureStatusText = "⏪ -${seekSeconds}s"
+                                          } else {
+                                              val target = (exoPlayer.currentPosition + seekSeconds * 1000L).coerceAtMost(duration)
+                                              exoPlayer.seekTo(target)
+                                              gestureStatusText = "⏩ +${seekSeconds}s"
+                                          }
+                                      },
+                                      onLongPress = {
+                                          exoPlayer.setPlaybackSpeed(2.0f)
+                                          gestureStatusText = "⚡ 2.0x Speed Boost"
+                                      },
+                                      onPress = {
+                                          tryAwaitRelease()
+                                          if (exoPlayer.playbackParameters.speed == 2.0f && playbackSpeed != 2.0f) {
+                                              exoPlayer.setPlaybackSpeed(playbackSpeed)
+                                              gestureStatusText = null
+                                          }
+                                      }
+                                  )
+                              }
+                              .pointerInput(Unit) {
+                                  detectDragGestures(
+                                      onDragEnd = { gestureStatusText = null },
+                                      onDragCancel = { gestureStatusText = null },
+                                      onDrag = { change, dragAmount ->
+                                          change.consume()
+                                          val w = size.width
+                                          val dx = dragAmount.x
+                                          val dy = dragAmount.y
+
+                                          if (abs(dx) > abs(dy)) {
+                                              // Horizontal Seek
+                                              val deltaMs = (dx * 150).toLong()
+                                              val nextPos = (exoPlayer.currentPosition + deltaMs).coerceIn(0L, duration)
+                                              exoPlayer.seekTo(nextPos)
+                                              gestureStatusText = "Seek: ${formatDuration(nextPos)}"
+                                          } else {
+                                              // Vertical Brightness (Left) or Volume (Right)
+                                              if (change.position.x < w / 2) {
+                                                  val lp = activity.window.attributes
+                                                  val currentB = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
+                                                  val nextB = (currentB - dy / 600f).coerceIn(0.05f, 1.0f)
+                                                  lp.screenBrightness = nextB
+                                                  activity.window.attributes = lp
+                                                  gestureStatusText = "☀️ Brightness: ${(nextB * 100).toInt()}%"
+                                              } else {
+                                                  val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                                                  val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+                                                  val deltaV = if (dy < -12) 1 else if (dy > 12) -1 else 0
+                                                  if (deltaV != 0) {
+                                                      val nextV = (curVol + deltaV).coerceIn(0, maxVol)
+                                                      audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextV, 0)
+                                                      gestureStatusText = "🔊 Volume: ${(nextV * 100 / maxVol)}%"
+                                                  }
+                                              }
+                                          }
+                                      }
+                                  )
+                              }
+                      )
+                  } else {
+                      // Locked Mode Tap
+                      Box(
+                          modifier = Modifier.fillMaxSize().clickable { showControls = !showControls }
+                      )
+                  }
+
+                  // Auto clear gesture indicator
+                  LaunchedEffect(gestureStatusText) {
+                      if (gestureStatusText != null && !gestureStatusText!!.contains("2.0x")) {
+                          delay(900)
+                          gestureStatusText = null
+                      }
+                  }
+
+                  // Center Gesture Badge
+                  if (gestureStatusText != null) {
+                      Surface(
+                          color = Color.Black.copy(alpha = 0.75f),
+                          shape = RoundedCornerShape(14.dp),
+                          modifier = Modifier.align(Alignment.Center)
+                      ) {
+                          Text(
+                              text = gestureStatusText!!,
+                              color = Color.White,
+                              fontWeight = FontWeight.Bold,
+                              fontSize = 18.sp,
+                              modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp)
+                          )
+                      }
+                  }
+
+                  // Decoder Alert Banner
+                  if (decoderErrorText != null) {
+                      Surface(
+                          color = Color(0xFFB91C1C).copy(alpha = 0.9f),
+                          shape = RoundedCornerShape(8.dp),
+                          modifier = Modifier.align(Alignment.TopCenter).padding(top = 60.dp)
+                      ) {
+                          Text(decoderErrorText!!, color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(8.dp))
+                      }
+                  }
+
+                  // Locked Screen Button Only
+                  if (isLocked && showControls) {
+                      IconButton(
+                          onClick = { isLocked = false },
+                          modifier = Modifier
+                              .align(Alignment.CenterStart)
+                              .padding(24.dp)
+                              .background(ElectricPurple, CircleShape)
+                      ) {
+                          Icon(Icons.Default.LockOpen, "Unlock", tint = Color.White)
+                      }
+                  }
+
+                  // Full Player Overlay Controls
+                  AnimatedVisibility(
+                      visible = showControls && !isLocked,
+                      enter = fadeIn(),
+                      exit = fadeOut()
+                  ) {
+                      Box(
+                          modifier = Modifier
+                              .fillMaxSize()
+                              .background(Color.Black.copy(alpha = 0.45f))
+                      ) {
+                          // TOP BAR
+                          Row(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .align(Alignment.TopCenter)
+                                  .padding(16.dp),
+                              verticalAlignment = Alignment.CenterVertically
+                          ) {
+                              IconButton(onClick = onClosePlayer) {
+                                  Icon(Icons.Default.ArrowBack, "Back", tint = Color.White)
+                              }
+                              Column(modifier = Modifier.weight(1f)) {
+                                  Text(video.title, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                  Text("${video.resolution} • Helio G80 HW+SW", color = ElectricPurple, fontSize = 11.sp)
+                              }
+                              IconButton(onClick = onToggleFavorite) {
+                                  Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, null, tint = if (isFavorite) Color(0xFFEC4899) else Color.White)
+                              }
+                              IconButton(onClick = onMinimizeToMiniPlayer) {
+                                  Icon(Icons.Default.PictureInPictureAlt, "Mini Player", tint = Color.White)
+                              }
+                              IconButton(onClick = {
+                                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                      val params = PictureInPictureParams.Builder()
+                                          .setAspectRatio(Rational(16, 9))
+                                          .build()
+                                      activity.enterPictureInPictureMode(params)
+                                  }
+                              }) {
+                                  Icon(Icons.Default.OpenInNew, "System PiP", tint = Color.White)
+                              }
+                              IconButton(onClick = { showSettingsSheet = true }) {
+                                  Icon(Icons.Default.Tune, "Settings", tint = Color.White)
+                              }
+                          }
+
+                          // CENTER PLAY/PAUSE & SEEK CONTROLS
+                          Row(
+                              modifier = Modifier.align(Alignment.Center),
+                              horizontalArrangement = Arrangement.spacedBy(28.dp),
+                              verticalAlignment = Alignment.CenterVertically
+                          ) {
+                              IconButton(onClick = {
+                                  val idx = allVideos.indexOfFirst { it.id == video.id }
+                                  if (idx > 0) onSwitchVideo(allVideos[idx - 1])
+                              }) {
+                                  Icon(Icons.Default.SkipPrevious, null, tint = Color.White, modifier = Modifier.size(38.dp))
+                              }
+
+                              IconButton(onClick = {
+                                  exoPlayer.seekTo((exoPlayer.currentPosition - seekSeconds * 1000L).coerceAtLeast(0L))
+                              }) {
+                                  Icon(Icons.Default.Replay10, null, tint = Color.White, modifier = Modifier.size(38.dp))
+                              }
+
+                              Box(
+                                  modifier = Modifier
+                                      .size(68.dp)
+                                      .clip(CircleShape)
+                                      .background(ElectricPurple)
+                                      .clickable {
+                                          if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+                                          isPlaying = exoPlayer.isPlaying
+                                      },
+                                  contentAlignment = Alignment.Center
+                              ) {
+                                  Icon(
+                                      if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                      contentDescription = "Play/Pause",
+                                      tint = Color.White,
+                                      modifier = Modifier.size(40.dp)
+                                  )
+                              }
+
+                              IconButton(onClick = {
+                                  exoPlayer.seekTo((exoPlayer.currentPosition + seekSeconds * 1000L).coerceAtMost(duration))
+                              }) {
+                                  Icon(Icons.Default.Forward10, null, tint = Color.White, modifier = Modifier.size(38.dp))
+                              }
+
+                              IconButton(onClick = {
+                                  val idx = allVideos.indexOfFirst { it.id == video.id }
+                                  if (idx != -1 && idx < allVideos.size - 1) onSwitchVideo(allVideos[idx + 1])
+                              }) {
+                                  Icon(Icons.Default.SkipNext, null, tint = Color.White, modifier = Modifier.size(38.dp))
+                              }
+                          }
+
+                          // BOTTOM TIMELINE & QUICK ACTIONS
+                          Column(
+                              modifier = Modifier
+                                  .fillMaxWidth()
+                                  .align(Alignment.BottomCenter)
+                                  .padding(16.dp)
+                          ) {
+                              Row(verticalAlignment = Alignment.CenterVertically) {
+                                  Text(formatDuration(currentPosition), color = Color.White, fontSize = 12.sp)
+                                  Slider(
+                                      value = currentPosition.toFloat(),
+                                      onValueChange = {
+                                          currentPosition = it.toLong()
+                                          exoPlayer.seekTo(currentPosition)
+                                      },
+                                      valueRange = 0f..duration.toFloat().coerceAtLeast(1f),
+                                      modifier = Modifier.weight(1f).padding(horizontal = 10.dp),
+                                      colors = SliderDefaults.colors(
+                                          thumbColor = ElectricPurple,
+                                          activeTrackColor = ElectricPurple
+                                      )
+                                  )
+                                  Text(formatDuration(duration), color = Color.White, fontSize = 12.sp)
+                              }
+
+                              Row(
+                                  modifier = Modifier.fillMaxWidth(),
+                                  horizontalArrangement = Arrangement.SpaceBetween,
+                                  verticalAlignment = Alignment.CenterVertically
+                              ) {
+                                  IconButton(onClick = { isLocked = true }) {
+                                      Icon(Icons.Default.Lock, "Lock", tint = Color.White)
+                                  }
+
+                                  TextButton(onClick = {
+                                      val nextSpeed = when (playbackSpeed) {
+                                          1.0f -> 1.25f
+                                          1.25f -> 1.5f
+                                          1.5f -> 2.0f
+                                          2.0f -> 0.75f
+                                          else -> 1.0f
+                                      }
+                                      playbackSpeed = nextSpeed
+                                      exoPlayer.setPlaybackSpeed(nextSpeed)
+                                  }) {
+                                      Text("${playbackSpeed}x Speed", color = Color.White, fontWeight = FontWeight.Bold)
+                                  }
+
+                                  TextButton(onClick = {
+                                      resizeMode = when (resizeMode) {
+                                          AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                                          AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL
+                                          else -> AspectRatioFrameLayout.RESIZE_MODE_FIT
+                                      }
+                                  }) {
+                                      Icon(Icons.Default.AspectRatio, null, tint = Color.White)
+                                      Spacer(Modifier.width(4.dp))
+                                      Text("Aspect", color = Color.White)
+                                  }
+
+                                  IconButton(onClick = {
+                                      isLandscape = !isLandscape
+                                      activity.requestedOrientation = if (isLandscape) {
+                                          ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                                      } else {
+                                          ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+                                      }
+                                  }) {
+                                      Icon(Icons.Default.ScreenRotation, "Rotate", tint = Color.White)
+                                  }
+                              }
+                          }
+                      }
+                  }
+
+                  // PLAYBACK SETTINGS BOTTOM SHEET (Audio Tracks, Subtitles, A-B Repeat, Speed)
+                  if (showSettingsSheet) {
+                      AlertDialog(
+                          onDismissRequest = { showSettingsSheet = false },
+                          containerColor = SurfaceCard,
+                          title = { Text("Playback & Track Controls", fontWeight = FontWeight.Bold) },
+                          text = {
+                              Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                  Text("Playback Speed", color = ElectricPurple, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                  Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                      listOf(0.5f, 1.0f, 1.25f, 1.5f, 2.0f).forEach { spd ->
+                                          FilterChip(
+                                              selected = playbackSpeed == spd,
+                                              onClick = {
+                                                  playbackSpeed = spd
+                                                  exoPlayer.setPlaybackSpeed(spd)
+                                              },
+                                              label = { Text("${spd}x", fontSize = 11.sp) }
+                                          )
+                                      }
+                                  }
+
+                                  Text("A-B Segment Repeat", color = ElectricPurple, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                  Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                      OutlinedButton(onClick = { abStart = currentPosition }) {
+                                          Text(if (abStart == null) "Set A" else "A: ${formatDuration(abStart!!)}", fontSize = 11.sp)
+                                      }
+                                      OutlinedButton(onClick = { abEnd = currentPosition }) {
+                                          Text(if (abEnd == null) "Set B" else "B: ${formatDuration(abEnd!!)}", fontSize = 11.sp)
+                                      }
+                                      TextButton(onClick = { abStart = null; abEnd = null }) {
+                                          Text("Clear")
+                                      }
+                                  }
+
+                                  Text("Media Technical Info", color = ElectricPurple, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                                  Text(
+                                      "File: ${video.title}\nResolution: ${video.resolution}\nSize: ${formatSize(video.size)}\nDecoder: Media3 ExoPlayer (Hardware + Software Fallback Active)",
+                                      color = TextGray,
+                                      fontSize = 12.sp
+                                  )
+                              }
+                          },
+                          confirmButton = {
+                              TextButton(onClick = { showSettingsSheet = false }) {
+                                  Text("Done", color = ElectricPurple)
+                              }
+                          }
+                      )
+                  }
+              }
+          }
+
+          // --- MEDIASTORE SCANNER ---
+          fun loadDeviceVideos(context: Context): List<VideoItem> {
+              val list = mutableListOf<VideoItem>()
+              val projection = arrayOf(
+                  MediaStore.Video.Media._ID,
+                  MediaStore.Video.Media.DISPLAY_NAME,
+                  MediaStore.Video.Media.BUCKET_DISPLAY_NAME,
+                  MediaStore.Video.Media.DURATION,
+                  MediaStore.Video.Media.SIZE,
+                  MediaStore.Video.Media.WIDTH,
+                  MediaStore.Video.Media.HEIGHT,
+                  MediaStore.Video.Media.DATE_ADDED
+              )
+              val sortOrder = "${MediaStore.Video.Media.DATE_ADDED} DESC"
+
+              context.contentResolver.query(
+                  MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                  projection,
+                  null,
+                  null,
+                  sortOrder
+              )?.use { cursor ->
+                  val idCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media._ID)
+                  val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DISPLAY_NAME)
+                  val folderCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
+                  val durCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DURATION)
+                  val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.SIZE)
+                  val wCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.WIDTH)
+                  val hCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.HEIGHT)
+                  val dateCol = cursor.getColumnIndexOrThrow(MediaStore.Video.Media.DATE_ADDED)
+
+                  while (cursor.moveToNext()) {
+                      val id = cursor.getLong(idCol)
+                      val name = cursor.getString(nameCol) ?: "Unknown Video"
+                      val folder = cursor.getString(folderCol) ?: "Internal Storage"
+                      val dur = cursor.getLong(durCol)
+                      val size = cursor.getLong(sizeCol)
+                      val w = cursor.getInt(wCol)
+                      val h = cursor.getInt(hCol)
+                      val date = cursor.getLong(dateCol)
+                      val uri = ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                      val res = if (w > 0 && h > 0) "${w}x${h}" else "HD"
+
+                      if (dur > 0) {
+                          list.add(VideoItem(id, uri, name, folder, dur, size, res, date))
+                      }
+                  }
+              }
+              return list
+          }
+
+          fun formatDuration(ms: Long): String {
+              val totalSec = (ms / 1000).coerceAtLeast(0)
+              val hrs = totalSec / 3600
+              val mins = (totalSec % 3600) / 60
+              val secs = totalSec % 60
+              return if (hrs > 0) String.format("%d:%02d:%02d", hrs, mins, secs)
+              else String.format("%02d:%02d", mins, secs)
+          }
+
+          fun formatSize(bytes: Long): String {
+              val mb = bytes / (1024.0 * 1024.0)
+              return if (mb >= 1024) String.format("%.2f GB", mb / 1024.0)
+              else String.format("%.1f MB", mb)
+          }
+          EOF
+
+      - name: Install Gradle & Build APK
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+
+      - name: Assemble Release APK (Signed for immediate install)
+        run: |
+          gradle assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk PlayNova-v1.0.${{ github.run_number }}-Redmi9Prime.apk
+
+      - name: Upload APK directly to GitHub Releases (Zero Artifacts Storage Used!)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: "PlayNova v1.0.${{ github.run_number }} (Redmi 9 Prime Edition)"
+          body: |
+            ### 🚀 PlayNova Next-Gen Video Player
+            - **Target Device:** Optimized for Redmi 9 Prime (MediaTek Helio G80 `arm64-v8a`)
+            - **Decoder Engine:** Media3 ExoPlayer with Hardware Acceleration + Automatic Software Fallback (`setEnableDecoderFallback(true)`)
+            - **Features Included:**
+              - Electric Purple & Deep Charcoal Dark UI
+              - Home Dashboard (Continue Watching with progress bars, Recently Added)
+              - All Videos (Grid/List toggle, Sort by Date, Name, Duration, Size)
+              - Folder Browser & Custom Playlists + Favorites
+              - Full Gesture Controls (Double-tap seek, Vertical Volume/Brightness swipe, Horizontal seek, Long-press 2x speed)
+              - In-App Mini-Player & System Picture-in-Picture (PiP)
+              - A-B Repeat & Screen Lock
+          files: PlayNova-v1.0.${{ github.run_number }}-Redmi9Prime.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
