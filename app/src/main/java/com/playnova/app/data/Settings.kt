@@ -6,7 +6,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 /** Simple SharedPreferences backed settings exposed as one immutable state object. */
 data class Prefs(
-    val theme: Int = 0,               // 0 dark, 1 light, 2 system
+    val theme: Int = 2,               // 0 dark, 1 light, 2 system
     val accent: Int = 0,
     val gridDefault: Boolean = true,
     val defaultSpeed: Float = 1f,
@@ -26,7 +26,9 @@ data class Prefs(
     val subSize: Float = 1f,
     val subColor: Int = 0,            // 0 white, 1 yellow, 2 cyan
     val subBg: Float = 0.4f,
-    val onboarded: Boolean = false
+    val onboarded: Boolean = false,
+    val headset: Boolean = true,
+    val lang: String = "system"
 )
 
 class SettingsStore(ctx: Context) {
@@ -47,7 +49,8 @@ class SettingsStore(ctx: Context) {
             sp.getBoolean("gL", d.gLongPress), sp.getFloat("lpSpeed", d.longPressSpeed),
             sp.getFloat("sens", d.sensitivity), sp.getFloat("subSize", d.subSize),
             sp.getInt("subColor", d.subColor), sp.getFloat("subBg", d.subBg),
-            sp.getBoolean("onboarded", d.onboarded)
+            sp.getBoolean("onboarded", d.onboarded),
+            sp.getBoolean("headset", d.headset), sp.getString("lang", d.lang) ?: d.lang
         )
     }
 
@@ -63,7 +66,8 @@ class SettingsStore(ctx: Context) {
             .putBoolean("gD", p.gDoubleTap).putBoolean("gL", p.gLongPress)
             .putFloat("lpSpeed", p.longPressSpeed).putFloat("sens", p.sensitivity)
             .putFloat("subSize", p.subSize).putInt("subColor", p.subColor).putFloat("subBg", p.subBg)
-            .putBoolean("onboarded", p.onboarded).apply()
+            .putBoolean("onboarded", p.onboarded)
+            .putBoolean("headset", p.headset).putString("lang", p.lang).apply()
     }
 
     // IDs the user removed from the library view (file itself is untouched)

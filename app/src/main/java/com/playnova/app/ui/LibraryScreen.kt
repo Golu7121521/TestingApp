@@ -18,8 +18,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.playnova.app.AppViewModel
 import com.playnova.app.data.Video
+import com.playnova.app.i18n.tr
 
-enum class SortKey(val label: String) { NAME("Naam"), DATE("Date added"), DURATION("Duration"), SIZE("Size"), PLAYED("Last played") }
+enum class SortKey(val label: String) { NAME("Name"), DATE("Date added"), DURATION("Duration"), SIZE("Size"), PLAYED("Last played") }
 
 fun sortVideos(l: List<Video>, key: SortKey, asc: Boolean, last: Map<Long, Long>): List<Video> {
     val c: Comparator<Video> = when (key) {
@@ -76,43 +77,43 @@ fun LibraryScreen(
 
     Column(Modifier.fillMaxSize()) {
         if (selecting) {
-            ScreenTitle("${selected.size} selected", onBack = { selected = emptySet() }) {
-                IconButton(onClick = { selected = shown.map { it.id }.toSet() }) { Icon(Icons.Outlined.SelectAll, "Sab select karo") }
-                IconButton(onClick = { actionTarget = shown.filter { it.id in selected } }) { Icon(Icons.Outlined.MoreVert, "Batch actions") }
+            ScreenTitle(tr("%d selected", selected.size), onBack = { selected = emptySet() }) {
+                IconButton(onClick = { selected = shown.map { it.id }.toSet() }) { Icon(Icons.Outlined.SelectAll, tr("Select all")) }
+                IconButton(onClick = { actionTarget = shown.filter { it.id in selected } }) { Icon(Icons.Outlined.MoreVert, tr("Batch actions")) }
             }
         } else {
-            ScreenTitle(folder ?: "Videos", onBack = onBack) {
-                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, "Search") }
-                IconButton(onClick = { grid = !grid }) { Icon(if (grid) Icons.Outlined.ViewList else Icons.Outlined.GridView, if (grid) "List view" else "Grid view") }
+            ScreenTitle(folder ?: tr("Videos"), onBack = onBack) {
+                IconButton(onClick = { searching = !searching; if (!searching) query = "" }) { Icon(Icons.Outlined.Search, tr("Search")) }
+                IconButton(onClick = { grid = !grid }) { Icon(if (grid) Icons.Outlined.ViewList else Icons.Outlined.GridView, if (grid) tr("List view") else tr("Grid view")) }
                 Box {
-                    IconButton(onClick = { sortMenu = true }) { Icon(Icons.Outlined.Sort, "Sort") }
+                    IconButton(onClick = { sortMenu = true }) { Icon(Icons.Outlined.Sort, tr("Sort")) }
                     DropdownMenu(sortMenu, { sortMenu = false }) {
                         SortKey.values().forEach { k ->
                             DropdownMenuItem(
-                                text = { Text(k.label) },
-                                leadingIcon = { if (sort == k) Icon(Icons.Outlined.Check, "Selected") },
+                                text = { Text(tr(k.label)) },
+                                leadingIcon = { if (sort == k) Icon(Icons.Outlined.Check, tr("Selected")) },
                                 onClick = { sort = k; sortMenu = false })
                         }
                         HorizontalDivider()
                         DropdownMenuItem(
-                            text = { Text(if (asc) "Ascending (A-Z / purana pehle)" else "Descending (Z-A / naya pehle)") },
+                            text = { Text(if (asc) tr("Ascending (A-Z, oldest first)") else tr("Descending (Z-A, newest first)")) },
                             leadingIcon = { Icon(if (asc) Icons.Outlined.ArrowUpward else Icons.Outlined.ArrowDownward, null) },
                             onClick = { asc = !asc; sortMenu = false })
                     }
                 }
-                IconButton(onClick = scan) { Icon(Icons.Outlined.Refresh, "Rescan library") }
+                RefreshButton(scan)
             }
         }
         if (searching) OutlinedTextField(
-            query, { query = it }, singleLine = true, placeholder = { Text("Filename search") },
+            query, { query = it }, singleLine = true, placeholder = { Text(tr("Search by file name")) },
             leadingIcon = { Icon(Icons.Outlined.Search, null) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), shape = SmallShape
         )
         LazyRow(Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
-            item { Chip("Sab", durFilter == 0) { durFilter = 0 } }
-            item { Chip("< 5 min", durFilter == 1) { durFilter = if (durFilter == 1) 0 else 1 } }
-            item { Chip("5-30 min", durFilter == 2) { durFilter = if (durFilter == 2) 0 else 2 } }
-            item { Chip("> 30 min", durFilter == 3) { durFilter = if (durFilter == 3) 0 else 3 } }
+            item { Chip(tr("All"), durFilter == 0) { durFilter = 0 } }
+            item { Chip(tr("< 5 min"), durFilter == 1) { durFilter = if (durFilter == 1) 0 else 1 } }
+            item { Chip(tr("5-30 min"), durFilter == 2) { durFilter = if (durFilter == 2) 0 else 2 } }
+            item { Chip(tr("> 30 min"), durFilter == 3) { durFilter = if (durFilter == 3) 0 else 3 } }
             if (folder == null) items(folders) { f ->
                 Chip(f.name, folderFilter == f.name) { folderFilter = if (folderFilter == f.name) null else f.name }
             }
@@ -120,10 +121,10 @@ fun LibraryScreen(
         when {
             loading && all.isEmpty() -> SkeletonGrid()
             shown.isEmpty() -> if (all.isEmpty()) EmptyState(
-                Icons.Outlined.VideoLibrary, "Koi video nahi mila",
-                if (scanned) "Is phone mein koi video nahi mila. Rescan karke dekho." else "Videos dikhane ke liye permission chahiye.",
-                if (hasVideoPermission(androidx.compose.ui.platform.LocalContext.current)) "Scan Videos" else "Permission do", scan
-            ) else EmptyState(Icons.Outlined.SearchOff, "Kuch match nahi hua", "Filter ya search badal ke dekho.")
+                Icons.Outlined.VideoLibrary, tr("No videos found"),
+                if (scanned) tr("No videos were found on this phone. Try rescanning.") else tr("Permission is needed to show your videos."),
+                if (hasVideoPermission(androidx.compose.ui.platform.LocalContext.current)) tr("Scan videos") else tr("Grant permission"), scan
+            ) else EmptyState(Icons.Outlined.SearchOff, tr("Nothing matches"), tr("Change the filter or the search text."))
             grid -> LazyVerticalGrid(
                 GridCells.Adaptive(160.dp), contentPadding = PaddingValues(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -145,7 +146,7 @@ fun LibraryScreen(
                             else onPlay(shown, shown.indexOf(v))
                         },
                         onLong = { if (selecting) actionTarget = shown.filter { it.id in selected } else selected = selected + v.id },
-                        trailing = { IconButton(onClick = { actionTarget = listOf(v) }) { Icon(Icons.Outlined.MoreVert, "More actions") } })
+                        trailing = { IconButton(onClick = { actionTarget = listOf(v) }) { Icon(Icons.Outlined.MoreVert, tr("More actions")) } })
                 }
             }
         }

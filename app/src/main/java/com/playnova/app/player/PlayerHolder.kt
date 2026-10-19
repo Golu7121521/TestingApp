@@ -3,7 +3,11 @@ package com.playnova.app.player
 import android.content.Context
 import android.net.Uri
 import androidx.media3.common.*
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.playnova.app.i18n.tr
 import androidx.media3.exoplayer.ExoPlayer
 import com.playnova.app.data.AppDao
 import com.playnova.app.data.HistoryEntity
@@ -29,7 +33,15 @@ class PlayerHolder(
         val factory = DefaultRenderersFactory(ctx)
             .setEnableDecoderFallback(true)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_OFF)
+        // Browser-like HTTP client: redirects (also http<->https), real User-Agent, generous timeouts.
+        val http = DefaultHttpDataSource.Factory()
+            .setUserAgent(UrlResolver.UA)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15_000)
+            .setReadTimeoutMs(25_000)
+        val sources = DefaultMediaSourceFactory(ctx).setDataSourceFactory(DefaultDataSource.Factory(ctx, http))
         ExoPlayer.Builder(ctx, factory)
+            .setMediaSourceFactory(sources)
             .setAudioAttributes(
                 AudioAttributes.Builder()
                     .setUsage(C.USAGE_MEDIA)
@@ -122,22 +134,26 @@ class PlayerHolder(
         PlaybackException.ERROR_CODE_DECODER_INIT_FAILED,
         PlaybackException.ERROR_CODE_DECODING_FAILED,
         PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES ->
-            "Is phone ka decoder is video ko decode nahi kar pa raha (codec ya resolution zyada heavy hai, jaise AV1 / 4K HEVC 10-bit)."
+            tr("This device's decoder cannot play this video (the codec or resolution is too heavy, for example AV1 or 4K 10-bit HEVC).")
         PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED ->
-            "Ye video format/codec is device par supported nahi hai."
+            tr("This video format or codec is not supported on this device.")
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED,
         PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED ->
-            "File corrupt lag rahi hai ya poori download nahi hui."
+            tr("The file looks corrupt or was not downloaded completely.")
         PlaybackException.ERROR_CODE_PARSING_CONTAINER_UNSUPPORTED ->
-            "Is container format ko player samajh nahi paaya."
+            tr("The player could not understand this container format.")
         PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND ->
-            "File nahi mili. Shayad move ya delete ho gayi hai. Library refresh karo."
+            tr("File not found. It may have been moved or deleted. Refresh the library.")
         PlaybackException.ERROR_CODE_IO_NO_PERMISSION ->
-            "File kholne ki permission nahi hai."
+            tr("No permission to open this file.")
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
         PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT ->
-            "Network connection fail ho gaya."
-        else -> "Playback error: ${e.errorCodeName}"
+            tr("Network connection failed. Check your internet and the link.")
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ->
+            tr("The server refused this link (HTTP error). The link may have expired or may need a login.")
+        PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE ->
+            tr("This link is not a video or audio file.")
+        else -> tr("Playback error: %s", e.errorCodeName)
     }
 
     fun play(videos: List<Video>, start: Int, shuffle: Boolean = false) {
@@ -149,7 +165,9 @@ class PlayerHolder(
         player.shuffleModeEnabled = shuffle
         _shuffle.value = shuffle
         val items = videos.map {
-            MediaItem.Builder().setUri(it.uri).setMediaId(it.id.toString()).build()
+            val b = MediaItem.Builder().setUri(it.uri).setMediaId(it.id.toString())
+            if (it.mime == MimeTypes.APPLICATION_M3U8 || it.mime == MimeTypes.APPLICATION_MPD) b.setMimeType(it.mime)
+            b.build()
         }
         player.setMediaItems(items, _index.value, C.TIME_UNSET)
         player.pauseAtEndOfMediaItems = !settings.state.value.autoNext

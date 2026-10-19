@@ -47,6 +47,8 @@ import androidx.media3.ui.CaptionStyleCompat
 import androidx.media3.ui.PlayerView
 import com.playnova.app.AppViewModel
 import com.playnova.app.data.fmtTime
+import com.playnova.app.i18n.tr
+import androidx.compose.foundation.clickable
 import com.playnova.app.player.PipState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -84,9 +86,9 @@ fun PlayerScreen(vm: AppViewModel, onBack: () -> Unit) {
 
     val st = remember { PlayerUiState(prefs.aspect, prefs.orientation) }
     var controls by remember { mutableStateOf(true) }
-    var expanded by remember { mutableStateOf(true) }
     var locked by remember { mutableStateOf(false) }
     var showSheet by remember { mutableStateOf(false) }
+    var sheetPage by remember { mutableStateOf("main") }
     var scrubbing by remember { mutableStateOf(false) }
     var hud by remember { mutableStateOf<String?>(null) }
     var hudTick by remember { mutableIntStateOf(0) }
@@ -147,7 +149,7 @@ fun PlayerScreen(vm: AppViewModel, onBack: () -> Unit) {
     BackHandler {
         when {
             showSheet -> showSheet = false
-            locked -> { controls = true; showHud("Screen locked") }
+            locked -> { controls = true; showHud(tr("Screen locked")) }
             else -> onBack()
         }
     }
@@ -220,7 +222,7 @@ fun PlayerScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 delay(450)
                                 fast = true
                                 holder.tempSpeed(prefsNow.longPressSpeed)
-                                showHud("${prefsNow.longPressSpeed}x speed")
+                                showHud(tr("%s speed", "${prefsNow.longPressSpeed}x"))
                             }
                             tryAwaitRelease()
                             job.cancel()
@@ -262,13 +264,13 @@ fun PlayerScreen(vm: AppViewModel, onBack: () -> Unit) {
                                 1 -> {
                                     bright = (bright - d.y / size.height * 1.3f * p.sensitivity).coerceIn(0.02f, 1f)
                                     activity?.window?.let { w -> w.attributes = w.attributes.also { it.screenBrightness = bright } }
-                                    showHud("Brightness ${(bright * 100).toInt()}%")
+                                    showHud(tr("Brightness %d%%", (bright * 100).toInt()))
                                 }
                                 2 -> {
                                     vol = (vol - d.y / size.height * 1.3f * p.sensitivity).coerceIn(0f, 1f)
                                     val max = audio.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                                     audio.setStreamVolume(AudioManager.STREAM_MUSIC, (vol * max).toInt(), 0)
-                                    showHud("Volume ${(vol * 100).toInt()}%")
+                                    showHud(tr("Volume %d%%", (vol * 100).toInt()))
                                 }
                                 3 -> {
                                     val delta = (acc.x / size.width * 120_000f * p.sensitivity).toLong()
@@ -295,81 +297,63 @@ fun PlayerScreen(vm: AppViewModel, onBack: () -> Unit) {
         ) {
             ErrorState(error ?: "", onRetry = { holder.retry() })
             Row {
-                if (player.hasNextMediaItem()) TextButton(onClick = { holder.retry(); player.seekToNextMediaItem() }) { Text("Agla video") }
-                TextButton(onClick = onBack) { Text("Wapas") }
+                if (player.hasNextMediaItem()) TextButton(onClick = { holder.retry(); player.seekToNextMediaItem() }) { Text(tr("Next video")) }
+                TextButton(onClick = onBack) { Text(tr("Back")) }
             }
         }
 
         // Lock indicator
         if (locked && controls && !inPip) IconButton(
-            onClick = { locked = false; showHud("Unlocked") },
+            onClick = { locked = false; showHud(tr("Unlocked")) },
             Modifier.align(Alignment.CenterStart).padding(16.dp).size(56.dp).clip(CircleShape).background(Color(0x99000000))
-        ) { Icon(Icons.Outlined.Lock, "Unlock screen", tint = Color.White) }
+        ) { Icon(Icons.Outlined.Lock, tr("Unlock screen"), tint = Color.White) }
 
-        // Controls overlay
+        // Controls overlay (YouTube style: top bar, three center buttons, time + seek bar at the bottom)
         AnimatedVisibility(visible = controls && !locked && !inPip && error == null, enter = fadeIn(), exit = fadeOut()) {
-            Box(Modifier.fillMaxSize()) {
-                Box(Modifier.fillMaxWidth().height(96.dp).background(Brush.verticalGradient(listOf(Color(0xCC000000), Color.Transparent))))
-                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(170.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xDD000000)))))
+            Box(Modifier.fillMaxSize().displayCutoutPadding()) {
+                Box(Modifier.fillMaxWidth().height(88.dp).background(Brush.verticalGradient(listOf(Color(0xB3000000), Color.Transparent))))
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(110.dp).background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xB3000000)))))
 
                 // Top bar
-                Row(Modifier.align(Alignment.TopStart).fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Library par wapas", tint = Color.White) }
-                    Text(cur?.title ?: "", Modifier.weight(1f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Row(Modifier.align(Alignment.TopStart).fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, tr("Back to library"), tint = Color.White) }
+                    Text(cur?.title ?: "", Modifier.weight(1f), color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp)
+                    IconButton(onClick = { sheetPage = "subs"; showSheet = true }) { Icon(Icons.Outlined.Subtitles, tr("Subtitles"), tint = Color.White) }
                     if (Build.VERSION.SDK_INT >= 26) IconButton(onClick = {
                         activity?.let { enterPip(it, view?.player?.videoSize?.width ?: 0, view?.player?.videoSize?.height ?: 0) }
-                    }) { Icon(Icons.Outlined.PictureInPictureAlt, "Picture in picture", tint = Color.White) }
-                    IconButton(onClick = { showSheet = true }) { Icon(Icons.Outlined.Tune, "Playback settings", tint = Color.White) }
+                    }) { Icon(Icons.Outlined.PictureInPictureAlt, tr("Picture in picture"), tint = Color.White) }
+                    IconButton(onClick = { sheetPage = "main"; showSheet = true }) { Icon(Icons.Outlined.Settings, tr("Playback settings"), tint = Color.White) }
                 }
 
                 // Center controls
-                Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                    IconButton(onClick = { player.seekToPreviousMediaItem() }, Modifier.size(52.dp)) { Icon(Icons.Outlined.SkipPrevious, "Previous video", tint = Color.White, modifier = Modifier.size(34.dp)) }
-                    SkipButton(prefs.skipSec, false) { skip(-1) }
-                    IconButton(onClick = { holder.toggle() }, Modifier.size(72.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary)) {
-                        Icon(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playing) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(42.dp))
-                    }
-                    SkipButton(prefs.skipSec, true) { skip(1) }
-                    IconButton(onClick = { player.seekToNextMediaItem() }, Modifier.size(52.dp), enabled = player.hasNextMediaItem()) {
-                        Icon(Icons.Outlined.SkipNext, "Next video", tint = if (player.hasNextMediaItem()) Color.White else Color.Gray, modifier = Modifier.size(34.dp))
-                    }
+                Row(Modifier.align(Alignment.Center), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(40.dp)) {
+                    if (queue.size > 1) RoundButton(Icons.Outlined.SkipPrevious, tr("Previous video"), 48.dp, 30.dp) { player.seekToPreviousMediaItem() }
+                    RoundButton(if (playing) Icons.Outlined.Pause else Icons.Outlined.PlayArrow, if (playing) tr("Pause") else tr("Play"), 64.dp, 40.dp) { holder.toggle() }
+                    if (queue.size > 1) RoundButton(Icons.Outlined.SkipNext, tr("Next video"), 48.dp, 30.dp) { player.seekToNextMediaItem() }
                 }
 
-                // Bottom
-                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp)) {
+                // Bottom: time row + seek bar
+                Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 12.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(fmtTime(seekPreview ?: pos), color = Color.White, fontSize = 12.sp)
-                        SeekBar(seekPreview ?: pos, dur, buf, a, b,
-                            onScrub = { f -> scrubbing = true; seekPreview = (f * dur).toLong() },
-                            onDone = { f -> player.seekTo((f * dur).toLong()); seekPreview = null; scrubbing = false },
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp))
-                        Text(fmtTime(dur), color = Color.White, fontSize = 12.sp)
+                        Text("${fmtTime(seekPreview ?: pos)} / ${fmtTime(dur)}", color = Color.White, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                        if (speed != 1f) Text("${speed}x", color = Color.White, fontSize = 12.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable { sheetPage = "main"; showSheet = true }.padding(horizontal = 8.dp, vertical = 6.dp))
+                        IconButton(onClick = { locked = true; controls = false; showHud(tr("Screen locked")) }, Modifier.size(40.dp)) { Icon(Icons.Outlined.LockOpen, tr("Lock screen controls"), tint = Color.White) }
+                        IconButton(onClick = { st.orient = if (st.orient == 1) 2 else 1 }, Modifier.size(40.dp)) { Icon(Icons.Outlined.ScreenRotation, tr("Rotate screen"), tint = Color.White) }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { expanded = !expanded }) {
-                            Icon(if (expanded) Icons.Outlined.ExpandMore else Icons.Outlined.ExpandLess, if (expanded) "Controls chhote karo" else "Controls badhao", tint = Color.White)
-                        }
-                        if (expanded) {
-                            IconButton(onClick = { locked = true; controls = false; showHud("Screen locked") }) { Icon(Icons.Outlined.LockOpen, "Lock screen controls", tint = Color.White) }
-                            TextButton(onClick = { showSheet = true }) { Text("${speed}x", color = Color.White) }
-                            IconButton(onClick = { st.aspect = (st.aspect + 1) % AspectLabels.size; showHud(AspectLabels[st.aspect]) }) { Icon(Icons.Outlined.AspectRatio, "Aspect ratio badlo", tint = Color.White) }
-                            IconButton(onClick = { st.orient = if (st.orient == 1) 2 else 1; showHud(OrientLabels[st.orient]) }) { Icon(Icons.Outlined.ScreenRotation, "Screen rotate", tint = Color.White) }
-                            IconButton(onClick = { showSheet = true }) { Icon(Icons.Outlined.Subtitles, "Subtitles aur audio", tint = Color.White) }
-                        }
-                    }
+                    SeekBar(seekPreview ?: pos, dur, buf, a, b,
+                        onScrub = { f -> scrubbing = true; seekPreview = (f * dur).toLong() },
+                        onDone = { f -> player.seekTo((f * dur).toLong()); seekPreview = null; scrubbing = false })
                 }
             }
         }
     }
-    if (showSheet) PlayerSheet(vm, st) { showSheet = false }
+    if (showSheet) PlayerSheet(vm, st, sheetPage) { showSheet = false }
 }
 
 @Composable
-private fun SkipButton(sec: Int, forward: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, Modifier.size(52.dp)) {
-        Box(contentAlignment = Alignment.Center) {
-            Icon(if (forward) Icons.Outlined.Redo else Icons.Outlined.Undo, if (forward) "Forward $sec seconds" else "Rewind $sec seconds", tint = Color.White, modifier = Modifier.size(38.dp))
-            Text("$sec", color = Color.White, fontSize = 10.sp)
-        }
+private fun RoundButton(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, size: androidx.compose.ui.unit.Dp, iconSize: androidx.compose.ui.unit.Dp, onClick: () -> Unit) {
+    IconButton(onClick = onClick, Modifier.size(size).clip(CircleShape).background(Color(0x66000000))) {
+        Icon(icon, desc, tint = Color.White, modifier = Modifier.size(iconSize))
     }
 }

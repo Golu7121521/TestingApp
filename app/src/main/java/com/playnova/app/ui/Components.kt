@@ -13,6 +13,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
+import com.playnova.app.i18n.tr
+import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -43,13 +46,26 @@ val SmallShape = RoundedCornerShape(12.dp)
 
 @Composable
 fun Thumb(v: Video, modifier: Modifier = Modifier) {
+    // Network streams are never passed to the image loader (it would download the whole video).
+    val remote = v.uri.scheme.let { it != null && it != "content" && it != "file" }
     Box(modifier.clip(SmallShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
-        Icon(Icons.Outlined.Movie, null, tint = Muted)
-        AsyncImage(
+        Icon(if (remote) Icons.Outlined.Link else Icons.Outlined.Movie, null, tint = Muted)
+        if (!remote) AsyncImage(
             model = ImageRequest.Builder(LocalContext.current).data(v.uri).crossfade(true).build(),
             contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize()
         )
     }
+}
+
+/** Refresh icon that spins for 2 seconds after every tap. */
+@Composable
+fun RefreshButton(onClick: () -> Unit) {
+    val rot = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    IconButton(onClick = {
+        onClick()
+        scope.launch { rot.snapTo(0f); rot.animateTo(720f, tween(2000, easing = LinearEasing)) }
+    }) { Icon(Icons.Outlined.Refresh, tr("Rescan library"), Modifier.rotate(rot.value)) }
 }
 
 @Composable
@@ -89,13 +105,13 @@ fun EmptyState(icon: ImageVector, title: String, msg: String, action: String? = 
 
 @Composable
 fun ErrorState(msg: String, onRetry: (() -> Unit)? = null) {
-    EmptyState(Icons.Outlined.ErrorOutline, "Playback nahi ho paya", msg, if (onRetry != null) "Phir try karo" else null, onRetry ?: {})
+    EmptyState(Icons.Outlined.ErrorOutline, tr("Playback failed"), msg, if (onRetry != null) tr("Try again") else null, onRetry ?: {})
 }
 
 @Composable
 fun ScreenTitle(title: String, onBack: (() -> Unit)? = null, actions: @Composable RowScope.() -> Unit = {}) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp).heightIn(min = 56.dp), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Back") }
+        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, tr("Back")) }
         else Spacer(Modifier.width(8.dp))
         Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         actions()
@@ -136,7 +152,7 @@ fun ConfirmDialog(title: String, text: String, confirm: String, danger: Boolean 
                 Text(confirm, color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } }
     )
 }
 
@@ -145,9 +161,9 @@ fun NameDialog(title: String, initial: String, confirm: String, onOk: (String) -
     var t by remember { mutableStateOf(initial) }
     AlertDialog(
         onDismissRequest = onDismiss, title = { Text(title) },
-        text = { OutlinedTextField(t, { t = it }, singleLine = true, label = { Text("Naam") }) },
+        text = { OutlinedTextField(t, { t = it }, singleLine = true, label = { Text(tr("Name")) }) },
         confirmButton = { TextButton(enabled = t.isNotBlank(), onClick = { onOk(t); onDismiss() }) { Text(confirm) } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } }
     )
 }
 
@@ -173,9 +189,9 @@ fun VideoGridItem(
             Thumb(v, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
             Text(fmtTime(v.durationMs), Modifier.align(Alignment.BottomEnd).padding(4.dp).clip(RoundedCornerShape(6.dp))
                 .background(Color(0xAA000000)).padding(horizontal = 6.dp, vertical = 2.dp), color = Color.White, style = MaterialTheme.typography.labelSmall)
-            if (fav) Icon(Icons.Outlined.Favorite, "Favorite", Modifier.align(Alignment.TopStart).padding(6.dp).size(18.dp), tint = Color(0xFFFF5C8A))
+            if (fav) Icon(Icons.Outlined.Favorite, tr("Favorite"), Modifier.align(Alignment.TopStart).padding(6.dp).size(18.dp), tint = Color(0xFFFF5C8A))
             if (selecting) Icon(if (selected) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                if (selected) "Selected" else "Not selected", Modifier.align(Alignment.TopEnd).padding(6.dp), tint = Color.White)
+                if (selected) tr("Selected") else tr("Not selected"), Modifier.align(Alignment.TopEnd).padding(6.dp), tint = Color.White)
             val p = progressOf(h, v)
             if (p > 0.01f) LinearProgressIndicator(progress = { p }, Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp))
         }
@@ -207,8 +223,8 @@ fun VideoListItem(
             Text("${fmtTime(v.durationMs)}  |  ${v.resolution}  |  ${fmtSize(v.size)}", color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
             Text(v.folder, color = Muted, style = MaterialTheme.typography.labelSmall, maxLines = 1)
         }
-        if (fav) Icon(Icons.Outlined.Favorite, "Favorite", Modifier.size(18.dp), tint = Color(0xFFFF5C8A))
-        if (selecting) Icon(if (selected) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, if (selected) "Selected" else "Not selected")
+        if (fav) Icon(Icons.Outlined.Favorite, tr("Favorite"), Modifier.size(18.dp), tint = Color(0xFFFF5C8A))
+        if (selecting) Icon(if (selected) Icons.Outlined.CheckCircle else Icons.Outlined.RadioButtonUnchecked, if (selected) tr("Selected") else tr("Not selected"))
         trailing?.invoke()
     }
 }

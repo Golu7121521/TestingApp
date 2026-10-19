@@ -60,7 +60,7 @@ class MediaRepo(private val ctx: Context) {
     companion object {
         /** Build a Video for a file/URL that is not in MediaStore (picker, VIEW intent, stream). */
         fun external(uri: Uri, name: String? = null): Video {
-            val title = name ?: (uri.lastPathSegment ?: "Video").substringAfterLast('/')
+            val title = name ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: uri.host ?: "Video"
             return Video(
                 id = -(uri.toString().hashCode().toLong().let { if (it == Long.MIN_VALUE) 1 else Math.abs(it) } + 1),
                 uri = uri, title = title, durationMs = 0, size = 0,

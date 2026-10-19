@@ -24,6 +24,10 @@ import com.playnova.app.AppViewModel
 import com.playnova.app.data.Video
 import com.playnova.app.data.fmtSize
 import com.playnova.app.data.fmtTime
+import com.playnova.app.i18n.tr
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -79,43 +83,51 @@ fun VideoActions(vm: AppViewModel, target: List<Video>?, onDismiss: () -> Unit, 
         if (!asked) { pending.value = emptyList(); vm.refresh(); onDismiss() }
     }
 
+    val writePerm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+        if (ok) runner[0]?.invoke(target.filter { !it.external })
+        else { Toast.makeText(ctx, tr("Permission is needed to delete files."), Toast.LENGTH_LONG).show(); onDismiss() }
+    }
+
     fun deleteNow() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             val s = vm.deleteRequest(target)
             if (s != null) launcher.launch(IntentSenderRequest.Builder(s).build()) else onDismiss()
-        } else runner[0]?.invoke(target.filter { !it.external })
+        } else if (Build.VERSION.SDK_INT in 23..28 &&
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        ) writePerm.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        else runner[0]?.invoke(target.filter { !it.external })
     }
 
     when (mode) {
         "menu" -> ModalBottomSheet(onDismissRequest = onDismiss) {
             Column(Modifier.padding(bottom = 24.dp)) {
-                Text(if (single) v.title else "${target.size} videos selected", Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                Text(if (single) v.title else tr("%d videos selected", target.size), Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
                     style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                if (single && onPlay != null) MenuRow(Icons.Outlined.PlayArrow, "Play") { onPlay(v); onDismiss() }
-                if (single) MenuRow(if (isFav) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, if (isFav) "Favorites se hatao" else "Favorites mein jodo") { vm.toggleFavorite(v); onDismiss() }
-                else MenuRow(Icons.Outlined.FavoriteBorder, "Sabko Favorites mein jodo") { vm.favoriteAll(target); onDismiss() }
-                MenuRow(Icons.Outlined.PlaylistAdd, "Playlist mein jodo") { mode = "playlist" }
-                if (single) MenuRow(Icons.Outlined.Share, "Share") {
+                if (single && onPlay != null) MenuRow(Icons.Outlined.PlayArrow, tr("Play")) { onPlay(v); onDismiss() }
+                if (single) MenuRow(if (isFav) Icons.Outlined.Favorite else Icons.Outlined.FavoriteBorder, if (isFav) tr("Remove from Favorites") else tr("Add to Favorites")) { vm.toggleFavorite(v); onDismiss() }
+                else MenuRow(Icons.Outlined.FavoriteBorder, tr("Add all to Favorites")) { vm.favoriteAll(target); onDismiss() }
+                MenuRow(Icons.Outlined.PlaylistAdd, tr("Add to playlist")) { mode = "playlist" }
+                if (single) MenuRow(Icons.Outlined.Share, tr("Share")) {
                     val i = Intent(Intent.ACTION_SEND).apply {
                         type = "video/*"; putExtra(Intent.EXTRA_STREAM, v.uri); addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                     }
-                    ctx.startActivity(Intent.createChooser(i, "Share video")); onDismiss()
+                    ctx.startActivity(Intent.createChooser(i, tr("Share video"))); onDismiss()
                 }
-                if (single) MenuRow(Icons.Outlined.Info, "Details") { mode = "details" }
-                MenuRow(Icons.Outlined.VisibilityOff, "Library se hatao (file safe rehti hai)") { mode = "remove" }
-                if (target.any { !it.external }) MenuRow(Icons.Outlined.Delete, "File delete karo", danger = true) { mode = "delete" }
+                if (single) MenuRow(Icons.Outlined.Info, tr("Details")) { mode = "details" }
+                MenuRow(Icons.Outlined.VisibilityOff, tr("Remove from library (file stays safe)")) { mode = "remove" }
+                if (target.any { !it.external }) MenuRow(Icons.Outlined.Delete, tr("Delete file"), danger = true) { mode = "delete" }
             }
         }
         "playlist" -> PlaylistChooser(vm, playlists.map { it.id to it.name }, target, onDismiss)
         "details" -> AlertDialog(
-            onDismissRequest = onDismiss, confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
-            title = { Text("Details") },
+            onDismissRequest = onDismiss, confirmButton = { TextButton(onClick = onDismiss) { Text(tr("OK")) } },
+            title = { Text(tr("Details")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(
-                        "Naam" to v.title, "Folder" to v.folder, "Size" to fmtSize(v.size),
-                        "Duration" to fmtTime(v.durationMs), "Resolution" to v.resolution, "Format" to v.mime,
-                        "Add hui" to SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(v.dateAdded * 1000))
+                        tr("Name") to v.title, tr("Folder") to v.folder, tr("Size") to fmtSize(v.size),
+                        tr("Duration") to fmtTime(v.durationMs), tr("Resolution") to v.resolution, tr("Format") to v.mime,
+                        tr("Date added") to SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.getDefault()).format(Date(v.dateAdded * 1000))
                     ).forEach { (k, x) ->
                         Column { Text(k, color = Muted, style = MaterialTheme.typography.labelSmall); Text(x) }
                     }
@@ -123,17 +135,17 @@ fun VideoActions(vm: AppViewModel, target: List<Video>?, onDismiss: () -> Unit, 
             }
         )
         "remove" -> ConfirmDialog(
-            "Library se hatao?", "Video sirf PlayNova ki list se chhupega. Phone se file delete NAHI hogi. Settings > Privacy mein wapas la sakte ho.",
-            "Hatao", onConfirm = { vm.removeFromLibrary(target) }, onDismiss = onDismiss
+            tr("Remove from library?"), tr("The video will only be hidden inside PlayNova. The file is NOT deleted from your phone. You can bring it back from Settings > Storage and permissions."),
+            tr("Remove"), onConfirm = { vm.removeFromLibrary(target) }, onDismiss = onDismiss
         )
         "delete" -> AlertDialog(
             onDismissRequest = onDismiss,
-            title = { Text("File permanently delete karein?") },
-            text = { Text(if (single) "\"${v.title}\" phone se hamesha ke liye delete ho jayegi. Ye wapas nahi aayegi." else "${target.size} files phone se hamesha ke liye delete ho jayengi.") },
+            title = { Text(tr("Delete file permanently?")) },
+            text = { Text(if (single) tr("\"%s\" will be deleted from your phone permanently. This cannot be undone.", v.title) else tr("%d files will be deleted from your phone permanently. This cannot be undone.", target.size)) },
             confirmButton = {
-                TextButton(onClick = { mode = "deleting"; deleteNow() }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                TextButton(onClick = { mode = "deleting"; deleteNow() }) { Text(tr("Delete"), color = MaterialTheme.colorScheme.error) }
             },
-            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } }
         )
         else -> {} // "deleting": keep this composable alive until the system dialog returns
     }
@@ -144,14 +156,14 @@ private fun PlaylistChooser(vm: AppViewModel, lists: List<Pair<Long, String>>, t
     var creating by remember { mutableStateOf(false) }
     val ctx = LocalContext.current
     if (creating) {
-        NameDialog("Nayi playlist", "", "Banao", onOk = { vm.createPlaylist(it, target); Toast.makeText(ctx, "Playlist ban gayi", Toast.LENGTH_SHORT).show() }, onDismiss = onDismiss)
+        NameDialog(tr("New playlist"), "", tr("Create"), onOk = { vm.createPlaylist(it, target); Toast.makeText(ctx, tr("Playlist created"), Toast.LENGTH_SHORT).show() }, onDismiss = onDismiss)
         return
     }
     AlertDialog(
-        onDismissRequest = onDismiss, title = { Text("Playlist chuno") },
+        onDismissRequest = onDismiss, title = { Text(tr("Choose a playlist")) },
         text = {
             Column {
-                ListItem(headlineContent = { Text("Nayi playlist banao") }, leadingContent = { Icon(Icons.Outlined.Add, null) },
+                ListItem(headlineContent = { Text(tr("Create new playlist")) }, leadingContent = { Icon(Icons.Outlined.Add, null) },
                     colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                     modifier = Modifier.clickable { creating = true })
                 lists.forEach { (id, name) ->
@@ -159,11 +171,11 @@ private fun PlaylistChooser(vm: AppViewModel, lists: List<Pair<Long, String>>, t
                         colors = ListItemDefaults.colors(containerColor = androidx.compose.ui.graphics.Color.Transparent),
                         modifier = Modifier.clickable {
                             vm.addToPlaylist(id, target)
-                            Toast.makeText(ctx, "Playlist mein add ho gaya", Toast.LENGTH_SHORT).show(); onDismiss()
+                            Toast.makeText(ctx, tr("Added to playlist"), Toast.LENGTH_SHORT).show(); onDismiss()
                         })
                 }
             }
         },
-        confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        confirmButton = {}, dismissButton = { TextButton(onClick = onDismiss) { Text(tr("Cancel")) } }
     )
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import com.playnova.app.AppViewModel
 import com.playnova.app.data.Video
 import com.playnova.app.data.fmtTime
+import com.playnova.app.i18n.tr
 
 @Composable
 fun PlaylistsScreen(vm: AppViewModel, onOpen: (Long) -> Unit, onFavorites: () -> Unit) {
@@ -29,21 +30,21 @@ fun PlaylistsScreen(vm: AppViewModel, onOpen: (Long) -> Unit, onFavorites: () ->
     var create by remember { mutableStateOf(false) }
     val byId = remember(videos) { videos.associateBy { it.id } }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Playlists") { IconButton(onClick = { create = true }) { Icon(Icons.Outlined.Add, "Nayi playlist") } }
+        ScreenTitle(tr("Playlists")) { IconButton(onClick = { create = true }) { Icon(Icons.Outlined.Add, tr("New playlist")) } }
         LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             item {
                 Row(Modifier.fillMaxWidth().clip(CardShape).background(MaterialTheme.colorScheme.primaryContainer).clickable(onClick = onFavorites).padding(16.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Outlined.Favorite, null, tint = Color(0xFFFF5C8A))
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                        Text("Favorites", style = MaterialTheme.typography.titleMedium)
-                        Text("${favs.count { it in byId }} videos | automatic", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(tr("Favorites"), style = MaterialTheme.typography.titleMedium)
+                        Text(tr("%d videos | automatic", favs.count { it in byId }), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     Icon(Icons.Outlined.ChevronRight, null)
                 }
             }
             if (lists.isEmpty()) item {
-                EmptyState(Icons.Outlined.PlaylistPlay, "Koi playlist nahi", "Apni pasandida videos ki playlist banao.", "Playlist banao") { create = true }
+                EmptyState(Icons.Outlined.PlaylistPlay, tr("No playlists yet"), tr("Create a playlist of your favorite videos."), tr("Create playlist")) { create = true }
             }
             itemsIndexed(lists, key = { _, p -> p.id }) { _, p ->
                 val its = items.filter { it.playlistId == p.id }.mapNotNull { byId[it.videoId] }
@@ -53,14 +54,14 @@ fun PlaylistsScreen(vm: AppViewModel, onOpen: (Long) -> Unit, onFavorites: () ->
                     else Box(Modifier.size(64.dp).clip(SmallShape).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Outlined.PlaylistPlay, null, tint = Muted) }
                     Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                         Text(p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                        Text("${its.size} videos | ${fmtTime(its.sumOf { it.durationMs })}", color = Muted, style = MaterialTheme.typography.bodySmall)
+                        Text(tr("%d videos | %s", its.size, fmtTime(its.sumOf { it.durationMs })), color = Muted, style = MaterialTheme.typography.bodySmall)
                     }
                     Icon(Icons.Outlined.ChevronRight, null, tint = Muted)
                 }
             }
         }
     }
-    if (create) NameDialog("Nayi playlist", "", "Banao", onOk = { vm.createPlaylist(it) }, onDismiss = { create = false })
+    if (create) NameDialog(tr("New playlist"), "", tr("Create"), onOk = { vm.createPlaylist(it) }, onDismiss = { create = false })
 }
 
 @Composable
@@ -80,30 +81,30 @@ fun PlaylistDetailScreen(vm: AppViewModel, id: Long, onBack: () -> Unit, onPlay:
     val list = rows.map { it.second }
     Column(Modifier.fillMaxSize()) {
         ScreenTitle(pl.name, onBack) {
-            IconButton(onClick = { rename = true }) { Icon(Icons.Outlined.Edit, "Rename") }
-            IconButton(onClick = { delete = true }) { Icon(Icons.Outlined.Delete, "Playlist delete karo") }
+            IconButton(onClick = { rename = true }) { Icon(Icons.Outlined.Edit, tr("Rename")) }
+            IconButton(onClick = { delete = true }) { Icon(Icons.Outlined.Delete, tr("Delete playlist")) }
         }
-        Text("${list.size} videos | ${fmtTime(list.sumOf { it.durationMs })}", Modifier.padding(horizontal = 16.dp), color = Muted)
+        Text(tr("%d videos | %s", list.size, fmtTime(list.sumOf { it.durationMs })), Modifier.padding(horizontal = 16.dp), color = Muted)
         if (list.isNotEmpty()) Row(Modifier.padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onPlay(list, 0, false) }, shape = SmallShape) { Icon(Icons.Outlined.PlayArrow, null); Text("Play all") }
-            OutlinedButton(onClick = { onPlay(list, 0, true) }, shape = SmallShape) { Icon(Icons.Outlined.Shuffle, null); Text("Shuffle") }
+            Button(onClick = { onPlay(list, 0, false) }, shape = SmallShape) { Icon(Icons.Outlined.PlayArrow, null); Text(tr("Play all")) }
+            OutlinedButton(onClick = { onPlay(list, 0, true) }, shape = SmallShape) { Icon(Icons.Outlined.Shuffle, null); Text(tr("Shuffle")) }
         }
-        if (list.isEmpty()) EmptyState(Icons.Outlined.PlaylistAdd, "Playlist khaali hai", "Library mein kisi video par long-press karke 'Playlist mein jodo' chuno.")
+        if (list.isEmpty()) EmptyState(Icons.Outlined.PlaylistAdd, tr("This playlist is empty"), tr("Long-press a video in the library and choose 'Add to playlist'."))
         else LazyColumn {
             itemsIndexed(rows, key = { _, r -> r.first.id }) { idx, (r, v) ->
                 VideoListItem(v, progress[v.id], v.id in favs, false, false, "", onClick = { onPlay(list, idx, false) }, onLong = { target = listOf(v) },
                     trailing = {
                         Column {
-                            IconButton(onClick = { vm.movePlaylistItem(id, idx, idx - 1) }, enabled = idx > 0, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.KeyboardArrowUp, "Upar le jao") }
-                            IconButton(onClick = { vm.movePlaylistItem(id, idx, idx + 1) }, enabled = idx < rows.lastIndex, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.KeyboardArrowDown, "Neeche le jao") }
+                            IconButton(onClick = { vm.movePlaylistItem(id, idx, idx - 1) }, enabled = idx > 0, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.KeyboardArrowUp, tr("Move up")) }
+                            IconButton(onClick = { vm.movePlaylistItem(id, idx, idx + 1) }, enabled = idx < rows.lastIndex, modifier = Modifier.size(36.dp)) { Icon(Icons.Outlined.KeyboardArrowDown, tr("Move down")) }
                         }
-                        IconButton(onClick = { vm.removePlaylistItem(r.id) }) { Icon(Icons.Outlined.RemoveCircleOutline, "Playlist se hatao") }
+                        IconButton(onClick = { vm.removePlaylistItem(r.id) }) { Icon(Icons.Outlined.RemoveCircleOutline, tr("Remove from playlist")) }
                     })
             }
         }
     }
-    if (rename) NameDialog("Playlist rename", pl.name, "Save", onOk = { vm.renamePlaylist(id, it) }, onDismiss = { rename = false })
-    if (delete) ConfirmDialog("\"${pl.name}\" delete karein?", "Sirf playlist delete hogi. Isme jude videos aapke phone mein jaise hain waise rahenge.", "Delete", danger = true,
+    if (rename) NameDialog(tr("Rename playlist"), pl.name, tr("Save"), onOk = { vm.renamePlaylist(id, it) }, onDismiss = { rename = false })
+    if (delete) ConfirmDialog(tr("Delete \"%s\"?", pl.name), tr("Only the playlist is deleted. The videos in it stay on your phone untouched."), tr("Delete"), danger = true,
         onConfirm = { vm.deletePlaylist(id); onBack() }, onDismiss = { delete = false })
     VideoActions(vm, target, { target = null }) { v -> onPlay(list, list.indexOf(v).coerceAtLeast(0), false) }
 }

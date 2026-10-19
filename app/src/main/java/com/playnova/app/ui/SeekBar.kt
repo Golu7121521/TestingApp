@@ -31,7 +31,7 @@ fun SeekBar(
     val durS by rememberUpdatedState(dur)
     Canvas(
         modifier.fillMaxWidth().height(40.dp)
-            .semantics { contentDescription = "Seek bar ${fmtTime(pos)} of ${fmtTime(dur)}" }
+            .semantics { contentDescription = "${fmtTime(pos)} / ${fmtTime(dur)}" }
             .pointerInput(Unit) { detectTapGestures { o -> if (durS > 0) onDone((o.x / size.width).coerceIn(0f, 1f)) } }
             .pointerInput(Unit) {
                 detectHorizontalDragGestures(

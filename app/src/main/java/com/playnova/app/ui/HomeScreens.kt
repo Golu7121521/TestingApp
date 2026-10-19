@@ -31,6 +31,11 @@ import com.playnova.app.data.MediaRepo
 import com.playnova.app.data.Video
 import com.playnova.app.data.fmtSize
 import com.playnova.app.data.fmtTime
+import com.playnova.app.i18n.tr
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import java.text.DateFormat
 import java.util.Date
 
@@ -43,14 +48,14 @@ private fun QuickCard(icon: ImageVector, label: String, modifier: Modifier = Mod
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-        Text(label, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(tr(label), style = MaterialTheme.typography.bodyMedium, maxLines = 1)
     }
 }
 
 @Composable
 fun HomeScreen(
     vm: AppViewModel, onNav: (String) -> Unit,
-    onPlay: (List<Video>, Int) -> Unit, onPlayExternal: (Uri) -> Unit
+    onPlay: (List<Video>, Int) -> Unit, onPlayExternal: (Uri) -> Unit, onPlayUrl: (String) -> Unit
 ) {
     val videos by vm.videos.collectAsState()
     val loading by vm.loading.collectAsState()
@@ -84,8 +89,8 @@ fun HomeScreen(
                     Icon(Icons.Outlined.PlayArrow, null, tint = Color.White)
                 }
                 Text("PlayNova", Modifier.weight(1f).padding(start = 10.dp), style = MaterialTheme.typography.titleLarge)
-                IconButton(onClick = { onNav("search") }) { Icon(Icons.Outlined.Search, "Search") }
-                IconButton(onClick = { onNav("settings") }) { Icon(Icons.Outlined.Settings, "Settings") }
+                IconButton(onClick = { onNav("search") }) { Icon(Icons.Outlined.Search, tr("Search")) }
+                IconButton(onClick = { onNav("settings") }) { Icon(Icons.Outlined.Settings, tr("Settings")) }
             }
         }
         item {
@@ -103,23 +108,23 @@ fun HomeScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     OutlinedButton(onClick = { picker.launch(arrayOf("video/*")) }, Modifier.weight(1f), shape = SmallShape) {
-                        Icon(Icons.Outlined.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text("File kholo", maxLines = 1)
+                        Icon(Icons.Outlined.FolderOpen, null); Spacer(Modifier.width(6.dp)); Text(tr("Open file"), maxLines = 1)
                     }
                     OutlinedButton(onClick = { urlDialog = true }, Modifier.weight(1f), shape = SmallShape) {
-                        Icon(Icons.Outlined.Link, null); Spacer(Modifier.width(6.dp)); Text("URL stream", maxLines = 1)
+                        Icon(Icons.Outlined.Link, null); Spacer(Modifier.width(6.dp)); Text(tr("Stream URL"), maxLines = 1)
                     }
                 }
             }
         }
         if (videos.isEmpty()) item {
             if (loading && !scanned) SkeletonGrid() else EmptyState(
-                Icons.Outlined.VideoLibrary, "Abhi koi video nahi",
-                if (hasVideoPermission(ctx)) "Videos scan karo ya upar se koi file seedha kholo." else "Phone ke videos dikhane ke liye permission do.",
-                if (hasVideoPermission(ctx)) "Scan Videos" else "Permission do", scan
+                Icons.Outlined.VideoLibrary, tr("No videos yet"),
+                if (hasVideoPermission(ctx)) tr("Scan for videos, or open a file directly using the buttons above.") else tr("Allow access so PlayNova can show the videos on your phone."),
+                if (hasVideoPermission(ctx)) tr("Scan videos") else tr("Grant permission"), scan
             )
         }
         if (resume.isNotEmpty()) {
-            item { SectionHeader("Continue Watching") }
+            item { SectionHeader(tr("Continue Watching")) }
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(resume, key = { it.first.videoId }) { (h, v) ->
@@ -133,13 +138,13 @@ fun HomeScreen(
                                 if (d > 0) LinearProgressIndicator({ (h.positionMs.toFloat() / d).coerceIn(0f, 1f) },
                                     Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(3.dp))
                                 IconButton(onClick = { vm.removeHistory(v.id) }, Modifier.align(Alignment.TopEnd)) {
-                                    Icon(Icons.Outlined.Close, "Continue watching se hatao", tint = Color.White)
+                                    Icon(Icons.Outlined.Close, tr("Remove from Continue Watching"), tint = Color.White)
                                 }
                             }
                             Text(v.title, Modifier.padding(top = 6.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("${fmtTime(h.positionMs)} / ${fmtTime(d)}", Modifier.weight(1f), color = Muted, style = MaterialTheme.typography.labelSmall)
-                                FilledTonalButton(onClick = { onPlay(listOf(v), 0) }, contentPadding = PaddingValues(horizontal = 12.dp), modifier = Modifier.height(36.dp)) { Text("Resume") }
+                                FilledTonalButton(onClick = { onPlay(listOf(v), 0) }, contentPadding = PaddingValues(horizontal = 12.dp), modifier = Modifier.height(36.dp)) { Text(tr("Resume")) }
                             }
                         }
                     }
@@ -147,7 +152,7 @@ fun HomeScreen(
             }
         }
         if (recent.isNotEmpty()) {
-            item { SectionHeader("Recently Added", "Sab dekho") { onNav("videos") } }
+            item { SectionHeader(tr("Recently Added"), tr("See all")) { onNav("videos") } }
             item {
                 LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(recent, key = { it.id }) { v ->
@@ -167,12 +172,23 @@ fun HomeScreen(
     if (urlDialog) {
         var url by remember { mutableStateOf("") }
         AlertDialog(
-            onDismissRequest = { urlDialog = false }, title = { Text("Network stream") },
-            text = { OutlinedTextField(url, { url = it }, singleLine = true, label = { Text("http(s):// video URL") }) },
-            confirmButton = {
-                TextButton(enabled = url.startsWith("http"), onClick = { urlDialog = false; onPlayExternal(Uri.parse(url.trim())) }) { Text("Play") }
+            onDismissRequest = { urlDialog = false }, title = { Text(tr("Stream from URL")) },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        url, { url = it }, singleLine = true, label = { Text(tr("Video link")) },
+                        placeholder = { Text("https://example.com/video.mp4") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
+                        keyboardActions = KeyboardActions(onGo = { if (url.isNotBlank()) { urlDialog = false; onPlayUrl(url) } })
+                    )
+                    Text(tr("Supports direct links, HLS (.m3u8), DASH (.mpd), RTSP, redirects and links without a file extension."),
+                        Modifier.padding(top = 8.dp), color = Muted, style = MaterialTheme.typography.bodySmall)
+                }
             },
-            dismissButton = { TextButton(onClick = { urlDialog = false }) { Text("Cancel") } }
+            confirmButton = {
+                TextButton(enabled = url.isNotBlank(), onClick = { urlDialog = false; onPlayUrl(url) }) { Text(tr("Play")) }
+            },
+            dismissButton = { TextButton(onClick = { urlDialog = false }) { Text(tr("Cancel")) } }
         )
     }
 }
@@ -185,12 +201,12 @@ fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
     val scan = rememberScanAction(vm)
     val shown = folders.filter { q.isBlank() || it.name.contains(q, true) }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Folders") { IconButton(onClick = scan) { Icon(Icons.Outlined.Refresh, "Rescan") } }
-        OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text("Folder dhundo") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
+        ScreenTitle(tr("Folders")) { RefreshButton(scan) }
+        OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text(tr("Search folders")) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), shape = SmallShape)
         when {
             loading && folders.isEmpty() -> SkeletonGrid()
-            shown.isEmpty() -> EmptyState(Icons.Outlined.FolderOff, "Koi folder nahi", "Sirf wahi folders dikhte hain jinme videos hain aur jinki permission di gayi hai.", "Scan Videos", scan)
+            shown.isEmpty() -> EmptyState(Icons.Outlined.FolderOff, tr("No folders"), tr("Only folders that contain videos and that the app can access are shown."), tr("Scan videos"), scan)
             else -> LazyColumn(contentPadding = PaddingValues(vertical = 4.dp)) {
                 items(shown, key = { it.name }) { f ->
                     Row(
@@ -201,7 +217,7 @@ fun FoldersScreen(vm: AppViewModel, onOpen: (String) -> Unit) {
                         Thumb(f.thumb, Modifier.size(72.dp))
                         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                             Text(f.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                            Text("${f.count} videos", color = Muted, style = MaterialTheme.typography.bodySmall)
+                            Text(tr("%d videos", f.count), color = Muted, style = MaterialTheme.typography.bodySmall)
                         }
                         Icon(Icons.Outlined.ChevronRight, null, tint = Muted)
                     }
@@ -237,17 +253,17 @@ fun SearchScreen(vm: AppViewModel, onBack: () -> Unit, onPlay: (List<Video>, Int
     }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, "Back") }
-            OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text("Video ka naam likho") },
+            IconButton(onClick = onBack) { Icon(Icons.Outlined.ArrowBack, tr("Back")) }
+            OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text(tr("Type a video name")) },
                 modifier = Modifier.weight(1f).padding(end = 12.dp).focusRequester(focus), shape = SmallShape,
-                trailingIcon = { if (q.isNotEmpty()) IconButton(onClick = { q = "" }) { Icon(Icons.Outlined.Close, "Clear") } },
+                trailingIcon = { if (q.isNotEmpty()) IconButton(onClick = { q = "" }) { Icon(Icons.Outlined.Close, tr("Clear")) } },
                 keyboardActions = androidx.compose.foundation.text.KeyboardActions(onSearch = { vm.addSearch(q) }),
                 keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = androidx.compose.ui.text.input.ImeAction.Search))
         }
         if (q.isBlank()) {
-            if (searches.isEmpty()) EmptyState(Icons.Outlined.Search, "Local search", "Phone ke videos filename se dhundo. Internet ki zaroorat nahi.")
+            if (searches.isEmpty()) EmptyState(Icons.Outlined.Search, tr("Local search"), tr("Search the videos on your phone by file name. No internet needed."))
             else {
-                SectionHeader("Recent searches", "Clear") { vm.clearSearches() }
+                SectionHeader(tr("Recent searches"), tr("Clear")) { vm.clearSearches() }
                 searches.forEach { s ->
                     ListItem(headlineContent = { Text(s.text) }, leadingContent = { Icon(Icons.Outlined.History, null) },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent), modifier = Modifier.clickable { q = s.text })
@@ -258,12 +274,12 @@ fun SearchScreen(vm: AppViewModel, onBack: () -> Unit, onPlay: (List<Video>, Int
                 items(suggestions) { s -> SuggestionChip(onClick = { q = s }, label = { Text(s) }, modifier = Modifier.padding(end = 6.dp)) }
             }
             LazyRow(Modifier.padding(horizontal = 16.dp)) {
-                item { Chip("< 5 min", dur == 1) { dur = if (dur == 1) 0 else 1 } }
-                item { Chip("5-30 min", dur == 2) { dur = if (dur == 2) 0 else 2 } }
-                item { Chip("> 30 min", dur == 3) { dur = if (dur == 3) 0 else 3 } }
+                item { Chip(tr("< 5 min"), dur == 1) { dur = if (dur == 1) 0 else 1 } }
+                item { Chip(tr("5-30 min"), dur == 2) { dur = if (dur == 2) 0 else 2 } }
+                item { Chip(tr("> 30 min"), dur == 3) { dur = if (dur == 3) 0 else 3 } }
                 items(folders) { f -> Chip(f.name, folderFilter == f.name) { folderFilter = if (folderFilter == f.name) null else f.name } }
             }
-            if (results.isEmpty()) EmptyState(Icons.Outlined.SearchOff, "Kuch nahi mila", "\"$q\" se match karta koi video nahi hai.")
+            if (results.isEmpty()) EmptyState(Icons.Outlined.SearchOff, tr("Nothing found"), tr("No video matches \"%s\".", q))
             else LazyColumn {
                 items(results, key = { it.id }) { v ->
                     VideoListItem(v, progress[v.id], v.id in favs, false, false, q,
@@ -286,23 +302,23 @@ fun HistoryScreen(vm: AppViewModel, onBack: () -> Unit, onPlay: (List<Video>, In
     val rows = remember(history, videos) { vm.historyVideos(history) }
     val list = rows.map { it.second }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("History", onBack) {
-            if (rows.isNotEmpty()) IconButton(onClick = { confirm = true }) { Icon(Icons.Outlined.DeleteSweep, "History saaf karo") }
+        ScreenTitle(tr("History"), onBack) {
+            if (rows.isNotEmpty()) IconButton(onClick = { confirm = true }) { Icon(Icons.Outlined.DeleteSweep, tr("Clear history")) }
         }
-        if (rows.isEmpty()) EmptyState(Icons.Outlined.History, "History khaali hai", "Jo videos tum dekhoge yahan dikhenge.")
+        if (rows.isEmpty()) EmptyState(Icons.Outlined.History, tr("History is empty"), tr("Videos you watch will show up here."))
         else LazyColumn {
             items(rows, key = { it.first.videoId }) { (h, v) ->
                 VideoListItem(v, h, v.id in favs, false, false, "", onClick = { onPlay(list, list.indexOf(v)) }, onLong = { target = listOf(v) },
                     trailing = {
                         Column(horizontalAlignment = Alignment.End) {
                             Text(DateFormat.getDateInstance(DateFormat.SHORT).format(Date(h.lastPlayed)), color = Muted, style = MaterialTheme.typography.labelSmall)
-                            IconButton(onClick = { vm.removeHistory(v.id) }) { Icon(Icons.Outlined.Close, "History se hatao") }
+                            IconButton(onClick = { vm.removeHistory(v.id) }) { Icon(Icons.Outlined.Close, tr("Remove from history")) }
                         }
                     })
             }
         }
     }
-    if (confirm) ConfirmDialog("Poori history saaf karein?", "Sirf history list saaf hogi. Videos phone mein rahenge.", "Saaf karo", danger = true,
+    if (confirm) ConfirmDialog(tr("Clear all history?"), tr("Only the history list will be cleared. Your videos stay on the phone."), tr("Clear"), danger = true,
         onConfirm = { vm.clearHistory() }, onDismiss = { confirm = false })
     VideoActions(vm, target, { target = null }) { v -> onPlay(list, list.indexOf(v).coerceAtLeast(0)) }
 }
@@ -321,20 +337,20 @@ fun FavoritesScreen(vm: AppViewModel, onBack: () -> Unit, onPlay: (List<Video>, 
         if (byName) l.sortedBy { it.title.lowercase() } else l
     }
     Column(Modifier.fillMaxSize()) {
-        ScreenTitle("Favorites", onBack) {
-            IconButton(onClick = { byName = !byName }) { Icon(Icons.Outlined.SortByAlpha, if (byName) "Naam se sort (on)" else "Naam se sort") }
+        ScreenTitle(tr("Favorites"), onBack) {
+            IconButton(onClick = { byName = !byName }) { Icon(Icons.Outlined.SortByAlpha, if (byName) tr("Sort by name (on)") else tr("Sort by name")) }
         }
-        OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text("Favorites mein dhundo") }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
+        OutlinedTextField(q, { q = it }, singleLine = true, placeholder = { Text(tr("Search favorites")) }, leadingIcon = { Icon(Icons.Outlined.Search, null) },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), shape = SmallShape)
         if (list.isNotEmpty()) Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onPlay(list, 0, false) }, shape = SmallShape) { Icon(Icons.Outlined.PlayArrow, null); Text("Play all") }
-            OutlinedButton(onClick = { onPlay(list, 0, true) }, shape = SmallShape) { Icon(Icons.Outlined.Shuffle, null); Text("Shuffle") }
+            Button(onClick = { onPlay(list, 0, false) }, shape = SmallShape) { Icon(Icons.Outlined.PlayArrow, null); Text(tr("Play all")) }
+            OutlinedButton(onClick = { onPlay(list, 0, true) }, shape = SmallShape) { Icon(Icons.Outlined.Shuffle, null); Text(tr("Shuffle")) }
         }
-        if (list.isEmpty()) EmptyState(Icons.Outlined.FavoriteBorder, "Koi favorite nahi", "Kisi video par long-press karke Favorites mein jodo.")
+        if (list.isEmpty()) EmptyState(Icons.Outlined.FavoriteBorder, tr("No favorites yet"), tr("Long-press a video and add it to Favorites."))
         else LazyColumn {
             items(list, key = { it.id }) { v ->
                 VideoListItem(v, progress[v.id], true, false, false, q, onClick = { onPlay(list, list.indexOf(v), false) }, onLong = { target = listOf(v) },
-                    trailing = { IconButton(onClick = { vm.toggleFavorite(v) }) { Icon(Icons.Outlined.Favorite, "Favorites se hatao", tint = Color(0xFFFF5C8A)) } })
+                    trailing = { IconButton(onClick = { vm.toggleFavorite(v) }) { Icon(Icons.Outlined.Favorite, tr("Remove from Favorites"), tint = Color(0xFFFF5C8A)) } })
             }
         }
     }

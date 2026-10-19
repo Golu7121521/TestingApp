@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.playnova.app.AppViewModel
+import com.playnova.app.i18n.tr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -39,7 +40,7 @@ fun SplashScreen(onDone: () -> Unit) {
             }
             Spacer(Modifier.height(16.dp))
             Text("PlayNova", style = MaterialTheme.typography.headlineMedium)
-            Text("Premium video player", color = Muted)
+            Text(tr("Premium video player"), color = Muted)
         }
     }
 }
@@ -47,14 +48,14 @@ fun SplashScreen(onDone: () -> Unit) {
 @Composable
 fun OnboardingScreen(onDone: () -> Unit) {
     val pages = listOf<Triple<ImageVector, String, String>>(
-        Triple(Icons.Outlined.PlayCircle, "Smooth playback", "Hardware decoding ke saath MP4, MKV, WebM, MOV aur zyada formats. Phone ka decoder jo support kare wo sab."),
-        Triple(Icons.Outlined.TouchApp, "Gestures", "Double-tap se seek, left swipe brightness, right swipe volume, long-press se fast speed."),
-        Triple(Icons.Outlined.VideoLibrary, "Aapki library", "Folders, playlists, favorites aur history. Resume wahin se jahan chhoda tha.")
+        Triple(Icons.Outlined.PlayCircle, tr("Smooth playback"), tr("Hardware decoding with MP4, MKV, WebM, MOV and more. Anything your phone can decode.")),
+        Triple(Icons.Outlined.TouchApp, tr("Gestures"), tr("Double-tap to seek, swipe the left side for brightness, the right side for volume, long-press for fast speed.")),
+        Triple(Icons.Outlined.VideoLibrary, tr("Your library"), tr("Folders, playlists, favorites and history. Resume right where you left off."))
     )
     val state = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = onDone) { Text("Skip") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) { TextButton(onClick = onDone) { Text(tr("Skip")) } }
         HorizontalPager(state, Modifier.weight(1f)) { i ->
             val (ic, t, d) = pages[i]
             Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
@@ -74,7 +75,7 @@ fun OnboardingScreen(onDone: () -> Unit) {
             }
         }
         Button(onClick = { if (state.currentPage == pages.lastIndex) onDone() else scope.launch { state.animateScrollToPage(state.currentPage + 1) } },
-            Modifier.fillMaxWidth().height(52.dp), shape = SmallShape) { Text(if (state.currentPage == pages.lastIndex) "Shuru karo" else "Aage") }
+            Modifier.fillMaxWidth().height(52.dp), shape = SmallShape) { Text(if (state.currentPage == pages.lastIndex) tr("Get started") else tr("Next")) }
     }
 }
 
@@ -82,9 +83,9 @@ fun OnboardingScreen(onDone: () -> Unit) {
 fun PermissionScreen(vm: AppViewModel, onDone: () -> Unit) {
     val ask = rememberScanAction(vm) { onDone() }
     Column(Modifier.fillMaxSize().systemBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-        EmptyState(Icons.Outlined.Lock, "Videos tak access", "PlayNova ko aapke phone ke videos dikhane ke liye video access chahiye. Ye data kahin upload nahi hota. Aap baad mein bhi 'File kholo' se koi bhi video chala sakte ho.")
+        EmptyState(Icons.Outlined.Lock, tr("Access to your videos"), tr("PlayNova needs video access to show the videos on your phone. Nothing is uploaded anywhere. You can also play any video later with Open file."))
         Spacer(Modifier.height(12.dp))
-        Button(onClick = ask, Modifier.fillMaxWidth().height(52.dp), shape = SmallShape) { Text("Permission do") }
-        TextButton(onClick = onDone) { Text("Abhi nahi") }
+        Button(onClick = ask, Modifier.fillMaxWidth().height(52.dp), shape = SmallShape) { Text(tr("Grant permission")) }
+        TextButton(onClick = onDone) { Text(tr("Not now")) }
     }
 }
