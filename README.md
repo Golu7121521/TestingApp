@@ -1,40 +1,39 @@
-# PDF Toolkit (Android)
+# PDF Pro — All-in-One PDF Studio
 
-A lightweight, offline PDF utility. Kotlin + XML Views, minSdk 21 (Android 5.0), no account, no analytics, no internet use.
-
-## What works in this version (v1 "core")
-
-- **Home** with Open PDF, Create PDF (images to PDF), quick tools, Recent Files and Starred.
-- **Files**: Recent / All PDFs / Starred / Created by me, search by name, sort, favorites, long-press menu (open, share, favorite, rename/delete for files you created). Files are opened with Android's file picker (no broad storage permission). "Scan device" lists PDFs visible to the app through MediaStore.
-- **Reader**: continuous vertical scrolling with page-by-page rendering and a small bitmap cache (safe on low-RAM phones), zoom 100–200%, go to page, page indicator, dark reader mode, reading-position restore, share, document info, errors for damaged/unreadable files. Opens PDFs from other apps ("Open with").
-- **Tools**: Merge, Split / Extract pages, Compress, Images to PDF (A4 / Letter / fit), PDF to Images (PNG / JPEG). Each shows progress, validates its output, and offers Open / Share / Save a copy.
-- **Settings**: theme (system/light/dark), default sort, default compression, clear history / temp files / starred, privacy, about, reset.
-
-## Known limits (shown honestly in the app)
-
-- **Compress** re-renders pages as JPEG images, so text is no longer selectable, and it saves nothing if the result is not smaller.
-- **Password-protected PDFs** cannot be opened or processed in this version.
-- **Not included yet**: text search, bookmarks / table of contents, annotation and editing, scanning, OCR, forms, password protection, watermark, page rotate/reorder, Office conversions. They are not shown as buttons that do nothing; the Tools screen says they are planned.
-- Zoom uses menu buttons, not pinch.
-- On Android 10+ output files live in the app's own folder (`Android/data/com.advancedpdf.toolkit/files/PDFs`). Use **Save a copy** on a result to put a file anywhere else.
+React + TypeScript + Vite + Tailwind app, wrapped as an Android APK with Capacitor.
+All PDF processing runs **on the device** (pdf-lib + PDF.js). Nothing is uploaded.
 
 ## Build the APK with GitHub Actions (no PC needed)
+1. Push this project to a GitHub repository (the `.github/workflows/build-apk.yml` file must be included).
+2. Open **Actions → "Build APK and publish to Releases" → Run workflow**, enter a version such as `v1.0.0`.
+   (Or push a tag starting with `v`.)
+3. When it finishes, the APK is attached to **Releases** automatically. No Actions artifacts are used, so the artifact storage limit does not matter.
+4. Download `PDF-Pro-<version>.apk` from Releases and install it (allow "Install unknown apps").
 
-1. Push this project to your GitHub repo (the `.github/workflows/release.yml` file must be included).
-2. In the repo go to **Actions → Build and Release APK → Run workflow**, enter a version such as `1.0.0`, and run it.
-   (Or push a tag named `v1.0.0`.)
-3. When the run is green, open the repo's **Releases** page. `PDFToolkit-v1.0.0.apk` is attached. Download it on your phone and install it.
+The APK is a **debug-signed** build, which installs fine for personal use. It is not suitable for Play Store.
 
-Each version creates its own release, so older downloads stay available.
+## Run locally
+```bash
+npm install
+npm run dev        # http://localhost:5173
+npm test           # unit tests for PDF operations and validation
+npm run typecheck
+npm run build
+```
 
-### Which APK?
+## Implemented
+View PDF (zoom, fit, rotate view, thumbnails, keyboard nav) · Merge · Split (ranges / every N) · Extract pages · Delete pages ·
+Rotate / reorder / duplicate / delete pages with undo · Compress (lossless structure optimize, or re-render as JPEG) ·
+PDF → PNG/JPG (+ZIP) · Images → PDF · Watermark · Page numbers · Visual signature (draw/upload, drag to place) ·
+Dark mode · Settings · Recent exports list (names and sizes only).
 
-One universal APK is produced (the app has no native code), and it is the right one for the Redmi 9 Prime (arm64) and for older 32-bit phones.
+## Not available (clearly disabled in the UI)
+Annotate, Protect (encrypt), Unlock, OCR, PDF → Word/Excel/PowerPoint, text search/selection in viewer,
+Starred/Trash/Shared (files are not stored between sessions).
 
-### Signing (optional but recommended)
-
-Without secrets, each build is signed with a freshly generated key, so installing a newer build over an older one requires uninstalling first. To keep updates working, add these repository secrets (Settings → Secrets and variables → Actions): `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. No keys or passwords are stored in the repository.
-
-## If the build fails
-
-Open the failed run, expand the **Build release APK** step and send the last ~40 lines of the log. A `build-reports` artifact is also attached to failed runs.
+## Notes
+- Signatures are visual images, **not** cryptographic digital signatures.
+- Compression presets that re-render pages remove selectable text; savings are not guaranteed.
+- Encrypted PDFs are rejected with a clear message.
+- On Android, "Save / Share" opens the share sheet (Save to Files, Drive, WhatsApp…).
+- Local storage only keeps settings and export names/sizes; clearing app data removes them.
