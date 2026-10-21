@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "PlayNova"
+rootProject.name = "AdvancedPdfToolkit"
 include(":app")

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <item android:id="@+id/m_goto" android:title="Go to page…" app:showAsAction="never" />
+    <item android:id="@+id/m_zoom_in" android:title="Zoom in" app:showAsAction="never" />
+    <item android:id="@+id/m_zoom_out" android:title="Zoom out" app:showAsAction="never" />
+    <item android:id="@+id/m_fit" android:title="Fit to width" app:showAsAction="never" />
+    <item android:id="@+id/m_dark" android:checkable="true" android:title="Dark reader mode" app:showAsAction="never" />
+    <item android:id="@+id/m_share" android:title="Share" app:showAsAction="never" />
+    <item android:id="@+id/m_info" android:title="Document info" app:showAsAction="never" />
+</menu>

@@ -1,0 +1,118 @@
+name: Build and Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version number, for example 1.0.0"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+
+      - name: Work out version
+        id: ver
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            V="${GITHUB_REF_NAME#v}"
+          else
+            V="${{ github.event.inputs.version }}"
+          fi
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          echo "Building version $V (build number ${{ github.run_number }})"
+
+      - name: Prepare signing key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD_SECRET: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS_SECRET: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD_SECRET: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "Using signing key from repository secrets."
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            STORE_PASS="$KEYSTORE_PASSWORD_SECRET"
+            ALIAS="$KEY_ALIAS_SECRET"
+            KEY_PASS="${KEY_PASSWORD_SECRET:-$KEYSTORE_PASSWORD_SECRET}"
+          else
+            echo "No signing secrets set. Generating a one-off key for this build."
+            echo "(Updates over a previously installed build will need an uninstall first.)"
+            STORE_PASS="$(openssl rand -hex 16)"
+            KEY_PASS="$STORE_PASS"
+            ALIAS="pdftoolkit"
+            keytool -genkeypair -v -keystore "$RUNNER_TEMP/release.jks" \
+              -storepass "$STORE_PASS" -keypass "$KEY_PASS" \
+              -alias "$ALIAS" -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=PDF Toolkit, O=Local, C=IN" > /dev/null
+          fi
+          echo "::add-mask::$STORE_PASS"
+          echo "::add-mask::$KEY_PASS"
+          {
+            echo "KEYSTORE_PATH=$RUNNER_TEMP/release.jks"
+            echo "KEYSTORE_PASSWORD=$STORE_PASS"
+            echo "KEY_ALIAS=$ALIAS"
+            echo "KEY_PASSWORD=$KEY_PASS"
+          } >> "$GITHUB_ENV"
+
+      - name: Build release APK
+        env:
+          APP_VERSION: ${{ steps.ver.outputs.version }}
+          VERSION_CODE: ${{ github.run_number }}
+        run: gradle assembleRelease --stacktrace --no-daemon
+
+      - name: Name the APK
+        id: apk
+        run: |
+          NAME="PDFToolkit-v${{ steps.ver.outputs.version }}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$NAME"
+          ls -l "$NAME"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          name: PDF Toolkit ${{ steps.ver.outputs.version }}
+          files: ${{ steps.apk.outputs.name }}
+          generate_release_notes: true
+          body: |
+            ## Install
+            Download **${{ steps.apk.outputs.name }}** below, open it on your Android phone and allow
+            "Install unknown apps" for your browser or file manager when asked.
+
+            This single APK is universal and works on arm64 and 32-bit ARM phones, including the
+            Xiaomi Redmi 9 Prime. Requires Android 5.0 or newer.
+
+      - name: Upload build reports on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-reports
+          path: |
+            app/build/reports
+            app/build/outputs/logs
+          if-no-files-found: ignore
