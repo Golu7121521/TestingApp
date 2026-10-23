@@ -77,7 +77,7 @@ dependencies {
     // out of the box it plays local files of almost any codec/container PLUS
     // every kind of link - http/https, hls (.m3u8), dash (.mpd), rtsp, rtmp,
     // mms, udp, rtp, smb, ftp, and more - with no extra modules needed.
-    implementation 'org.videolan.android:libvlc-all:3.6.7'
+    implementation 'org.videolan.android:libvlc-all:3.5.1'
 
     // Glide - generates video thumbnails from local files
     implementation 'com.github.bumptech.glide:glide:4.16.0'
