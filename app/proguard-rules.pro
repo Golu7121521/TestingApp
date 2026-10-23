@@ -5,10 +5,13 @@
 -keep class com.bumptech.glide.GeneratedAppGlideModuleImpl
 -dontwarn com.bumptech.glide.load.resource.bitmap.VideoDecoder
 
-# Media3 / ExoPlayer ships its own consumer-rules.pro (kept automatically),
-# this just silences harmless warnings from optional codec/network classes
-# that this app never uses at runtime.
 -dontwarn org.checkerframework.**
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+
+# libVLC talks to its native (C/C++) engine over JNI, which looks up these
+# Java classes/fields/methods by name - they must not be renamed or stripped.
+-keep class org.videolan.libvlc.** { *; }
+-keep interface org.videolan.libvlc.** { *; }
+-dontwarn org.videolan.libvlc.**

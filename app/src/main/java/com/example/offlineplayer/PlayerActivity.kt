@@ -15,18 +15,19 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackException
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.AspectRatioFrameLayout
 import com.example.offlineplayer.databinding.ActivityPlayerBinding
+import org.videolan.libvlc.LibVLC
+import org.videolan.libvlc.Media
+import org.videolan.libvlc.MediaPlayer
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
 /**
- * Fully custom, edge-to-edge offline video player screen built on Media3 ExoPlayer.
+ * Fully custom, edge-to-edge video player screen built on libVLC - the exact same
+ * playback engine VLC itself uses. This means it plays local files AND almost any
+ * kind of link (http/https, hls .m3u8, dash .mpd, rtsp, rtmp, mms, udp, smb, ftp...)
+ * without needing separate extension modules, just like VLC does.
  *
  * Features:
  *  - Immersive edge-to-edge playback (content flows under the status/nav bars)
@@ -38,21 +39,22 @@ import kotlin.math.abs
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
-    private var player: ExoPlayer? = null
+
+    private var libVLC: LibVLC? = null
+    private var mediaPlayer: MediaPlayer? = null
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private var controlsVisible = true
     private var isLocked = false
     private var isUserSeeking = false
+    private var knownDurationMs = 0L
 
     private val speedSteps = floatArrayOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f)
     private var speedIndex = 2 // 1.0x
 
-    private val aspectModes = intArrayOf(
-        AspectRatioFrameLayout.RESIZE_MODE_FIT,
-        AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-        AspectRatioFrameLayout.RESIZE_MODE_FILL
-    )
+    // null = best-fit (libVLC default), then a couple of fixed ratios
+    private val aspectRatios = arrayOf<String?>(null, "16:9", "4:3", "1:1")
+    private val aspectLabels = arrayOf("Fit", "16:9", "4:3", "1:1")
     private var aspectIndex = 0
 
     private lateinit var gestureDetector: GestureDetector
@@ -112,13 +114,15 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     // ---------------------------------------------------------------------
-    // Player setup
+    // Player setup (libVLC)
     // ---------------------------------------------------------------------
 
     /** Works whether we launched this screen ourselves, or another app (file manager,
-     *  browser, WhatsApp, etc.) opened/shared a video with us. */
+     *  browser, WhatsApp, etc.) opened/shared a video - or a direct link - with us. */
     private fun resolveVideoUri(): Uri? {
-        intent.getStringExtra(EXTRA_VIDEO_URI)?.let { return Uri.parse(it) }
+        intent.getStringExtra(EXTRA_VIDEO_URI)?.let {
+            return if (it.contains("://")) Uri.parse(it) else Uri.parse(it)
+        }
 
         return when (intent.action) {
             Intent.ACTION_VIEW -> intent.data
@@ -138,42 +142,63 @@ class PlayerActivity : AppCompatActivity() {
 
     private fun initializePlayer() {
         val uri = resolveVideoUri() ?: return
-        val exoPlayer = ExoPlayer.Builder(this).build()
-        binding.playerView.player = exoPlayer
-        binding.playerView.useController = false
-        binding.playerView.resizeMode = aspectModes[aspectIndex]
 
-        exoPlayer.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                binding.bufferingSpinner.visibility =
-                    if (playbackState == Player.STATE_BUFFERING) View.VISIBLE else View.GONE
+        // Minimal, safe options - lets libVLC auto-detect everything about the stream,
+        // same way the VLC app itself does.
+        val vlc = LibVLC(this, arrayListOf("--no-drop-late-frames", "--no-skip-frames"))
+        val vlcMediaPlayer = MediaPlayer(vlc)
+        vlcMediaPlayer.attachViews(binding.playerView, null, false, false)
 
-                if (playbackState == Player.STATE_READY) {
-                    binding.textTotalTime.text = formatTime(exoPlayer.duration.coerceAtLeast(0))
+        val media = Media(vlc, uri)
+        media.setHWDecoderEnabled(true, false)
+        vlcMediaPlayer.media = media
+        media.release()
+
+        vlcMediaPlayer.setEventListener { event ->
+            when (event.type) {
+                MediaPlayer.Event.Opening, MediaPlayer.Event.Buffering -> {
+                    runOnUiThread {
+                        val stillBuffering = event.type != MediaPlayer.Event.Buffering || event.buffering < 100f
+                        binding.bufferingSpinner.visibility = if (stillBuffering) View.VISIBLE else View.GONE
+                    }
                 }
+                MediaPlayer.Event.Playing -> runOnUiThread {
+                    binding.bufferingSpinner.visibility = View.GONE
+                    updatePlayPauseIcon(true)
+                }
+                MediaPlayer.Event.Paused, MediaPlayer.Event.Stopped -> runOnUiThread {
+                    updatePlayPauseIcon(false)
+                }
+                MediaPlayer.Event.EndReached -> runOnUiThread {
+                    updatePlayPauseIcon(false)
+                }
+                MediaPlayer.Event.EncounteredError -> runOnUiThread {
+                    binding.bufferingSpinner.visibility = View.GONE
+                }
+                MediaPlayer.Event.LengthChanged -> runOnUiThread {
+                    knownDurationMs = event.lengthChanged.coerceAtLeast(0)
+                    binding.textTotalTime.text = formatTime(knownDurationMs)
+                }
+                else -> {}
             }
+        }
 
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                updatePlayPauseIcon(isPlaying)
-            }
+        vlcMediaPlayer.play()
 
-            override fun onPlayerError(error: PlaybackException) {
-                binding.bufferingSpinner.visibility = View.GONE
-            }
-        })
-
-        val mediaItem = MediaItem.fromUri(uri)
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.playWhenReady = true
-        exoPlayer.prepare()
-
-        player = exoPlayer
+        libVLC = vlc
+        mediaPlayer = vlcMediaPlayer
         startProgressUpdates()
     }
 
     private fun releasePlayer() {
-        player?.release()
-        player = null
+        mediaPlayer?.let {
+            it.stop()
+            it.detachViews()
+            it.release()
+        }
+        mediaPlayer = null
+        libVLC?.release()
+        libVLC = null
     }
 
     // ---------------------------------------------------------------------
@@ -218,7 +243,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private val autoHideRunnable = Runnable {
-        if (player?.isPlaying == true) hideControls()
+        if (mediaPlayer?.isPlaying == true) hideControls()
     }
 
     private fun scheduleAutoHideControls() {
@@ -247,14 +272,15 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnSpeed.setOnClickListener {
             speedIndex = (speedIndex + 1) % speedSteps.size
             val speed = speedSteps[speedIndex]
-            player?.setPlaybackSpeed(speed)
+            mediaPlayer?.setRate(speed)
             binding.btnSpeed.text = formatSpeedLabel(speed)
             scheduleAutoHideControls()
         }
 
         binding.btnAspectRatio.setOnClickListener {
-            aspectIndex = (aspectIndex + 1) % aspectModes.size
-            binding.playerView.resizeMode = aspectModes[aspectIndex]
+            aspectIndex = (aspectIndex + 1) % aspectRatios.size
+            mediaPlayer?.setAspectRatio(aspectRatios[aspectIndex])
+            mediaPlayer?.setScale(0f)
             scheduleAutoHideControls()
         }
 
@@ -275,8 +301,8 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun togglePlayPause() {
-        val exoPlayer = player ?: return
-        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
+        val player = mediaPlayer ?: return
+        if (player.isPlaying) player.pause() else player.play()
         scheduleAutoHideControls()
     }
 
@@ -285,10 +311,10 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun seekBy(deltaMs: Long) {
-        val exoPlayer = player ?: return
-        val newPosition = (exoPlayer.currentPosition + deltaMs)
-            .coerceIn(0, exoPlayer.duration.coerceAtLeast(0))
-        exoPlayer.seekTo(newPosition)
+        val player = mediaPlayer ?: return
+        val duration = if (knownDurationMs > 0) knownDurationMs else player.length.coerceAtLeast(0)
+        val newPosition = (player.time + deltaMs).coerceIn(0, duration)
+        player.time = newPosition
     }
 
     // ---------------------------------------------------------------------
@@ -299,7 +325,7 @@ class PlayerActivity : AppCompatActivity() {
         binding.seekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    val duration = player?.duration?.coerceAtLeast(0) ?: 0
+                    val duration = currentDuration()
                     val position = duration * progress / seekBar.max
                     binding.textCurrentTime.text = formatTime(position)
                 }
@@ -311,26 +337,31 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onStopTrackingTouch(seekBar: SeekBar) {
-                val duration = player?.duration?.coerceAtLeast(0) ?: 0
+                val duration = currentDuration()
                 val position = duration * seekBar.progress / seekBar.max
-                player?.seekTo(position)
+                mediaPlayer?.time = position
                 isUserSeeking = false
                 scheduleAutoHideControls()
             }
         })
     }
 
+    private fun currentDuration(): Long {
+        val player = mediaPlayer ?: return knownDurationMs
+        return if (knownDurationMs > 0) knownDurationMs else player.length.coerceAtLeast(0)
+    }
+
     private val progressRunnable = object : Runnable {
         override fun run() {
-            val exoPlayer = player
-            if (exoPlayer != null && !isUserSeeking) {
-                val duration = exoPlayer.duration.coerceAtLeast(0)
-                val position = exoPlayer.currentPosition.coerceIn(0, duration)
+            val player = mediaPlayer
+            if (player != null && !isUserSeeking) {
+                val duration = currentDuration()
+                val position = player.time.coerceIn(0, if (duration > 0) duration else Long.MAX_VALUE)
                 if (duration > 0) {
                     binding.seekBar.progress = (position * binding.seekBar.max / duration).toInt()
                 }
                 binding.textCurrentTime.text = formatTime(position)
-                binding.textTotalTime.text = formatTime(duration)
+                if (duration > 0) binding.textTotalTime.text = formatTime(duration)
             }
             mainHandler.postDelayed(this, PROGRESS_UPDATE_MS)
         }
@@ -352,7 +383,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun formatTime(ms: Long): String {
-        val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(ms)
+        val totalSeconds = TimeUnit.MILLISECONDS.toSeconds(ms.coerceAtLeast(0))
         val hours = totalSeconds / 3600
         val minutes = (totalSeconds % 3600) / 60
         val seconds = totalSeconds % 60

@@ -16,6 +16,13 @@ android {
 
         // Only ship English strings/resources -> smaller APK
         resConfigs "en"
+
+        // libvlc-all bundles native .so files for 4 CPU architectures; almost every
+        // real device today is one of these two, so we drop the legacy x86/x86_64
+        // ones to keep the APK size reasonable.
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a"
+        }
     }
 
     buildTypes {
@@ -65,18 +72,12 @@ dependencies {
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
 
-    // Media3 ExoPlayer - the current best-in-class, actively maintained Android
-    // playback library. Core module alone already plays MP4, MKV, WebM, 3GP,
-    // OGG, MP3, AAC, FLAC, WAV, AMR, TS/TS-H265, FLV, etc. via its built-in
-    // extractors. These extra modules add support for every *type of link*
-    // (not just plain files): HLS (.m3u8), DASH (.mpd) and RTSP streams.
-    implementation 'androidx.media3:media3-exoplayer:1.4.1'
-    implementation 'androidx.media3:media3-exoplayer-hls:1.4.1'
-    implementation 'androidx.media3:media3-exoplayer-dash:1.4.1'
-    implementation 'androidx.media3:media3-exoplayer-rtsp:1.4.1'
-    implementation 'androidx.media3:media3-datasource-okhttp:1.4.1'
-    implementation 'androidx.media3:media3-ui:1.4.1'
-    implementation 'androidx.media3:media3-common:1.4.1'
+    // libVLC - the exact same playback engine VLC itself uses. This is the
+    // single most format/protocol-agnostic player library available on Android:
+    // out of the box it plays local files of almost any codec/container PLUS
+    // every kind of link - http/https, hls (.m3u8), dash (.mpd), rtsp, rtmp,
+    // mms, udp, rtp, smb, ftp, and more - with no extra modules needed.
+    implementation 'org.videolan.android:libvlc-all:3.6.7'
 
     // Glide - generates video thumbnails from local files
     implementation 'com.github.bumptech.glide:glide:4.16.0'
