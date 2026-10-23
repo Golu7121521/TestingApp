@@ -1,0 +1,51 @@
+name: Build & Release Offline Video Player APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+# Needed so this workflow is allowed to create a GitHub Release / upload assets
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.7
+
+      # Release build: minified + resource-shrunk + signed with the debug key
+      # so it installs directly without needing a real keystore.
+      - name: Build release APK
+        run: gradle assembleRelease --no-daemon
+
+      - name: Report APK size
+        run: ls -lh app/build/outputs/apk/release/*.apk
+
+      # Uploaded straight to a GitHub Release instead of Actions artifact
+      # storage, which avoids the monthly Actions storage quota entirely.
+      - name: Create GitHub Release with the APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: Offline Video Player v1.0.${{ github.run_number }}
+          body: |
+            Automated build from commit ${{ github.sha }}.
+            Download `app-release.apk` below and install it on your phone.
+          files: app/build/outputs/apk/release/app-release.apk
+          draft: false
+          prerelease: false
