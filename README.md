@@ -1,6 +1,9 @@
-# YouTube NewPipe Real Android App (v2 - Fixed Gradle 8.7 for GitHub Actions)
+# MyTube
+NewPipeExtractor + Jetpack Compose + Media3 se bana YouTube-style Android client.
+Sirf arm64-v8a APK banta hai aur GitHub Releases mein upload hota hai.
 
-## What was fixed in v2:
-GitHub Actions `ubuntu-latest` (Ubuntu 26.04) runner par default **Gradle 9.8.2** chal raha tha, jo Android Gradle Plugin (AGP 8.x) ke sath `Cannot mutate the dependencies of configuration ':app:releaseCompileClasspath'` error deta hai.
-- `.github/workflows/android-release.yml` mein `gradle-version: '8.7'` lock kar diya gaya hai.
-- `cache-disabled: true` set kar diya gaya hai taki GitHub cache 400 warnings na aayein.
+## Steps (phone se)
+1. GitHub par naya repo banao, is zip ki saari files upload karo (`.github` folder samet).
+2. Repo > Settings > Actions > General > Workflow permissions > "Read and write permissions" ON.
+3. Actions tab > "Build arm64 APK and Release" > Run workflow (ya main branch par push).
+4. Build ke baad Releases section se APK download karke install karo.

@@ -1,0 +1,39 @@
+name: Build arm64 APK and Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Gradle wrapper ki zaroorat nahi: Gradle yahin install hota hai
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+          cache-disabled: true   # Actions storage/cache use nahi hoga
+
+      - name: Build release APK (arm64-v8a)
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Publish to Releases (no artifacts)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          cp app/build/outputs/apk/release/app-release.apk "MyTube-arm64-v8a-${TAG}.apk"
+          gh release create "$TAG" "MyTube-arm64-v8a-${TAG}.apk" \
+            --title "MyTube $TAG" \
+            --notes "arm64-v8a APK (build #${{ github.run_number }})"
