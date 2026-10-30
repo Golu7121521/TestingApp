@@ -1,9 +1,9 @@
-name: Build arm64 APK and publish to Releases
+name: Build arm64 APK and Release
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
-  workflow_dispatch:
 
 permissions:
   contents: write
@@ -14,46 +14,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Works both when the repo holds the full project AND when you only uploaded PDFly.zip
-      - name: Locate project
-        id: loc
-        run: |
-          if [ -f settings.gradle.kts ]; then
-            echo "dir=." >> "$GITHUB_OUTPUT"
-          else
-            zip_file=$(ls ./*.zip | head -n1)
-            mkdir -p _src
-            unzip -q "$zip_file" -d _src
-            d=$(dirname "$(find _src -name settings.gradle.kts | head -n1)")
-            echo "dir=$d" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Install Android SDK pieces
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;35.0.0" > /dev/null
-
+      # Gradle wrapper ki zaroorat nahi: Gradle yahin install hota hai
       - uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: 8.10.2
+          gradle-version: "8.9"
+          cache-disabled: true   # Actions storage/cache use nahi hoga
 
       - name: Build release APK (arm64-v8a)
-        working-directory: ${{ steps.loc.outputs.dir }}
-        run: gradle :app:assembleRelease --no-daemon -PversionCode=${{ github.run_number }} -PversionName=1.0.${{ github.run_number }}
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Rename APK
-        working-directory: ${{ steps.loc.outputs.dir }}
-        run: cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/PDFly-1.0.${{ github.run_number }}-arm64-v8a.apk"
-
-      - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: PDFly 1.0.${{ github.run_number }}
-          body: "PDFly (arm64-v8a). Download the .apk below and install it on your phone."
-          files: PDFly-1.0.${{ github.run_number }}-arm64-v8a.apk
+      - name: Publish to Releases (no artifacts)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v1.0.${{ github.run_number }}"
+          cp app/build/outputs/apk/release/app-release.apk "MyTube-arm64-v8a-${TAG}.apk"
+          gh release create "$TAG" "MyTube-arm64-v8a-${TAG}.apk" \
+            --title "MyTube $TAG" \
+            --notes "arm64-v8a APK (build #${{ github.run_number }})"
