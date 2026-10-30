@@ -182,7 +182,7 @@ fun RealVideoFeedCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(215.dp)
-                .background( Color(0xFF1E293B))
+                .background(Color(0xFF1E293B))
         ) {
             AsyncImage(
                 model = video.thumbnailUrl,

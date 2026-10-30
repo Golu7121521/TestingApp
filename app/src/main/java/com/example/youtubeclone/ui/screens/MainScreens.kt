@@ -2,7 +2,6 @@ package com.example.youtubeclone.ui.screens
 
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -19,7 +18,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -153,7 +151,6 @@ fun RealVideoPlayerScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Top 16:9 Real ExoPlayer Box
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -191,7 +188,6 @@ fun RealVideoPlayerScreen(
             }
         }
 
-        // Metadata and Related Videos
         LazyColumn(modifier = Modifier.fillMaxSize()) {
             item {
                 Column(modifier = Modifier.padding(14.dp)) {

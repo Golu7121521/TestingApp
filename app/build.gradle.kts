@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.youtubeclone"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0-NewPipe"
+        versionCode = 3
+        versionName = "2.1-NewPipe"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -50,7 +50,7 @@ android {
         compose = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.8"
+        kotlinCompilerExtensionVersion = "1.5.14"
     }
     packaging {
         resources {

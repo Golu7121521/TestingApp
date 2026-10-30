@@ -142,7 +142,6 @@ object NewPipeRepository {
             initIfNeeded()
             val info = StreamInfo.getInfo(ServiceList.YouTube, videoUrl)
 
-            // Pick best progressive MP4 stream with both video+audio, or fallback to HLS
             val progressiveStream = info.videoStreams
                 .filter { !it.isVideoOnly }
                 .maxByOrNull { it.height }
