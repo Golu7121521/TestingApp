@@ -22,29 +22,42 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Gradle 8.7 (Fixes Gradle 9.8.2 AGP conflict)
+      - name: Setup Gradle 8.7
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: '8.7'
           cache-disabled: true
 
       - name: Build ARM64 Release APK
-        run: gradle assembleRelease --no-daemon --stacktrace
+        run: ./gradlew assembleRelease --no-daemon --stacktrace || gradle assembleRelease --no-daemon --stacktrace
 
-      - name: Rename ARM64 APK
+      - name: Locate and Prepare APK
         run: |
-          ls -la app/build/outputs/apk/release/
-          cp app/build/outputs/apk/release/app-arm64-v8a-release.apk YouTubeNewPipe-arm64-v8a.apk
+          echo "Listing all generated APKs:"
+          find app/build/outputs/apk/ -name "*.apk" -ls
+          
+          # Pehli matching release APK dhoondh kar copy karega
+          APK_PATH=$(find app/build/outputs/apk/ -type f -name "*release*.apk" | head -n 1)
+          
+          if [ -z "$APK_PATH" ]; then
+            echo "Error: Release APK nahi mili!"
+            exit 1
+          fi
+          
+          echo "Found APK at: $APK_PATH"
+          cp "$APK_PATH" YouTubeNewPipe-arm64-v8a.apk
 
-      - name: Upload APK directly to GitHub Releases (Zero Artifact Quota Used)
+      - name: Upload APK directly to GitHub Releases
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.${{ github.run_number }}
+          tag_name: "v1.0.${{ github.run_number }}"
           name: "YouTube NewPipe ARM64 Build #${{ github.run_number }}"
           body: |
             Real YouTube client powered by **NewPipeExtractor** & **ExoPlayer**.
             - Architecture: `arm64-v8a` only
-            - Signed and ready to install on Android devices.
+            - Build Number: `${{ github.run_number }}`
           files: YouTubeNewPipe-arm64-v8a.apk
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
