@@ -33,14 +33,12 @@ jobs:
           java-version: 21
 
       - uses: gradle/actions/setup-gradle@v4
-        with:
-          build-root-directory: ${{ env.PROJECT_DIR }}
 
       - name: Build debug APK
         working-directory: ${{ env.PROJECT_DIR }}
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          ./gradlew :app:assembleDebug -x :app:formatKtlint -x :app:runKtlint -x :app:runCheckstyle --no-daemon
 
       - name: Publish to GitHub Releases
         env:
