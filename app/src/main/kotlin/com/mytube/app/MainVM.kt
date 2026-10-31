@@ -49,7 +49,6 @@ class MainVM(private val app: Application) : AndroidViewModel(app) {
     var watch by mutableStateOf<Load<StreamInfo>>(Load.Idle)
     var qualities by mutableStateOf<List<Int>>(emptyList())
     var quality by mutableIntStateOf(0)
-        private set
     private var current: StreamInfo? = null
 
     private val yt = ServiceList.YouTube
@@ -153,7 +152,7 @@ class MainVM(private val app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun setQuality(h: Int) {
+    fun changeQuality(h: Int) {
         val info = current ?: return
         quality = h
         val pos = player.currentPosition

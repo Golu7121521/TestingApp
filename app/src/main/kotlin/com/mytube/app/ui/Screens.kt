@@ -325,7 +325,7 @@ private fun WatchScreen(vm: MainVM) {
                                                 vm.qualities.forEach { h ->
                                                     DropdownMenuItem(
                                                         text = { Text("${h}p") },
-                                                        onClick = { qMenu = false; vm.setQuality(h) }
+                                                        onClick = { qMenu = false; vm.changeQuality(h) }
                                                     )
                                                 }
                                             }
