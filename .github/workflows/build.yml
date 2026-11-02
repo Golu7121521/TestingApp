@@ -1,138 +1,48 @@
-name: Build CineFlix APK
+name: Build APK & Project ZIP
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
   build:
-    name: Build Android APK
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Setup Java 17
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Generate Android Project & ZIP
+        run: python3 generate_project.py
+
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
           java-version: '17'
+          distribution: 'temurin'
 
-      - name: Setup Flutter 3.27.4
-        uses: subosito/flutter-action@v2
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
         with:
-          flutter-version: '3.27.4'
-          channel: 'stable'
-          cache: false
+          gradle-version: '8.4'
 
-      - name: Configure Android & Tooling
-        run: |
-          flutter config --no-analytics
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
 
-          # 1. Clean build directory without losing root source
-          rm -rf android .metadata build
-          flutter create . --org com.desiflix --project-name hindi_movie_stream --platforms android
-
-          # 2. AGP 8.3.2 aur Kotlin 1.9.24 settings.gradle me pin karein
-          cat << 'EOF' > android/settings.gradle
-          pluginManagement {
-              def flutterSdkPath = {
-                  def properties = new Properties()
-                  file("local.properties").withInputStream { properties.load(it) }
-                  def flutterSdkPath = properties.getProperty("flutter.sdk")
-                  assert flutterSdkPath != null : "flutter.sdk not set in local.properties"
-                  return flutterSdkPath
-              }()
-
-              includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
-
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
-
-          plugins {
-              id "dev.flutter.flutter-plugin-loader" version "1.0.0"
-              id "com.android.application" version "8.3.2" apply false
-              id "org.jetbrains.kotlin.android" version "1.9.24" apply false
-          }
-
-          include ":app"
-          EOF
-
-          # 3. Gradle Wrapper 8.4 pin karein
-          sed -i 's/gradle-.*-all.zip/gradle-8.4-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
-
-          # 4. Network Security Config (CDN & HTTP cleartext support) create karein
-          mkdir -p android/app/src/main/res/xml
-          cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <network-security-config>
-              <base-config cleartextTrafficPermitted="true">
-                  <trust-anchors>
-                      <certificates src="system" />
-                      <certificates src="user" />
-                  </trust-anchors>
-              </base-config>
-              <domain-config cleartextTrafficPermitted="true">
-                  <domain includeSubdomains="true">themoviedb.org</domain>
-                  <domain includeSubdomains="true">tmdb.org</domain>
-                  <domain includeSubdomains="true">weserv.nl</domain>
-                  <domain includeSubdomains="true">vidsrc.me</domain>
-                  <domain includeSubdomains="true">webtor.io</domain>
-                  <domain includeSubdomains="true">strem.fun</domain>
-                  <trust-anchors>
-                      <certificates src="system" />
-                      <certificates src="user" />
-                  </trust-anchors>
-              </domain-config>
-          </network-security-config>
-          EOF
-
-          # 5. AndroidManifest me Permissions, PiP aur Impeller Bypass inject karein
-          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>' android/app/src/main/AndroidManifest.xml
-          sed -i 's/<application/<application android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml\/network_security_config"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/<activity/<activity android:supportsPictureInPicture="true"/' android/app/src/main/AndroidManifest.xml
-          sed -i '/<\/application>/i \    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
-
-          # 6. Kotlin metadata crash bypass
-          cat << 'EOF' >> android/build.gradle
-
-          allprojects {
-              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
-                  kotlinOptions {
-                      freeCompilerArgs += [
-                          "-Xskip-metadata-version-check",
-                          "-Xskip-prerelease-check"
-                      ]
-                  }
-              }
-          }
-          EOF
-
-          # 7. minSdk 21 ensure karein (ExoPlayer requirement)
-          cat << 'EOF' >> android/app/build.gradle
-
-          android {
-              defaultConfig {
-                  minSdk = 21
-              }
-          }
-          EOF
-
-      - name: Fetch Dependencies
-        run: flutter pub get
-
-      - name: Build Android Release APK
-        run: flutter build apk --release --no-tree-shake-icons
-
-      - name: Upload APK Artifact
+      - name: Upload Source Project ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: CineFlix-Release-APK
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
+          name: BlueStreamPlayer-Project-ZIP
+          path: BlueStreamPlayer_Source.zip
+
+      - name: Upload Ready-to-Install APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlueStreamPlayer-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
