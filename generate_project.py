@@ -45,8 +45,8 @@ android {
         applicationId "com.stream.blueplayer"
         minSdk 24
         targetSdk 34
-        versionCode 2
-        versionName "2.0"
+        versionCode 3
+        versionName "3.0"
 
         ndk {
             // Includes lib/arm64-v8a/libdatastore_shared_counter.so and 32-bit fallback
@@ -54,7 +54,7 @@ android {
         }
     }
 
-    packagingOptions {
+    packaging {
         jniLibs {
             useLegacyPackaging = true
         }
@@ -87,11 +87,11 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Jetpack DataStore (Packs native lib/arm64-v8a/libdatastore_shared_counter.so for ultra-fast I/O)
+    // Jetpack DataStore (Packs native lib/arm64-v8a/libdatastore_shared_counter.so)
     implementation "androidx.datastore:datastore-preferences:1.1.1"
     implementation "androidx.datastore:datastore-core:1.1.1"
 
-    // AndroidX Media3 (ExoPlayer) - Full format support
+    // AndroidX Media3 (ExoPlayer) - All format support
     def media3_version = "1.3.0"
     implementation "androidx.media3:media3-exoplayer:$media3_version"
     implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
@@ -104,7 +104,7 @@ dependencies {
 """,
 
     "app/src/main/AndroidManifest.xml": """<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+<manifest xmlns:android="http://schemas.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
@@ -114,7 +114,6 @@ dependencies {
     <application
         android:allowBackup="true"
         android:hardwareAccelerated="true"
-        android:extractNativeLibs="true"
         android:label="Network Stream (Video) Player"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
@@ -140,60 +139,90 @@ dependencies {
             android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
             android:exported="true"
             android:launchMode="singleTask"
-            android:supportsPictureInPicture="true" />
+            android:supportsPictureInPicture="true"
+            android:theme="@style/Theme.BlueStreamPlayer.Player" />
     </application>
 </manifest>
 """,
 
+    # LIGHT MODE COLORS (Default) - Pure Clean White/Gray & Blue (Zero Brown)
     "app/src/main/res/values/colors.xml": """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#141210</color>
-    <color name="surface_dark">#1D1A18</color>
+    <color name="app_bg">#F8F9FA</color>
+    <color name="surface_card">#FFFFFF</color>
     <color name="blue_accent">#2979FF</color>
-    <color name="blue_stroke_dim">#4D2979FF</color>
-    <color name="border_subtle">#524943</color>
-    <color name="text_primary">#E6E1DE</color>
-    <color name="text_secondary">#B8AEA8</color>
-    <color name="player_overlay">#88000000</color>
+    <color name="border_unfocused">#CFD8DC</color>
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#4B5563</color>
+    <color name="icon_tint">#1F2937</color>
+    <color name="white">#FFFFFF</color>
+    <color name="player_control_bg">#66000000</color>
+    <color name="player_chip_bg">#4DFFFFFF</color>
 </resources>
 """,
 
-    "app/src/main/res/values/themes.xml": """<?xml version="1.0" encoding="utf-8"?>
+    # DARK MODE COLORS (Automatic when phone is in Dark Mode) - Pure Matte Black/Slate & Blue (Zero Brown)
+    "app/src/main/res/values-night/colors.xml": """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.BlueStreamPlayer" parent="Theme.Material3.Dark.NoActionBar">
+    <color name="app_bg">#0F1115</color>
+    <color name="surface_card">#181B20</color>
+    <color name="blue_accent">#2979FF</color>
+    <color name="border_unfocused">#374151</color>
+    <color name="text_primary">#F3F4F6</color>
+    <color name="text_secondary">#9CA3AF</color>
+    <color name="icon_tint">#F3F4F6</color>
+    <color name="white">#FFFFFF</color>
+    <color name="player_control_bg">#66000000</color>
+    <color name="player_chip_bg">#33FFFFFF</color>
+</resources>
+""",
+
+    # LIGHT THEME
+    "app/src/main/res/values/themes.xml": """<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.BlueStreamPlayer" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/blue_accent</item>
-        <item name="colorOnPrimary">@android:color/white</item>
+        <item name="colorOnPrimary">@color/white</item>
         <item name="colorSecondary">@color/blue_accent</item>
-        <item name="android:windowBackground">@color/bg_dark</item>
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+
+    <style name="Theme.BlueStreamPlayer.Player" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="colorPrimary">@color/blue_accent</item>
+        <item name="android:windowBackground">@android:color/black</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
     <style name="StreamInputBox" parent="Widget.Material3.TextInputLayout.OutlinedBox">
         <item name="boxStrokeColor">@color/input_stroke_selector</item>
-        <item name="boxStrokeWidth">1dp</item>
-        <item name="boxStrokeWidthFocused">1.8dp</item>
-        <item name="boxCornerRadiusTopStart">5dp</item>
-        <item name="boxCornerRadiusTopEnd">5dp</item>
-        <item name="boxCornerRadiusBottomStart">5dp</item>
-        <item name="boxCornerRadiusBottomEnd">5dp</item>
+        <item name="boxStrokeWidth">1.2dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCornerRadiusTopStart">6dp</item>
+        <item name="boxCornerRadiusTopEnd">6dp</item>
+        <item name="boxCornerRadiusBottomStart">6dp</item>
+        <item name="boxCornerRadiusBottomEnd">6dp</item>
         <item name="hintTextColor">@color/blue_accent</item>
         <item name="android:textColorHint">@color/text_secondary</item>
-        <item name="boxBackgroundColor">@android:color/transparent</item>
+        <item name="boxBackgroundColor">@color/surface_card</item>
     </style>
 
     <style name="StreamDropdownBox" parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
         <item name="boxStrokeColor">@color/input_stroke_selector</item>
-        <item name="boxStrokeWidth">1dp</item>
-        <item name="boxStrokeWidthFocused">1.8dp</item>
-        <item name="boxCornerRadiusTopStart">5dp</item>
-        <item name="boxCornerRadiusTopEnd">5dp</item>
-        <item name="boxCornerRadiusBottomStart">5dp</item>
-        <item name="boxCornerRadiusBottomEnd">5dp</item>
-        <item name="hintTextColor">@color/text_secondary</item>
+        <item name="boxStrokeWidth">1.2dp</item>
+        <item name="boxStrokeWidthFocused">2dp</item>
+        <item name="boxCornerRadiusTopStart">6dp</item>
+        <item name="boxCornerRadiusTopEnd">6dp</item>
+        <item name="boxCornerRadiusBottomStart">6dp</item>
+        <item name="boxCornerRadiusBottomEnd">6dp</item>
+        <item name="hintTextColor">@color/blue_accent</item>
         <item name="android:textColorHint">@color/text_secondary</item>
         <item name="endIconTint">@color/text_secondary</item>
-        <item name="boxBackgroundColor">@android:color/transparent</item>
+        <item name="boxBackgroundColor">@color/surface_card</item>
     </style>
 
     <style name="RoundedSquareFab" parent="">
@@ -203,15 +232,32 @@ dependencies {
 </resources>
 """,
 
+    # DARK THEME OVERRIDES FOR STATUS BAR ICONS
+    "app/src/main/res/values-night/themes.xml": """<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.BlueStreamPlayer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/blue_accent</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorSecondary">@color/blue_accent</item>
+        <item name="android:windowBackground">@color/app_bg</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+    </style>
+</resources>
+""",
+
     "app/src/main/res/color/input_stroke_selector.xml": """<?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:color="@color/blue_accent" android:state_focused="true"/>
     <item android:color="@color/blue_accent" android:state_activated="true"/>
-    <item android:color="@color/border_subtle"/>
+    <item android:color="@color/blue_accent" android:state_hovered="true"/>
+    <item android:color="@color/border_unfocused"/>
 </selector>
 """,
 
-    # Custom Vector Drawables matching the exact reference UI screenshots
+    # ALL CUSTOM VECTOR DRAWABLES (Zero Emojis, Zero Ugly System Icons)
     "app/src/main/res/drawable/ic_history_clock.xml": """<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
@@ -219,7 +265,7 @@ dependencies {
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="@color/text_primary"
+        android:fillColor="@color/icon_tint"
         android:pathData="M13,3a9,9 0,0 0,-9 9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42A8.954,8.954 0,0 0,13 21a9,9 0,0 0,0 -18zm-1,5v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z"/>
 </vector>
 """,
@@ -231,7 +277,7 @@ dependencies {
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="@color/text_primary"
+        android:fillColor="@color/icon_tint"
         android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/>
 </vector>
 """,
@@ -243,7 +289,7 @@ dependencies {
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
-        android:fillColor="@color/text_primary"
+        android:fillColor="@color/icon_tint"
         android:pathData="M3,18h6v-2H3v2zM3,6v2h18V6H3zm0,7h12v-2H3v2z"/>
 </vector>
 """,
@@ -262,8 +308,8 @@ dependencies {
 
     "app/src/main/res/drawable/ic_play_arrow.xml": """<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="28dp"
-    android:height="28dp"
+    android:width="32dp"
+    android:height="32dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
@@ -274,8 +320,8 @@ dependencies {
 
     "app/src/main/res/drawable/ic_pause.xml": """<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="28dp"
-    android:height="28dp"
+    android:width="32dp"
+    android:height="32dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
     <path
@@ -284,21 +330,263 @@ dependencies {
 </vector>
 """,
 
-    "app/src/main/res/drawable/pill_blue_bg.xml": """<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/blue_accent" />
-    <corners android:radius="20dp" />
+    "app/src/main/res/drawable/ic_replay_10.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M11.99,5V1l-5,5 5,5V7c3.31,0 6,2.69 6,6s-2.69,6 -6,6 -6,-2.69 -6,-6h-2c0,4.42 3.58,8 8,8s8,-3.58 8,-8 -3.58,-8 -8,-8z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_forward_10.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,13c0,3.31 -2.69,6 -6,6s-6,-2.69 -6,-6 2.69,-6 6,-6v4l5,-5 -5,-5v4c-4.42,0 -8,3.58 -8,8s3.58,8 8,8 8,-3.58 8,-8h-2z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_quality_hd.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,3H5C3.89,3 3,3.9 3,5v14c0,1.1 0.89,2 2,2h14c1.1,0 2,-0.9 2,-2V5C21,3.9 20.1,3 19,3zM11,15H9.5v-2h-2v2H6V9h1.5v2.5h2V9H11V15zM13,9h4c0.55,0 1,0.45 1,1v4c0,0.55 -0.45,1 -1,1h-4V9zM14.5,13.5h2v-3h-2V13.5z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_audio_track.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,3v9.28c-0.47,-0.17 -0.97,-0.28 -1.5,-0.28C8.01,12 6,14.01 6,16.5S8.01,21 10.5,21c2.31,0 4.2,-1.75 4.45,-4H15V6h4V3h-7z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_speed.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20.38,8.57l-1.23,1.85a8,8 0,0 1,-0.22 7.58H5.07A8,8 0,0 1,15.58 6.85l1.85,-1.23A10,10 0,0 0,3.35 19a2,2 0,0 0,1.72 1h13.85a2,2 0,0 0,1.74 -1,10 10,0 0,0 -0.27,-10.44zM10.59,15.41a2,2 0,0 0,2.83 0l5.66,-8.49 -8.49,5.66a2,2 0,0 0,0 2.83z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_pip.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,7h-8v6h8V7zm2,-4H3c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,1.98 2,1.98h18c1.1,0 2,-0.88 2,-1.98V5c0,-1.1 -0.9,-2 -2,-2zm0,16.01H3V4.98h18v14.03z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_settings.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94zM12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_lock_closed.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M18,8h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2zM12,17c-1.1,0 -2,-0.9 -2,-2s0.9,-2 2,-2 2,0.9 2,2 -0.9,2 -2,2zM15.1,8H8.9V6c0,-1.71 1.39,-3.1 3.1,-3.1 1.71,0 3.1,1.39 3.1,3.1v2z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_lock_open.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,17c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zm6,-9h-1V6c0,-2.76 -2.24,-5 -5,-5S7,3.24 7,6h1.9c0,-1.71 1.39,-3.1 3.1,-3.1 1.71,0 3.1,1.39 3.1,3.1v2H6c-1.1,0 -2,0.9 -2,2v10c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V10c0,-1.1 -0.9,-2 -2,-2zm0,12H6V10h12v10z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_volume_up.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M3,9v6h4l5,5V4L7,9H3zm13.5,3c0,-1.77 -1.02,-3.29 -2.5,-4.03v8.05c1.48,-0.73 2.5,-2.25 2.5,-4.02zM14,3.23v2.06c2.89,0.86 5,3.54 5,6.71s-2.11,5.85 -5,6.71v2.06c4.01,-0.91 7,-4.49 7,-8.77s-2.99,-7.86 -7,-8.77z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_volume_off.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16.5,12c0,-1.77 -1.02,-3.29 -2.5,-4.03v2.21l2.45,2.45c0.03,-0.2 0.05,-0.41 0.05,-0.63zm2.5,0c0,0.94 -0.2,1.82 -0.54,2.64l1.51,1.51C20.63,14.91 21,13.5 21,12c0,-4.28 -2.99,-7.86 -7,-8.77v2.06c2.89,0.86 5,3.54 5,6.71zM4.27,3L3,4.27 7.73,9H3v6h4l5,5v-6.73l4.25,4.25c-0.67,0.52 -1.42,0.93 -2.25,1.18v2.06c1.38,-0.31 2.63,-0.95 3.69,-1.81L19.73,21 21,19.73l-9,-9L4.27,3zM12,4L9.91,6.09 12,8.18V4z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_brightness.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,8.69V4h-4.69L12,0.69 8.69,4H4v4.69L0.69,12 4,15.31V20h4.69L12,23.31 15.31,20H20v-4.69L23.31,12 20,8.69zM12,18c-3.31,0 -6,-2.69 -6,-6s2.69,-6 6,-6 6,2.69 6,6 -2.69,6 -6,6zm0,-10c-2.21,0 -4,1.79 -4,4s1.79,4 4,4 4,-1.79 4,-4 -1.79,-4 -4,-4z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_aspect_ratio.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M19,12h-2v3h-3v2h5v-5zM7,9h3V7H5v5h2V9zm14,-6H3c-1.1,0 -2,0.9 -2,2v14c0,1.1 0.9,2 2,2h18c1.1,0 2,-0.9 2,-2V5c0,-1.1 -0.9,-2 -2,-2zm0,16.01H3V4.99h18v14.02z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_screen_rotate.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="22dp"
+    android:height="22dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M16.48,2.52c3.27,1.55 5.61,4.72 5.97,8.48h1.5C23.44,4.84 18.29,0 12,0l-0.66,0.03 3.81,3.81 1.33,-1.32zm-6.25,-0.77c-0.59,-0.59 -1.54,-0.59 -2.12,0L1.75,8.11c-0.59,0.59 -0.59,1.54 0,2.12l12.02,12.02c0.59,0.59 1.54,0.59 2.12,0l6.36,-6.36c0.59,-0.59 0.59,-1.54 0,-2.12L10.23,1.75zm4.6,19.44L2.81,9.17l6.36,-6.36 12.02,12.02 -6.36,6.36zm-7.31,0.29C4.25,19.94 1.91,16.76 1.55,13H0.05C0.56,19.16 5.71,24 12,24l0.66,-0.03 -3.81,-3.81 -1.33,1.32z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_live_dot.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="10dp"
+    android:height="10dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M12,12m-8,0a8,8 0,1 1,16 0a8,8 0,1 1,-16 0"/>
+</vector>
+""",
+
+    # PLAYER UI BACKGROUNDS & GRADIENTS
+    "app/src/main/res/drawable/bg_top_scrim.xml": """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="#CC000000"
+        android:centerColor="#66000000"
+        android:endColor="#00000000" />
 </shape>
 """,
 
+    "app/src/main/res/drawable/bg_bottom_scrim.xml": """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="90"
+        android:startColor="#DD000000"
+        android:centerColor="#77000000"
+        android:endColor="#00000000" />
+</shape>
+""",
+
+    "app/src/main/res/drawable/bg_circle_translucent.xml": """<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#4DFFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#66000000" />
+            <stroke android:width="1dp" android:color="#33FFFFFF" />
+        </shape>
+    </item>
+</ripple>
+""",
+
+    "app/src/main/res/drawable/bg_circle_blue.xml": """<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#66FFFFFF">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="@color/blue_accent" />
+        </shape>
+    </item>
+</ripple>
+""",
+
+    "app/src/main/res/drawable/bg_chip_glass.xml": """<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#4DFFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#55000000" />
+            <corners android:radius="18dp" />
+            <stroke android:width="1dp" android:color="#40FFFFFF" />
+        </shape>
+    </item>
+</ripple>
+""",
+
+    "app/src/main/res/drawable/bg_chip_blue.xml": """<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="#4DFFFFFF">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/blue_accent" />
+            <corners android:radius="18dp" />
+        </shape>
+    </item>
+</ripple>
+""",
+
+    # MAIN SCREEN LAYOUT
     "app/src/main/res/layout/activity_main.xml": """<?xml version="1.0" encoding="utf-8"?>
 <androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/mainRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark">
+    android:background="@color/app_bg">
 
     <LinearLayout
         android:layout_width="match_parent"
@@ -306,7 +594,6 @@ dependencies {
         android:orientation="vertical"
         android:paddingHorizontal="16dp">
 
-        <!-- Exact Screenshot Toolbar -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="60dp"
@@ -319,13 +606,13 @@ dependencies {
                 android:layout_weight="1"
                 android:text="Network Stream (Video) Player"
                 android:textColor="@color/text_primary"
-                android:textSize="21sp"
-                android:fontFamily="sans-serif" />
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <ImageButton
                 android:id="@+id/btnHistory"
-                android:layout_width="42dp"
-                android:layout_height="42dp"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="History"
                 android:src="@drawable/ic_history_clock" />
@@ -348,80 +635,80 @@ dependencies {
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="18dp"
+                    android:layout_marginBottom="16dp"
                     android:hint="Media Stream URL">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etStreamUrl"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="textUri"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="18dp"
+                    android:layout_marginBottom="16dp"
                     android:hint="Cookie Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etCookie"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="text"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="18dp"
+                    android:layout_marginBottom="16dp"
                     android:hint="Referer Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etReferer"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="textUri"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="18dp"
+                    android:layout_marginBottom="16dp"
                     android:hint="Origin Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etOrigin"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="textUri"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="18dp"
+                    android:layout_marginBottom="16dp"
                     android:hint="DRM License URL">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etDrmUrl"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="textUri"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <LinearLayout
@@ -445,7 +732,7 @@ dependencies {
                             android:paddingHorizontal="14dp"
                             android:text="Custom"
                             android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
+                            android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
@@ -464,7 +751,7 @@ dependencies {
                             android:paddingHorizontal="14dp"
                             android:text="widevine"
                             android:textColor="@color/text_primary"
-                            android:textSize="16sp" />
+                            android:textSize="15sp" />
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
@@ -473,24 +760,23 @@ dependencies {
                     style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="18dp"
+                    android:layout_marginTop="16dp"
                     android:visibility="visible"
                     android:hint="Custom UserAgent Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etCustomUa"
                         android:layout_width="match_parent"
-                        android:layout_height="58dp"
+                        android:layout_height="56dp"
                         android:inputType="text"
                         android:paddingHorizontal="16dp"
                         android:textColor="@color/text_primary"
-                        android:textSize="16sp" />
+                        android:textSize="15sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
             </LinearLayout>
         </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 
-    <!-- Exact Rounded Square Floating Action Button in Blue -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabPlay"
         android:layout_width="wrap_content"
@@ -501,7 +787,7 @@ dependencies {
         android:contentDescription="Play"
         android:src="@drawable/ic_play_arrow"
         app:backgroundTint="@color/blue_accent"
-        app:tint="@android:color/white"
+        app:tint="@color/white"
         app:fabCustomSize="58dp"
         app:maxImageSize="28dp"
         app:shapeAppearanceOverlay="@style/RoundedSquareFab" />
@@ -509,15 +795,15 @@ dependencies {
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
 """,
 
+    # HISTORY SCREEN LAYOUT
     "app/src/main/res/layout/activity_history.xml": """<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/historyRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_dark"
+    android:background="@color/app_bg"
     android:orientation="vertical">
 
-    <!-- Exact History Header matching Screenshot -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="60dp"
@@ -539,7 +825,8 @@ dependencies {
             android:layout_weight="1"
             android:text="History"
             android:textColor="@color/text_primary"
-            android:textSize="22sp" />
+            android:textSize="21sp"
+            android:textStyle="bold" />
 
         <ImageButton
             android:id="@+id/btnSort"
@@ -575,10 +862,10 @@ dependencies {
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
-    app:cardBackgroundColor="@color/surface_dark"
-    app:cardCornerRadius="12dp"
+    app:cardBackgroundColor="@color/surface_card"
+    app:cardCornerRadius="10dp"
     app:cardElevation="0dp"
-    app:strokeColor="@color/border_subtle"
+    app:strokeColor="@color/border_unfocused"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -598,8 +885,8 @@ dependencies {
             android:ellipsize="end"
             android:lineSpacingExtra="2dp"
             android:maxLines="2"
-            android:textColor="@color/text_secondary"
-            android:textSize="15sp" />
+            android:textColor="@color/text_primary"
+            android:textSize="14sp" />
 
         <ImageButton
             android:id="@+id/btnDeleteItem"
@@ -612,6 +899,7 @@ dependencies {
 </com.google.android.material.card.MaterialCardView>
 """,
 
+    # PREMIUM REDESIGNED VIDEO PLAYER UI (Zero Emojis, Glassmorphic Pills, Smooth Scrims)
     "app/src/main/res/layout/activity_player.xml": """<?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -628,116 +916,194 @@ dependencies {
         app:use_controller="false"
         app:surface_type="surface_view" />
 
+    <!-- Touch Gesture Surface -->
     <View
         android:id="@+id/gestureOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <TextView
-        android:id="@+id/tvGestureIndicator"
+    <!-- Modern Gesture Feedback Pill (Vector Icon + Text, Zero Emojis) -->
+    <LinearLayout
+        android:id="@+id/gestureIndicatorLayout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="@drawable/pill_blue_bg"
+        android:background="@drawable/bg_chip_glass"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
         android:paddingHorizontal="20dp"
-        android:paddingVertical="10dp"
-        android:textColor="@android:color/white"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:visibility="gone" />
+        android:paddingVertical="12dp"
+        android:visibility="gone">
 
+        <ImageView
+            android:id="@+id/ivGestureIcon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="10dp"
+            android:src="@drawable/ic_volume_up"
+            app:tint="@color/blue_accent" />
+
+        <TextView
+            android:id="@+id/tvGestureText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+    </LinearLayout>
+
+    <!-- Buffering Loader -->
     <ProgressBar
         android:id="@+id/loadingIndicator"
-        android:layout_width="50dp"
-        android:layout_height="50dp"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_gravity="center"
         android:indeterminateTint="@color/blue_accent"
         android:visibility="gone" />
 
-    <!-- Smooth Custom Controls Overlay -->
+    <!-- Complete Player Controls Overlay -->
     <FrameLayout
         android:id="@+id/controlsRoot"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/player_overlay">
+        android:layout_height="match_parent">
 
-        <!-- Top Bar -->
+        <!-- Top Bar with Smooth Dark Scrim -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
+            android:background="@drawable/bg_top_scrim"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="16dp"
             android:paddingTop="18dp"
-            android:paddingBottom="10dp">
+            android:paddingBottom="20dp">
 
             <ImageButton
                 android:id="@+id/btnPlayerBack"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@drawable/ic_arrow_back" />
+                android:background="@drawable/bg_circle_translucent"
+                android:padding="8dp"
+                android:src="@drawable/ic_arrow_back"
+                app:tint="@color/white" />
 
             <TextView
                 android:id="@+id/tvStreamTitle"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginHorizontal="12dp"
+                android:layout_marginHorizontal="14dp"
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:text="Stream"
-                android:textColor="@android:color/white"
-                android:textSize="15sp"
+                android:text="Network Stream"
+                android:textColor="@color/white"
+                android:textSize="16sp"
                 android:textStyle="bold" />
 
-            <TextView
+            <!-- Quality Chip -->
+            <LinearLayout
                 android:id="@+id/btnQuality"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:padding="8dp"
-                android:text="Quality"
-                android:textColor="@color/blue_accent"
-                android:textStyle="bold" />
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip_glass"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
 
-            <TextView
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="6dp"
+                    android:src="@drawable/ic_quality_hd"
+                    app:tint="@color/blue_accent" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Quality"
+                    android:textColor="@color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Audio Language Chip -->
+            <LinearLayout
                 android:id="@+id/btnAudio"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:padding="8dp"
-                android:text="Audio"
-                android:textColor="@android:color/white" />
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip_glass"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
 
-            <TextView
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="6dp"
+                    android:src="@drawable/ic_audio_track"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Audio"
+                    android:textColor="@color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <!-- Speed Chip -->
+            <LinearLayout
                 android:id="@+id/btnSpeed"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackground"
-                android:padding="8dp"
-                android:text="1.0x"
-                android:textColor="@android:color/white" />
+                android:layout_height="34dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_chip_glass"
+                android:gravity="center"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp">
+
+                <ImageView
+                    android:layout_width="18dp"
+                    android:layout_height="18dp"
+                    android:layout_marginEnd="6dp"
+                    android:src="@drawable/ic_speed"
+                    app:tint="@color/white" />
+
+                <TextView
+                    android:id="@+id/tvSpeedLabel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1.0x"
+                    android:textColor="@color/white"
+                    android:textSize="12sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
 
             <ImageButton
                 android:id="@+id/btnPip"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_crop"
-                app:tint="@android:color/white" />
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:layout_marginEnd="8dp"
+                android:background="@drawable/bg_circle_translucent"
+                android:padding="8dp"
+                android:src="@drawable/ic_pip"
+                app:tint="@color/white" />
 
             <ImageButton
                 android:id="@+id/btnGestureSettings"
-                android:layout_width="40dp"
-                android:layout_height="40dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_preferences"
+                android:layout_width="38dp"
+                android:layout_height="38dp"
+                android:background="@drawable/bg_circle_translucent"
+                android:padding="8dp"
+                android:src="@drawable/ic_settings"
                 app:tint="@color/blue_accent" />
         </LinearLayout>
 
-        <!-- Center Play/Pause & 10s Seek -->
+        <!-- Center Play/Pause & 10s Seek Circular Controls -->
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -747,38 +1113,45 @@ dependencies {
 
             <ImageButton
                 android:id="@+id/btnRewind"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_rew"
-                app:tint="@android:color/white" />
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_circle_translucent"
+                android:padding="14dp"
+                android:src="@drawable/ic_replay_10"
+                app:tint="@color/white" />
 
             <ImageButton
                 android:id="@+id/btnPlayPause"
-                android:layout_width="68dp"
-                android:layout_height="68dp"
-                android:layout_marginHorizontal="36dp"
-                android:background="@drawable/pill_blue_bg"
-                android:src="@drawable/ic_pause" />
+                android:layout_width="72dp"
+                android:layout_height="72dp"
+                android:layout_marginHorizontal="40dp"
+                android:background="@drawable/bg_circle_blue"
+                android:padding="18dp"
+                android:src="@drawable/ic_pause"
+                app:tint="@color/white" />
 
             <ImageButton
                 android:id="@+id/btnForward"
-                android:layout_width="52dp"
-                android:layout_height="52dp"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_media_ff"
-                app:tint="@android:color/white" />
+                android:layout_width="56dp"
+                android:layout_height="56dp"
+                android:background="@drawable/bg_circle_translucent"
+                android:padding="14dp"
+                android:src="@drawable/ic_forward_10"
+                app:tint="@color/white" />
         </LinearLayout>
 
-        <!-- Bottom Bar -->
+        <!-- Bottom Bar with Smooth Dark Scrim -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
+            android:background="@drawable/bg_bottom_scrim"
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
+            android:paddingTop="20dp"
             android:paddingBottom="18dp">
 
+            <!-- Timeline SeekBar Row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -789,31 +1162,38 @@ dependencies {
                     android:id="@+id/tvPosition"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
                     android:text="00:00"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp" />
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
 
                 <SeekBar
                     android:id="@+id/seekBar"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
+                    android:progressBackgroundTint="#66FFFFFF"
                     android:progressTint="@color/blue_accent"
+                    android:secondaryProgressTint="#99FFFFFF"
                     android:thumbTint="@color/blue_accent" />
 
                 <TextView
                     android:id="@+id/tvDuration"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
                     android:text="00:00"
-                    android:textColor="@android:color/white"
-                    android:textSize="13sp" />
+                    android:textColor="@color/white"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
             </LinearLayout>
 
+            <!-- Bottom Action Buttons Row -->
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
+                android:layout_marginTop="8dp"
                 android:gravity="center_vertical"
                 android:orientation="horizontal">
 
@@ -821,69 +1201,104 @@ dependencies {
                     android:id="@+id/btnLock"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_lock_lock"
-                    app:tint="@android:color/white" />
+                    android:background="@drawable/bg_circle_translucent"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_lock_open"
+                    app:tint="@color/white" />
 
                 <ImageButton
                     android:id="@+id/btnMute"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
                     android:layout_marginStart="12dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_lock_silent_mode_off"
-                    app:tint="@android:color/white" />
+                    android:background="@drawable/bg_circle_translucent"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_volume_up"
+                    app:tint="@color/white" />
 
-                <TextView
+                <!-- Go Live Pill Button (Vector Dot + Text) -->
+                <LinearLayout
                     android:id="@+id/btnGoLive"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:background="@drawable/pill_blue_bg"
-                    android:paddingHorizontal="12dp"
-                    android:paddingVertical="4dp"
-                    android:text="● LIVE"
-                    android:textColor="@android:color/white"
-                    android:textSize="12sp"
-                    android:textStyle="bold" />
+                    android:layout_height="34dp"
+                    android:layout_marginStart="14dp"
+                    android:background="@drawable/bg_chip_blue"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+
+                    <ImageView
+                        android:layout_width="8dp"
+                        android:layout_height="8dp"
+                        android:layout_marginEnd="6dp"
+                        android:src="@drawable/ic_live_dot" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="GO LIVE"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <View
                     android:layout_width="0dp"
                     android:layout_height="1dp"
                     android:layout_weight="1" />
 
-                <TextView
+                <!-- Scale / Aspect Ratio Chip -->
+                <LinearLayout
                     android:id="@+id/btnScaleMode"
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="?attr/selectableItemBackground"
-                    android:padding="8dp"
-                    android:text="FIT"
-                    android:textColor="@color/blue_accent"
-                    android:textStyle="bold" />
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_chip_glass"
+                    android:gravity="center"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="14dp">
+
+                    <ImageView
+                        android:layout_width="18dp"
+                        android:layout_height="18dp"
+                        android:layout_marginEnd="6dp"
+                        android:src="@drawable/ic_aspect_ratio"
+                        app:tint="@color/blue_accent" />
+
+                    <TextView
+                        android:id="@+id/tvScaleLabel"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="FIT"
+                        android:textColor="@color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
 
                 <ImageButton
                     android:id="@+id/btnRotate"
                     android:layout_width="40dp"
                     android:layout_height="40dp"
-                    android:layout_marginStart="8dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:src="@android:drawable/ic_menu_always_landscape_portrait"
-                    app:tint="@android:color/white" />
+                    android:layout_marginStart="12dp"
+                    android:background="@drawable/bg_circle_translucent"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_screen_rotate"
+                    app:tint="@color/white" />
             </LinearLayout>
         </LinearLayout>
     </FrameLayout>
 
+    <!-- Floating Unlock Button when Screen is Locked -->
     <ImageButton
         android:id="@+id/btnUnlockOnly"
-        android:layout_width="50dp"
-        android:layout_height="50dp"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
         android:layout_gravity="center_vertical|start"
         android:layout_marginStart="24dp"
-        android:background="@drawable/pill_blue_bg"
-        android:src="@android:drawable/ic_lock_lock"
+        android:background="@drawable/bg_circle_blue"
+        android:padding="13dp"
+        android:src="@drawable/ic_lock_closed"
         android:visibility="gone"
-        app:tint="@android:color/white" />
+        app:tint="@color/white" />
 
 </FrameLayout>
 """,
@@ -918,7 +1333,6 @@ import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-// Uses Jetpack DataStore backed by native lib/arm64-v8a/libdatastore_shared_counter.so
 val Context.appDataStore: DataStore<Preferences> by preferencesDataStore(name = "blue_stream_datastore")
 
 class DataStoreManager(private val context: Context) {
@@ -1153,9 +1567,9 @@ class HistoryActivity : AppCompatActivity() {
 
         binding.btnClearAll.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle("Delete All History")
-                .setMessage("Clear all saved links?")
-                .setPositiveButton("Clear") { _, _ ->
+                .setTitle("Clear History")
+                .setMessage("Delete all saved stream links?")
+                .setPositiveButton("Delete") { _, _ ->
                     lifecycleScope.launch { dataStore.clearHistory() }
                 }
                 .setNegativeButton("Cancel", null)
@@ -1214,6 +1628,7 @@ import android.view.View
 import android.view.WindowManager
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.annotation.DrawableRes
 import androidx.annotation.OptIn
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -1302,7 +1717,7 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initializePlayer(config: StreamConfig) {
-        // Redmi 9 Prime (Android 10 / Helio G80) Hardware + Software Fallback Decoding
+        // Optimized for Redmi 9 Prime (Android 10 / Helio G80)
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
@@ -1382,8 +1797,15 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        binding.btnRewind.setOnClickListener { seekBy(-10000) }
-        binding.btnForward.setOnClickListener { seekBy(10000) }
+        binding.btnRewind.setOnClickListener {
+            seekBy(-10000)
+            showCenterIndicator(R.drawable.ic_replay_10, "-10s")
+        }
+
+        binding.btnForward.setOnClickListener {
+            seekBy(10000)
+            showCenterIndicator(R.drawable.ic_forward_10, "+10s")
+        }
 
         binding.btnQuality.setOnClickListener {
             val exo = player ?: return@setOnClickListener
@@ -1395,7 +1817,7 @@ class PlayerActivity : AppCompatActivity() {
 
         binding.btnAudio.setOnClickListener {
             val exo = player ?: return@setOnClickListener
-            TrackSelectionDialogBuilder(this, "Audio Language", exo, C.TRACK_TYPE_AUDIO)
+            TrackSelectionDialogBuilder(this, "Audio Track", exo, C.TRACK_TYPE_AUDIO)
                 .build()
                 .show()
         }
@@ -1408,7 +1830,7 @@ class PlayerActivity : AppCompatActivity() {
                 .setItems(speeds) { _, which ->
                     savedSpeed = values[which]
                     player?.setPlaybackSpeed(savedSpeed)
-                    binding.btnSpeed.text = "${savedSpeed}x"
+                    binding.tvSpeedLabel.text = "${savedSpeed}x"
                 }
                 .show()
         }
@@ -1420,22 +1842,26 @@ class PlayerActivity : AppCompatActivity() {
             isScreenLocked = true
             binding.controlsRoot.visibility = View.GONE
             binding.btnUnlockOnly.visibility = View.VISIBLE
+            showCenterIndicator(R.drawable.ic_lock_closed, "Locked")
         }
 
         binding.btnUnlockOnly.setOnClickListener {
             isScreenLocked = false
             binding.btnUnlockOnly.visibility = View.GONE
             binding.controlsRoot.visibility = View.VISIBLE
+            showCenterIndicator(R.drawable.ic_lock_open, "Unlocked")
         }
 
         binding.btnMute.setOnClickListener {
             player?.let {
                 if (it.volume > 0f) {
                     it.volume = 0f
-                    binding.btnMute.setImageResource(android.R.drawable.ic_lock_silent_mode)
+                    binding.btnMute.setImageResource(R.drawable.ic_volume_off)
+                    showCenterIndicator(R.drawable.ic_volume_off, "Muted")
                 } else {
                     it.volume = 1f
-                    binding.btnMute.setImageResource(android.R.drawable.ic_lock_silent_mode_off)
+                    binding.btnMute.setImageResource(R.drawable.ic_volume_up)
+                    showCenterIndicator(R.drawable.ic_volume_up, "Unmuted")
                 }
             }
         }
@@ -1449,15 +1875,18 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnScaleMode.setOnClickListener {
             currentResizeMode = when (currentResizeMode) {
                 AspectRatioFrameLayout.RESIZE_MODE_FIT -> {
-                    binding.btnScaleMode.text = "FILL"
+                    binding.tvScaleLabel.text = "FILL"
+                    showCenterIndicator(R.drawable.ic_aspect_ratio, "Fill Screen")
                     AspectRatioFrameLayout.RESIZE_MODE_FILL
                 }
                 AspectRatioFrameLayout.RESIZE_MODE_FILL -> {
-                    binding.btnScaleMode.text = "ZOOM"
+                    binding.tvScaleLabel.text = "ZOOM"
+                    showCenterIndicator(R.drawable.ic_aspect_ratio, "Zoom Crop")
                     AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 }
                 else -> {
-                    binding.btnScaleMode.text = "FIT"
+                    binding.tvScaleLabel.text = "FIT"
+                    showCenterIndicator(R.drawable.ic_aspect_ratio, "Fit Screen")
                     AspectRatioFrameLayout.RESIZE_MODE_FIT
                 }
             }
@@ -1491,12 +1920,12 @@ class PlayerActivity : AppCompatActivity() {
                 if (isScreenLocked || !gestureState.pinchZoom) return false
                 if (detector.scaleFactor > 1.07f) {
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    binding.btnScaleMode.text = "ZOOM"
-                    showCenterIndicator("Zoom: Crop")
+                    binding.tvScaleLabel.text = "ZOOM"
+                    showCenterIndicator(R.drawable.ic_aspect_ratio, "Zoom Crop")
                 } else if (detector.scaleFactor < 0.93f) {
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
-                    binding.btnScaleMode.text = "FIT"
-                    showCenterIndicator("Zoom: Fit")
+                    binding.tvScaleLabel.text = "FIT"
+                    showCenterIndicator(R.drawable.ic_aspect_ratio, "Fit Screen")
                 }
                 return true
             }
@@ -1535,10 +1964,10 @@ class PlayerActivity : AppCompatActivity() {
                 val w = binding.gestureOverlay.width
                 if (e.x < w / 2) {
                     seekBy(-10000)
-                    showCenterIndicator("⏪ -10s")
+                    showCenterIndicator(R.drawable.ic_replay_10, "10s Backward")
                 } else {
                     seekBy(10000)
-                    showCenterIndicator("⏩ +10s")
+                    showCenterIndicator(R.drawable.ic_forward_10, "10s Forward")
                 }
                 return true
             }
@@ -1549,8 +1978,9 @@ class PlayerActivity : AppCompatActivity() {
                     savedSpeed = it.playbackParameters.speed
                     it.setPlaybackSpeed(2.0f)
                     isLongPressSpeedActive = true
-                    binding.tvGestureIndicator.text = "⏩ 2x Speed"
-                    binding.tvGestureIndicator.visibility = View.VISIBLE
+                    binding.ivGestureIcon.setImageResource(R.drawable.ic_speed)
+                    binding.tvGestureText.text = "2.0x Speed"
+                    binding.gestureIndicatorLayout.visibility = View.VISIBLE
                 }
             }
 
@@ -1574,7 +2004,7 @@ class PlayerActivity : AppCompatActivity() {
                         val next = (cur + delta).coerceIn(0.02f, 1.0f)
                         lp.screenBrightness = next
                         window.attributes = lp
-                        showCenterIndicator("☀️ ${(next * 100).toInt()}%")
+                        showCenterIndicator(R.drawable.ic_brightness, "${(next * 100).toInt()}%")
                     } else {
                         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -1582,7 +2012,9 @@ class PlayerActivity : AppCompatActivity() {
                         if (abs(distanceY) > 12) {
                             val nextVol = (curVol + step).coerceIn(0, maxVol)
                             audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
-                            showCenterIndicator("🔊 ${(nextVol * 100) / maxVol}%")
+                            val pct = (nextVol * 100) / maxVol
+                            val icon = if (pct == 0) R.drawable.ic_volume_off else R.drawable.ic_volume_up
+                            showCenterIndicator(icon, "$pct%")
                         }
                     }
                     return true
@@ -1599,7 +2031,7 @@ class PlayerActivity : AppCompatActivity() {
                 if (isLongPressSpeedActive) {
                     player?.setPlaybackSpeed(savedSpeed)
                     isLongPressSpeedActive = false
-                    binding.tvGestureIndicator.visibility = View.GONE
+                    binding.gestureIndicatorLayout.visibility = View.GONE
                 }
             }
             true
@@ -1621,7 +2053,7 @@ class PlayerActivity : AppCompatActivity() {
         )
 
         AlertDialog.Builder(this)
-            .setTitle("Gesture Controls")
+            .setTitle("Player Gestures")
             .setMultiChoiceItems(items, checked) { _, which, isChecked ->
                 lifecycleScope.launch {
                     when (which) {
@@ -1636,13 +2068,14 @@ class PlayerActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showCenterIndicator(text: String) {
-        binding.tvGestureIndicator.text = text
-        binding.tvGestureIndicator.visibility = View.VISIBLE
+    private fun showCenterIndicator(@DrawableRes iconRes: Int, text: String) {
+        binding.ivGestureIcon.setImageResource(iconRes)
+        binding.tvGestureText.text = text
+        binding.gestureIndicatorLayout.visibility = View.VISIBLE
         handler.removeCallbacksAndMessages("HIDE_IND")
         handler.postAtTime({
             if (!isLongPressSpeedActive) {
-                binding.tvGestureIndicator.visibility = View.GONE
+                binding.gestureIndicatorLayout.visibility = View.GONE
             }
         }, "HIDE_IND", android.os.SystemClock.uptimeMillis() + 800)
     }
@@ -1720,12 +2153,12 @@ def main():
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-    print("Updated project files generated!")
+    print("Clean DayNight & Pro Player UI project files generated!")
 
     with zipfile.ZipFile("BlueStreamPlayer_Source.zip", "w", zipfile.ZIP_DEFLATED) as zf:
         for path in files.keys():
             zf.write(path)
-    print("Updated ZIP created: BlueStreamPlayer_Source.zip")
+    print("ZIP created: BlueStreamPlayer_Source.zip")
 
 if __name__ == "__main__":
     main()
