@@ -26,7 +26,7 @@ include ':app'
 }
 """,
 
-    "gradle.properties": """org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+    "gradle.properties": """org.gradle.jvmargs=-Xmx3072m -Dfile.encoding=UTF-8
 android.useAndroidX=true
 kotlin.code.style=official
 android.nonTransitiveRClass=true
@@ -45,8 +45,19 @@ android {
         applicationId "com.stream.blueplayer"
         minSdk 24
         targetSdk 34
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "2.0"
+
+        ndk {
+            // Includes lib/arm64-v8a/libdatastore_shared_counter.so and 32-bit fallback
+            abiFilters 'arm64-v8a', 'armeabi-v7a'
+        }
+    }
+
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     buildTypes {
@@ -72,9 +83,15 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'com.google.code.gson:gson:2.10.1'
 
-    // Best Video Player Library: AndroidX Media3 (ExoPlayer) - Supports all formats
+    // Jetpack DataStore (Packs native lib/arm64-v8a/libdatastore_shared_counter.so for ultra-fast I/O)
+    implementation "androidx.datastore:datastore-preferences:1.1.1"
+    implementation "androidx.datastore:datastore-core:1.1.1"
+
+    // AndroidX Media3 (ExoPlayer) - Full format support
     def media3_version = "1.3.0"
     implementation "androidx.media3:media3-exoplayer:$media3_version"
     implementation "androidx.media3:media3-exoplayer-hls:$media3_version"
@@ -96,7 +113,9 @@ dependencies {
 
     <application
         android:allowBackup="true"
-        android:label="Network Stream Player"
+        android:hardwareAccelerated="true"
+        android:extractNativeLibs="true"
+        android:label="Network Stream (Video) Player"
         android:supportsRtl="true"
         android:usesCleartextTraffic="true"
         android:theme="@style/Theme.BlueStreamPlayer"
@@ -105,7 +124,7 @@ dependencies {
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:windowSoftInputMode="adjustResize">
+            android:windowSoftInputMode="adjustPan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
@@ -128,22 +147,21 @@ dependencies {
 
     "app/src/main/res/values/colors.xml": """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="bg_dark">#0F0F12</color>
-    <color name="surface_dark">#18181D</color>
-    <color name="blue_accent">#2196F3</color>
-    <color name="blue_dark">#1976D2</color>
-    <color name="text_primary">#EBEBF0</color>
-    <color name="text_secondary">#9E9EA8</color>
-    <color name="border_unfocused">#3A3A44</color>
-    <color name="player_overlay">#80000000</color>
+    <color name="bg_dark">#141210</color>
+    <color name="surface_dark">#1D1A18</color>
+    <color name="blue_accent">#2979FF</color>
+    <color name="blue_stroke_dim">#4D2979FF</color>
+    <color name="border_subtle">#524943</color>
+    <color name="text_primary">#E6E1DE</color>
+    <color name="text_secondary">#B8AEA8</color>
+    <color name="player_overlay">#88000000</color>
 </resources>
 """,
 
     "app/src/main/res/values/themes.xml": """<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.BlueStreamPlayer" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <style name="Theme.BlueStreamPlayer" parent="Theme.Material3.Dark.NoActionBar">
         <item name="colorPrimary">@color/blue_accent</item>
-        <item name="colorPrimaryVariant">@color/blue_dark</item>
         <item name="colorOnPrimary">@android:color/white</item>
         <item name="colorSecondary">@color/blue_accent</item>
         <item name="android:windowBackground">@color/bg_dark</item>
@@ -151,31 +169,127 @@ dependencies {
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
 
-    <style name="CustomOutlineBox" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox">
-        <item name="boxStrokeColor">@color/box_stroke_selector</item>
-        <item name="boxStrokeWidth">1.5dp</item>
+    <style name="StreamInputBox" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxStrokeColor">@color/input_stroke_selector</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">1.8dp</item>
+        <item name="boxCornerRadiusTopStart">5dp</item>
+        <item name="boxCornerRadiusTopEnd">5dp</item>
+        <item name="boxCornerRadiusBottomStart">5dp</item>
+        <item name="boxCornerRadiusBottomEnd">5dp</item>
         <item name="hintTextColor">@color/blue_accent</item>
         <item name="android:textColorHint">@color/text_secondary</item>
-        <item name="boxBackgroundColor">@color/surface_dark</item>
+        <item name="boxBackgroundColor">@android:color/transparent</item>
     </style>
 
-    <style name="CustomDropdownBox" parent="Widget.MaterialComponents.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
-        <item name="boxStrokeColor">@color/box_stroke_selector</item>
-        <item name="boxStrokeWidth">1.5dp</item>
-        <item name="hintTextColor">@color/blue_accent</item>
+    <style name="StreamDropdownBox" parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="boxStrokeColor">@color/input_stroke_selector</item>
+        <item name="boxStrokeWidth">1dp</item>
+        <item name="boxStrokeWidthFocused">1.8dp</item>
+        <item name="boxCornerRadiusTopStart">5dp</item>
+        <item name="boxCornerRadiusTopEnd">5dp</item>
+        <item name="boxCornerRadiusBottomStart">5dp</item>
+        <item name="boxCornerRadiusBottomEnd">5dp</item>
+        <item name="hintTextColor">@color/text_secondary</item>
         <item name="android:textColorHint">@color/text_secondary</item>
-        <item name="boxBackgroundColor">@color/surface_dark</item>
         <item name="endIconTint">@color/text_secondary</item>
+        <item name="boxBackgroundColor">@android:color/transparent</item>
+    </style>
+
+    <style name="RoundedSquareFab" parent="">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">16dp</item>
     </style>
 </resources>
 """,
 
-    "app/src/main/res/color/box_stroke_selector.xml": """<?xml version="1.0" encoding="utf-8"?>
+    "app/src/main/res/color/input_stroke_selector.xml": """<?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:color="@color/blue_accent" android:state_focused="true"/>
-    <item android:color="@color/blue_accent" android:state_hovered="true"/>
-    <item android:color="@color/border_unfocused"/>
+    <item android:color="@color/blue_accent" android:state_Activated="true"/>
+    <item android:color="@color/border_subtle"/>
 </selector>
+""",
+
+    # Custom Vector Drawables matching the exact reference UI screenshots
+    "app/src/main/res/drawable/ic_history_clock.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M13,3a9,9 0,0 0,-9 9H1l3.89,3.89 0.07,0.14L9,12H6c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.93,0 -3.68,-0.79 -4.94,-2.06l-1.42,1.42A8.954,8.954 0,0 0,13 21a9,9 0,0 0,0 -18zm-1,5v5l4.28,2.54 0.72,-1.21 -3.5,-2.08V8H12z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_arrow_back.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M20,11H7.83l5.59,-5.59L12,4l-8,8 8,8 1.41,-1.41L7.83,13H20v-2z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_sort_lines.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/text_primary"
+        android:pathData="M3,18h6v-2H3v2zM3,6v2h18V6H3zm0,7h12v-2H3v2z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_delete_bin.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="@color/text_secondary"
+        android:pathData="M6,19c0,1.1 0.9,2 2,2h8c1.1,0 2,-0.9 2,-2V7H6v12zM19,4h-3.5l-1,-1h-5l-1,1H5v2h14V4z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_play_arrow.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M8,5v14l11,-7z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/ic_pause.xml": """<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="28dp"
+    android:height="28dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M6,19h4V5H6v14zm8,-14v14h4V5h-4z"/>
+</vector>
+""",
+
+    "app/src/main/res/drawable/pill_blue_bg.xml": """<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/blue_accent" />
+    <corners android:radius="20dp" />
+</shape>
 """,
 
     "app/src/main/res/layout/activity_main.xml": """<?xml version="1.0" encoding="utf-8"?>
@@ -192,10 +306,10 @@ dependencies {
         android:orientation="vertical"
         android:paddingHorizontal="16dp">
 
-        <!-- Top Bar -->
+        <!-- Exact Screenshot Toolbar -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="64dp"
+            android:layout_height="60dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -205,99 +319,109 @@ dependencies {
                 android:layout_weight="1"
                 android:text="Network Stream (Video) Player"
                 android:textColor="@color/text_primary"
-                android:textSize="20sp"
-                android:textStyle="normal" />
+                android:textSize="21sp"
+                android:fontFamily="sans-serif" />
 
             <ImageButton
                 android:id="@+id/btnHistory"
-                android:layout_width="44dp"
-                android:layout_height="44dp"
+                android:layout_width="42dp"
+                android:layout_height="42dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="History"
-                android:src="@android:drawable/ic_menu_recent_history"
-                app:tint="@color/blue_accent" />
+                android:src="@drawable/ic_history_clock" />
         </LinearLayout>
 
-        <ScrollView
+        <androidx.core.widget.NestedScrollView
             android:layout_width="match_parent"
             android:layout_height="match_parent"
+            android:overScrollMode="never"
             android:scrollbars="none">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingTop="8dp"
+                android:paddingTop="10dp"
                 android:paddingBottom="100dp">
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="18dp"
                     android:hint="Media Stream URL">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etStreamUrl"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="textUri"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="18dp"
                     android:hint="Cookie Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etCookie"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="text"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="18dp"
                     android:hint="Referer Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etReferer"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="textUri"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="18dp"
                     android:hint="Origin Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etOrigin"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="textUri"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
+                    android:layout_marginBottom="18dp"
                     android:hint="DRM License URL">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etDrmUrl"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="textUri"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
                 <LinearLayout
@@ -307,96 +431,106 @@ dependencies {
                     android:baselineAligned="false">
 
                     <com.google.android.material.textfield.TextInputLayout
-                        style="@style/CustomDropdownBox"
+                        style="@style/StreamDropdownBox"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
+                        android:layout_marginEnd="6dp"
                         android:hint="UserAgent">
                         <AutoCompleteTextView
                             android:id="@+id/actvUserAgent"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_height="56dp"
                             android:inputType="none"
-                            android:text="Default"
-                            android:textColor="@color/text_primary" />
+                            android:paddingHorizontal="14dp"
+                            android:text="Custom"
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp" />
                     </com.google.android.material.textfield.TextInputLayout>
 
                     <com.google.android.material.textfield.TextInputLayout
-                        style="@style/CustomDropdownBox"
+                        style="@style/StreamDropdownBox"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginStart="8dp"
-                        android:hint="DrmScheme">
+                        android:layout_marginStart="6dp"
+                        android:hint="DrmScheme"
+                        app:boxStrokeColor="@color/blue_accent">
                         <AutoCompleteTextView
                             android:id="@+id/actvDrmScheme"
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
+                            android:layout_height="56dp"
                             android:inputType="none"
+                            android:paddingHorizontal="14dp"
                             android:text="widevine"
-                            android:textColor="@color/text_primary" />
+                            android:textColor="@color/text_primary"
+                            android:textSize="16sp" />
                     </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
                 <com.google.android.material.textfield.TextInputLayout
                     android:id="@+id/tilCustomUa"
-                    style="@style/CustomOutlineBox"
+                    style="@style/StreamInputBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
-                    android:visibility="gone"
-                    android:hint="Custom User-Agent String">
+                    android:layout_marginTop="18dp"
+                    android:visibility="visible"
+                    android:hint="Custom UserAgent Value">
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etCustomUa"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
+                        android:layout_height="58dp"
                         android:inputType="text"
-                        android:textColor="@color/text_primary" />
+                        android:paddingHorizontal="16dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="16sp" />
                 </com.google.android.material.textfield.TextInputLayout>
 
             </LinearLayout>
-        </ScrollView>
+        </androidx.core.widget.NestedScrollView>
     </LinearLayout>
 
+    <!-- Exact Rounded Square Floating Action Button in Blue -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabPlay"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom|end"
-        android:layout_margin="24dp"
-        android:contentDescription="Play Stream"
-        android:src="@android:drawable/ic_media_play"
+        android:layout_marginEnd="22dp"
+        android:layout_marginBottom="28dp"
+        android:contentDescription="Play"
+        android:src="@drawable/ic_play_arrow"
         app:backgroundTint="@color/blue_accent"
         app:tint="@android:color/white"
-        app:shapeAppearanceOverlay="@style/ShapeAppearance.MaterialComponents.MediumComponent" />
+        app:fabCustomSize="58dp"
+        app:maxImageSize="28dp"
+        app:shapeAppearanceOverlay="@style/RoundedSquareFab" />
 
 </androidx.coordinatorlayout.widget.CoordinatorLayout>
 """,
 
     "app/src/main/res/layout/activity_history.xml": """<?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/historyRoot"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
     android:orientation="vertical">
 
+    <!-- Exact History Header matching Screenshot -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="60dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="12dp">
 
         <ImageButton
             android:id="@+id/btnBack"
-            android:layout_width="44dp"
-            android:layout_height="44dp"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_revert"
-            app:tint="@color/text_primary" />
+            android:src="@drawable/ic_arrow_back" />
 
         <TextView
             android:layout_width="0dp"
@@ -405,31 +539,33 @@ dependencies {
             android:layout_weight="1"
             android:text="History"
             android:textColor="@color/text_primary"
-            android:textSize="20sp" />
+            android:textSize="22sp" />
 
         <ImageButton
             android:id="@+id/btnSort"
             android:layout_width="44dp"
             android:layout_height="44dp"
+            android:layout_marginEnd="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_sort_by_size"
-            app:tint="@color/blue_accent" />
+            android:src="@drawable/ic_sort_lines" />
 
         <ImageButton
             android:id="@+id/btnClearAll"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_delete"
-            app:tint="@color/blue_accent" />
+            android:src="@drawable/ic_delete_bin" />
     </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvHistory"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:padding="12dp"
-        android:clipToPadding="false" />
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:paddingHorizontal="14dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="24dp" />
 </LinearLayout>
 """,
 
@@ -440,8 +576,9 @@ dependencies {
     android:layout_height="wrap_content"
     android:layout_marginBottom="12dp"
     app:cardBackgroundColor="@color/surface_dark"
-    app:cardCornerRadius="10dp"
-    app:strokeColor="@color/blue_accent"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="0dp"
+    app:strokeColor="@color/border_subtle"
     app:strokeWidth="1dp">
 
     <LinearLayout
@@ -449,7 +586,9 @@ dependencies {
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:padding="14dp">
+        android:paddingVertical="14dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="10dp">
 
         <TextView
             android:id="@+id/tvHistoryUrl"
@@ -457,18 +596,18 @@ dependencies {
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:ellipsize="end"
+            android:lineSpacingExtra="2dp"
             android:maxLines="2"
-            android:textColor="@color/text_primary"
-            android:textSize="14sp" />
+            android:textColor="@color/text_secondary"
+            android:textSize="15sp" />
 
         <ImageButton
             android:id="@+id/btnDeleteItem"
-            android:layout_width="38dp"
-            android:layout_height="38dp"
-            android:layout_marginStart="8dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="10dp"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_menu_delete"
-            app:tint="@color/text_secondary" />
+            android:src="@drawable/ic_delete_bin" />
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>
 """,
@@ -489,61 +628,56 @@ dependencies {
         app:use_controller="false"
         app:surface_type="surface_view" />
 
-    <!-- Gesture Overlay Layer -->
     <View
         android:id="@+id/gestureOverlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Center Feedback Indicator (Volume / Brightness / Seek / 2x Speed) -->
     <TextView
         android:id="@+id/tvGestureIndicator"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
-        android:background="#B3000000"
+        android:background="@drawable/pill_blue_bg"
         android:paddingHorizontal="20dp"
         android:paddingVertical="10dp"
         android:textColor="@android:color/white"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold"
         android:visibility="gone" />
 
-    <!-- Loading ProgressBar -->
     <ProgressBar
         android:id="@+id/loadingIndicator"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:layout_gravity="center"
         android:indeterminateTint="@color/blue_accent"
         android:visibility="gone" />
 
-    <!-- Custom Controls Overlay -->
+    <!-- Smooth Custom Controls Overlay -->
     <FrameLayout
         android:id="@+id/controlsRoot"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="@color/player_overlay">
 
-        <!-- Top Controls Bar -->
+        <!-- Top Bar -->
         <LinearLayout
-            android:id="@+id/topControls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="top"
             android:gravity="center_vertical"
             android:orientation="horizontal"
             android:paddingHorizontal="16dp"
-            android:paddingTop="20dp"
-            android:paddingBottom="12dp">
+            android:paddingTop="18dp"
+            android:paddingBottom="10dp">
 
             <ImageButton
                 android:id="@+id/btnPlayerBack"
                 android:layout_width="40dp"
                 android:layout_height="40dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
-                android:src="@android:drawable/ic_menu_revert"
-                app:tint="@android:color/white" />
+                android:src="@drawable/ic_arrow_back" />
 
             <TextView
                 android:id="@+id/tvStreamTitle"
@@ -553,7 +687,7 @@ dependencies {
                 android:layout_weight="1"
                 android:ellipsize="end"
                 android:singleLine="true"
-                android:text="Live Stream"
+                android:text="Stream"
                 android:textColor="@android:color/white"
                 android:textSize="15sp"
                 android:textStyle="bold" />
@@ -564,7 +698,7 @@ dependencies {
                 android:layout_height="wrap_content"
                 android:background="?attr/selectableItemBackground"
                 android:padding="8dp"
-                android:text="HD / Auto"
+                android:text="Quality"
                 android:textColor="@color/blue_accent"
                 android:textStyle="bold" />
 
@@ -603,9 +737,8 @@ dependencies {
                 app:tint="@color/blue_accent" />
         </LinearLayout>
 
-        <!-- Center Play/Pause & Seek Buttons -->
+        <!-- Center Play/Pause & 10s Seek -->
         <LinearLayout
-            android:id="@+id/centerControls"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="center"
@@ -614,39 +747,37 @@ dependencies {
 
             <ImageButton
                 android:id="@+id/btnRewind"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_media_rew"
                 app:tint="@android:color/white" />
 
             <ImageButton
                 android:id="@+id/btnPlayPause"
-                android:layout_width="72dp"
-                android:layout_height="72dp"
+                android:layout_width="68dp"
+                android:layout_height="68dp"
                 android:layout_marginHorizontal="36dp"
-                android:background="@drawable/circle_blue_bg"
-                android:src="@android:drawable/ic_media_pause"
-                app:tint="@android:color/white" />
+                android:background="@drawable/pill_blue_bg"
+                android:src="@drawable/ic_pause" />
 
             <ImageButton
                 android:id="@+id/btnForward"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
+                android:layout_width="52dp"
+                android:layout_height="52dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:src="@android:drawable/ic_media_ff"
                 app:tint="@android:color/white" />
         </LinearLayout>
 
-        <!-- Bottom Controls Bar -->
+        <!-- Bottom Bar -->
         <LinearLayout
-            android:id="@+id/bottomControls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom"
             android:orientation="vertical"
             android:paddingHorizontal="16dp"
-            android:paddingBottom="20dp">
+            android:paddingBottom="18dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -682,9 +813,9 @@ dependencies {
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
                 android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:layout_marginTop="4dp">
+                android:orientation="horizontal">
 
                 <ImageButton
                     android:id="@+id/btnLock"
@@ -708,10 +839,10 @@ dependencies {
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="16dp"
-                    android:background="@drawable/circle_blue_bg"
+                    android:background="@drawable/pill_blue_bg"
                     android:paddingHorizontal="12dp"
                     android:paddingVertical="4dp"
-                    android:text="● GO LIVE"
+                    android:text="● LIVE"
                     android:textColor="@android:color/white"
                     android:textSize="12sp"
                     android:textStyle="bold" />
@@ -743,27 +874,18 @@ dependencies {
         </LinearLayout>
     </FrameLayout>
 
-    <!-- Unlock Button (Only visible when screen is locked) -->
     <ImageButton
         android:id="@+id/btnUnlockOnly"
-        android:layout_width="52dp"
-        android:layout_height="52dp"
+        android:layout_width="50dp"
+        android:layout_height="50dp"
         android:layout_gravity="center_vertical|start"
         android:layout_marginStart="24dp"
-        android:background="@drawable/circle_blue_bg"
+        android:background="@drawable/pill_blue_bg"
         android:src="@android:drawable/ic_lock_lock"
         android:visibility="gone"
         app:tint="@android:color/white" />
 
 </FrameLayout>
-""",
-
-    "app/src/main/res/drawable/circle_blue_bg.xml": """<?xml version="1.0" encoding="utf-8"?>
-<shape xmlns:android="http://schemas.android.com/apk/res/android"
-    android:shape="rectangle">
-    <solid android:color="@color/blue_accent" />
-    <corners android:radius="24dp" />
-</shape>
 """,
 
     "app/src/main/java/com/stream/blueplayer/StreamConfig.kt": """package com.stream.blueplayer
@@ -782,56 +904,93 @@ data class StreamConfig(
 ) : Serializable
 """,
 
-    "app/src/main/java/com/stream/blueplayer/PrefsManager.kt": """package com.stream.blueplayer
+    "app/src/main/java/com/stream/blueplayer/DataStoreManager.kt": """package com.stream.blueplayer
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 
-class PrefsManager(context: Context) {
-    private val prefs = context.getSharedPreferences("blue_player_prefs", Context.MODE_PRIVATE)
+// Uses Jetpack DataStore backed by native lib/arm64-v8a/libdatastore_shared_counter.so
+val Context.appDataStore: DataStore<Preferences> by preferencesDataStore(name = "blue_stream_datastore")
+
+class DataStoreManager(private val context: Context) {
     private val gson = Gson()
 
-    fun saveStreamToHistory(config: StreamConfig) {
-        val list = getHistory().toMutableList()
-        list.removeAll { it.streamUrl.equals(config.streamUrl, ignoreCase = true) }
-        list.add(0, config)
-        prefs.edit().putString("history_list", gson.toJson(list)).apply()
+    companion object {
+        val KEY_HISTORY = stringPreferencesKey("history_json")
+        val KEY_VOL_BRIGHT = booleanPreferencesKey("gesture_vol_bright")
+        val KEY_PINCH = booleanPreferencesKey("gesture_pinch")
+        val KEY_DOUBLE_TAP = booleanPreferencesKey("gesture_double_tap")
+        val KEY_LONG_PRESS = booleanPreferencesKey("gesture_long_press")
     }
 
-    fun getHistory(): List<StreamConfig> {
-        val json = prefs.getString("history_list", null) ?: return emptyList()
+    val historyFlow: Flow<List<StreamConfig>> = context.appDataStore.data.map { prefs ->
+        val json = prefs[KEY_HISTORY] ?: return@map emptyList()
         val type = object : TypeToken<List<StreamConfig>>() {}.type
-        return gson.fromJson(json, type) ?: emptyList()
+        gson.fromJson<List<StreamConfig>>(json, type) ?: emptyList()
     }
 
-    fun deleteHistoryItem(url: String) {
-        val list = getHistory().toMutableList()
-        list.removeAll { it.streamUrl == url }
-        prefs.edit().putString("history_list", gson.toJson(list)).apply()
+    suspend fun saveStream(config: StreamConfig) {
+        context.appDataStore.edit { prefs ->
+            val currentJson = prefs[KEY_HISTORY]
+            val type = object : TypeToken<MutableList<StreamConfig>>() {}.type
+            val list: MutableList<StreamConfig> = if (currentJson != null) {
+                gson.fromJson(currentJson, type) ?: mutableListOf()
+            } else {
+                mutableListOf()
+            }
+            list.removeAll { it.streamUrl.equals(config.streamUrl, ignoreCase = true) }
+            list.add(0, config)
+            prefs[KEY_HISTORY] = gson.toJson(list)
+        }
     }
 
-    fun clearAllHistory() {
-        prefs.edit().remove("history_list").apply()
+    suspend fun deleteStream(url: String) {
+        context.appDataStore.edit { prefs ->
+            val currentJson = prefs[KEY_HISTORY] ?: return@edit
+            val type = object : TypeToken<MutableList<StreamConfig>>() {}.type
+            val list: MutableList<StreamConfig> = gson.fromJson(currentJson, type) ?: return@edit
+            list.removeAll { it.streamUrl == url }
+            prefs[KEY_HISTORY] = gson.toJson(list)
+        }
     }
 
-    // Gesture Settings
-    var isSwipeVolumeBrightnessEnabled: Boolean
-        get() = prefs.getBoolean("gesture_vol_bright", true)
-        set(value) = prefs.edit().putBoolean("gesture_vol_bright", value).apply()
+    suspend fun clearHistory() {
+        context.appDataStore.edit { prefs ->
+            prefs.remove(KEY_HISTORY)
+        }
+    }
 
-    var isPinchZoomEnabled: Boolean
-        get() = prefs.getBoolean("gesture_pinch", true)
-        set(value) = prefs.edit().putBoolean("gesture_pinch", value).apply()
+    val gestureSettingsFlow: Flow<GestureState> = context.appDataStore.data.map { prefs ->
+        GestureState(
+            volBright = prefs[KEY_VOL_BRIGHT] ?: true,
+            pinchZoom = prefs[KEY_PINCH] ?: true,
+            doubleTap = prefs[KEY_DOUBLE_TAP] ?: true,
+            longPress2x = prefs[KEY_LONG_PRESS] ?: true
+        )
+    }
 
-    var isDoubleTapSeekEnabled: Boolean
-        get() = prefs.getBoolean("gesture_double_tap", true)
-        set(value) = prefs.edit().putBoolean("gesture_double_tap", value).apply()
-
-    var isLongPress2xEnabled: Boolean
-        get() = prefs.getBoolean("gesture_long_press_2x", true)
-        set(value) = prefs.edit().putBoolean("gesture_long_press_2x", value).apply()
+    suspend fun updateGesture(key: Preferences.Key<Boolean>, enabled: Boolean) {
+        context.appDataStore.edit { prefs ->
+            prefs[key] = enabled
+        }
+    }
 }
+
+data class GestureState(
+    val volBright: Boolean = true,
+    val pinchZoom: Boolean = true,
+    val doubleTap: Boolean = true,
+    val longPress2x: Boolean = true
+)
 """,
 
     "app/src/main/java/com/stream/blueplayer/MainActivity.kt": """package com.stream.blueplayer
@@ -845,34 +1004,35 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import com.stream.blueplayer.databinding.ActivityMainBinding
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var prefs: PrefsManager
+    private lateinit var dataStore: DataStoreManager
 
     private val userAgents = mapOf(
-        "Default" to "Mozilla/5.0 (Linux; Android 10; Redmi 9 Prime) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
-        "Chrome PC" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "ExoPlayer" to "ExoPlayerLib/2.19.1 (Linux; Android 10) ExoPlayerLib/1.3.0",
-        "Custom" to ""
+        "Custom" to "",
+        "Default Android" to "Mozilla/5.0 (Linux; Android 10; Redmi 9 Prime) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36",
+        "Chrome Windows" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "ExoPlayer" to "ExoPlayerLib/2.19.1 (Linux; Android 10) ExoPlayerLib/1.3.0"
     )
 
     private val drmSchemes = listOf("widevine", "clearkey", "playready", "none")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Full Screen Edge-to-Edge Support
         WindowCompat.setDecorFitsSystemWindows(window, false)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        prefs = PrefsManager(this)
+        dataStore = DataStoreManager(this)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.mainRoot) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
 
@@ -885,15 +1045,15 @@ class MainActivity : AppCompatActivity() {
         binding.fabPlay.setOnClickListener {
             val url = binding.etStreamUrl.text.toString().trim()
             if (url.isEmpty()) {
-                Toast.makeText(this, "Please paste a valid Media Stream URL", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Paste a Media Stream URL first", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             val selectedUaKey = binding.actvUserAgent.text.toString()
             val finalUa = if (selectedUaKey == "Custom") {
-                binding.etCustomUa.text.toString().trim().ifEmpty { userAgents["Default"]!! }
+                binding.etCustomUa.text.toString().trim().ifEmpty { userAgents["Default Android"]!! }
             } else {
-                userAgents[selectedUaKey] ?: userAgents["Default"]!!
+                userAgents[selectedUaKey] ?: userAgents["Default Android"]!!
             }
 
             val config = StreamConfig(
@@ -906,21 +1066,22 @@ class MainActivity : AppCompatActivity() {
                 drmScheme = binding.actvDrmScheme.text.toString().lowercase()
             )
 
-            prefs.saveStreamToHistory(config)
-
-            val intent = Intent(this, PlayerActivity::class.java).apply {
-                putExtra("STREAM_CONFIG", config)
+            lifecycleScope.launch {
+                dataStore.saveStream(config)
             }
-            startActivity(intent)
+
+            startActivity(Intent(this, PlayerActivity::class.java).apply {
+                putExtra("STREAM_CONFIG", config)
+            })
         }
     }
 
     private fun setupDropdowns() {
-        val uaAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, userAgents.keys.toList())
+        val uaKeys = userAgents.keys.toList()
+        val uaAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, uaKeys)
         binding.actvUserAgent.setAdapter(uaAdapter)
-        binding.actvUserAgent.setOnItemClickListener { _, _, position, _ ->
-            val selected = userAgents.keys.toList()[position]
-            binding.tilCustomUa.visibility = if (selected == "Custom") View.VISIBLE else View.GONE
+        binding.actvUserAgent.setOnItemClickListener { _, _, pos, _ ->
+            binding.tilCustomUa.visibility = if (uaKeys[pos] == "Custom") View.VISIBLE else View.GONE
         }
 
         val drmAdapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, drmSchemes)
@@ -940,18 +1101,23 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.stream.blueplayer.databinding.ActivityHistoryBinding
 import com.stream.blueplayer.databinding.ItemHistoryBinding
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class HistoryActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityHistoryBinding
-    private lateinit var prefs: PrefsManager
-    private var historyList = mutableListOf<StreamConfig>()
-    private lateinit var adapter: HistoryAdapter
-    private var isReversed = false
+    private lateinit var dataStore: DataStoreManager
+    private val adapter = HistoryDiffAdapter()
+    private var isAscending = false
+    private var cachedList = listOf<StreamConfig>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -959,66 +1125,71 @@ class HistoryActivity : AppCompatActivity() {
         binding = ActivityHistoryBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        prefs = PrefsManager(this)
+        dataStore = DataStoreManager(this)
 
         ViewCompat.setOnApplyWindowInsetsListener(binding.historyRoot) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
 
-        historyList = prefs.getHistory().toMutableList()
-        adapter = HistoryAdapter()
         binding.rvHistory.layoutManager = LinearLayoutManager(this)
+        binding.rvHistory.setHasFixedSize(true)
         binding.rvHistory.adapter = adapter
+
+        lifecycleScope.launch {
+            dataStore.historyFlow.collectLatest { list ->
+                cachedList = list
+                adapter.submitList(if (isAscending) list.reversed() else list)
+            }
+        }
 
         binding.btnBack.setOnClickListener { finish() }
 
         binding.btnSort.setOnClickListener {
-            isReversed = !isReversed
-            historyList.reverse()
-            adapter.notifyDataSetChanged()
+            isAscending = !isAscending
+            adapter.submitList(if (isAscending) cachedList.reversed() else cachedList)
         }
 
         binding.btnClearAll.setOnClickListener {
             AlertDialog.Builder(this)
-                .setTitle("Clear History")
-                .setMessage("Delete all saved stream links?")
+                .setTitle("Delete All History")
+                .setMessage("Clear all saved links?")
                 .setPositiveButton("Clear") { _, _ ->
-                    prefs.clearAllHistory()
-                    historyList.clear()
-                    adapter.notifyDataSetChanged()
+                    lifecycleScope.launch { dataStore.clearHistory() }
                 }
                 .setNegativeButton("Cancel", null)
                 .show()
         }
     }
 
-    inner class HistoryAdapter : RecyclerView.Adapter<HistoryAdapter.VH>() {
+    inner class HistoryDiffAdapter : ListAdapter<StreamConfig, HistoryDiffAdapter.VH>(DiffCallback) {
         inner class VH(val itemBinding: ItemHistoryBinding) : RecyclerView.ViewHolder(itemBinding.root)
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
             return VH(ItemHistoryBinding.inflate(LayoutInflater.from(parent.context), parent, false))
         }
 
-        override fun getItemCount(): Int = historyList.size
-
         override fun onBindViewHolder(holder: VH, position: Int) {
-            val item = historyList[position]
+            val item = getItem(position)
             holder.itemBinding.tvHistoryUrl.text = item.streamUrl
             holder.itemBinding.root.setOnClickListener {
-                val intent = Intent(this@HistoryActivity, PlayerActivity::class.java).apply {
+                startActivity(Intent(this@HistoryActivity, PlayerActivity::class.java).apply {
                     putExtra("STREAM_CONFIG", item)
-                }
-                startActivity(intent)
+                })
             }
             holder.itemBinding.btnDeleteItem.setOnClickListener {
-                prefs.deleteHistoryItem(item.streamUrl)
-                historyList.removeAt(position)
-                notifyItemRemoved(position)
-                notifyItemRangeChanged(position, historyList.size)
+                lifecycleScope.launch { dataStore.deleteStream(item.streamUrl) }
             }
         }
+    }
+
+    object DiffCallback : DiffUtil.ItemCallback<StreamConfig>() {
+        override fun areItemsTheSame(oldItem: StreamConfig, newItem: StreamConfig) =
+            oldItem.streamUrl == newItem.streamUrl
+
+        override fun areContentsTheSame(oldItem: StreamConfig, newItem: StreamConfig) =
+            oldItem == newItem
     }
 }
 """,
@@ -1049,6 +1220,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
@@ -1062,13 +1234,16 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.TrackSelectionDialogBuilder
 import com.stream.blueplayer.databinding.ActivityPlayerBinding
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 import kotlin.math.abs
 
 @OptIn(UnstableApi::class)
 class PlayerActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityPlayerBinding
-    private lateinit var prefs: PrefsManager
+    private lateinit var dataStore: DataStoreManager
+    private var gestureState = GestureState()
     private var player: ExoPlayer? = null
     private lateinit var audioManager: AudioManager
 
@@ -1088,7 +1263,6 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Edge-to-Edge Display Cutout (Notch) Support
         WindowCompat.setDecorFitsSystemWindows(window, false)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             window.attributes.layoutInDisplayCutoutMode =
@@ -1099,8 +1273,14 @@ class PlayerActivity : AppCompatActivity() {
         setContentView(binding.root)
         hideSystemBars()
 
-        prefs = PrefsManager(this)
+        dataStore = DataStoreManager(this)
         audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+
+        lifecycleScope.launch {
+            dataStore.gestureSettingsFlow.collectLatest { state ->
+                gestureState = state
+            }
+        }
 
         val config = intent.getSerializableExtra("STREAM_CONFIG") as? StreamConfig
         if (config == null) {
@@ -1122,13 +1302,13 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun initializePlayer(config: StreamConfig) {
-        // Special Decoding Optimization for Redmi 9 Prime (MediaTek Helio G80 / Android 10)
+        // Redmi 9 Prime (Android 10 / Helio G80) Hardware + Software Fallback Decoding
         val renderersFactory = DefaultRenderersFactory(this)
             .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
             .setEnableDecoderFallback(true)
 
         val loadControl = DefaultLoadControl.Builder()
-            .setBufferDurationsMs(15000, 50000, 1500, 3000)
+            .setBufferDurationsMs(15000, 50000, 1200, 2500)
             .build()
 
         val headers = mutableMapOf<String, String>()
@@ -1205,24 +1385,21 @@ class PlayerActivity : AppCompatActivity() {
         binding.btnRewind.setOnClickListener { seekBy(-10000) }
         binding.btnForward.setOnClickListener { seekBy(10000) }
 
-        // Video Quality Selector
         binding.btnQuality.setOnClickListener {
             val exo = player ?: return@setOnClickListener
-            TrackSelectionDialogBuilder(this, "Select Video Quality", exo, C.TRACK_TYPE_VIDEO)
+            TrackSelectionDialogBuilder(this, "Video Quality", exo, C.TRACK_TYPE_VIDEO)
                 .setAllowAdaptiveSelections(true)
                 .build()
                 .show()
         }
 
-        // Audio Language Selector
         binding.btnAudio.setOnClickListener {
             val exo = player ?: return@setOnClickListener
-            TrackSelectionDialogBuilder(this, "Select Audio Track / Language", exo, C.TRACK_TYPE_AUDIO)
+            TrackSelectionDialogBuilder(this, "Audio Language", exo, C.TRACK_TYPE_AUDIO)
                 .build()
                 .show()
         }
 
-        // Playback Speed Selector
         binding.btnSpeed.setOnClickListener {
             val speeds = arrayOf("0.25x", "0.5x", "0.75x", "1.0x (Normal)", "1.25x", "1.5x", "2.0x", "3.0x")
             val values = floatArrayOf(0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 3.0f)
@@ -1236,28 +1413,21 @@ class PlayerActivity : AppCompatActivity() {
                 .show()
         }
 
-        // PiP Button
         binding.btnPip.setOnClickListener { enterPipMode() }
-
-        // Gesture Settings Dialog Button
         binding.btnGestureSettings.setOnClickListener { showGestureSettingsDialog() }
 
-        // Lock / Unlock Screen
         binding.btnLock.setOnClickListener {
             isScreenLocked = true
             binding.controlsRoot.visibility = View.GONE
             binding.btnUnlockOnly.visibility = View.VISIBLE
-            Toast.makeText(this, "Screen Locked", Toast.LENGTH_SHORT).show()
         }
 
         binding.btnUnlockOnly.setOnClickListener {
             isScreenLocked = false
             binding.btnUnlockOnly.visibility = View.GONE
             binding.controlsRoot.visibility = View.VISIBLE
-            Toast.makeText(this, "Screen Unlocked", Toast.LENGTH_SHORT).show()
         }
 
-        // Mute / Unmute Button
         binding.btnMute.setOnClickListener {
             player?.let {
                 if (it.volume > 0f) {
@@ -1270,19 +1440,12 @@ class PlayerActivity : AppCompatActivity() {
             }
         }
 
-        // Go Live Button
         binding.btnGoLive.setOnClickListener {
             player?.let {
-                if (it.isCurrentMediaItemLive) {
-                    it.seekToDefaultPosition()
-                } else {
-                    it.seekTo(it.duration)
-                }
-                Toast.makeText(this, "Jumped to Live Edge", Toast.LENGTH_SHORT).show()
+                if (it.isCurrentMediaItemLive) it.seekToDefaultPosition() else it.seekTo(it.duration)
             }
         }
 
-        // Scale Mode Button
         binding.btnScaleMode.setOnClickListener {
             currentResizeMode = when (currentResizeMode) {
                 AspectRatioFrameLayout.RESIZE_MODE_FIT -> {
@@ -1301,7 +1464,6 @@ class PlayerActivity : AppCompatActivity() {
             binding.playerView.resizeMode = currentResizeMode
         }
 
-        // Orientation Rotate Button
         binding.btnRotate.setOnClickListener {
             requestedOrientation = if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
                 ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -1320,20 +1482,21 @@ class PlayerActivity : AppCompatActivity() {
     }
 
     private fun setupTouchGestures() {
-        val edgeGuardPx = (52 * resources.displayMetrics.density).toInt()
+        // 54dp Top & Bottom Exclusion Zone so status bar swipe never triggers Volume/Brightness
+        val edgeGuardPx = (54 * resources.displayMetrics.density).toInt()
         var ignoreCurrentSwipe = false
 
         val scaleDetector = ScaleGestureDetector(this, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                if (isScreenLocked || !prefs.isPinchZoomEnabled) return false
-                if (detector.scaleFactor > 1.08f) {
+                if (isScreenLocked || !gestureState.pinchZoom) return false
+                if (detector.scaleFactor > 1.07f) {
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                     binding.btnScaleMode.text = "ZOOM"
-                    showCenterIndicator("Zoom: Crop to Fill")
-                } else if (detector.scaleFactor < 0.92f) {
+                    showCenterIndicator("Zoom: Crop")
+                } else if (detector.scaleFactor < 0.93f) {
                     binding.playerView.resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     binding.btnScaleMode.text = "FIT"
-                    showCenterIndicator("Zoom: Fit Screen")
+                    showCenterIndicator("Zoom: Fit")
                 }
                 return true
             }
@@ -1342,8 +1505,6 @@ class PlayerActivity : AppCompatActivity() {
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
 
             override fun onDown(e: MotionEvent): Boolean {
-                // Top and Bottom Status/Nav Bar Exclusion Zone!
-                // Upar se swipe karke time dekhne par Volume/Brightness trigger nahi hoga
                 val screenH = binding.gestureOverlay.height
                 ignoreCurrentSwipe = (e.y < edgeGuardPx) || (e.y > screenH - edgeGuardPx)
                 return true
@@ -1356,13 +1517,21 @@ class PlayerActivity : AppCompatActivity() {
                     return true
                 }
                 isControlsVisible = !isControlsVisible
-                binding.controlsRoot.visibility = if (isControlsVisible) View.VISIBLE else View.GONE
-                if (!isControlsVisible) hideSystemBars()
+                if (isControlsVisible) {
+                    binding.controlsRoot.alpha = 0f
+                    binding.controlsRoot.visibility = View.VISIBLE
+                    binding.controlsRoot.animate().alpha(1f).setDuration(180).start()
+                } else {
+                    binding.controlsRoot.animate().alpha(0f).setDuration(180).withEndAction {
+                        binding.controlsRoot.visibility = View.GONE
+                    }.start()
+                    hideSystemBars()
+                }
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                if (isScreenLocked || !prefs.isDoubleTapSeekEnabled) return false
+                if (isScreenLocked || !gestureState.doubleTap) return false
                 val w = binding.gestureOverlay.width
                 if (e.x < w / 2) {
                     seekBy(-10000)
@@ -1375,12 +1544,12 @@ class PlayerActivity : AppCompatActivity() {
             }
 
             override fun onLongPress(e: MotionEvent) {
-                if (isScreenLocked || !prefs.isLongPress2xEnabled) return
+                if (isScreenLocked || !gestureState.longPress2x) return
                 player?.let {
                     savedSpeed = it.playbackParameters.speed
                     it.setPlaybackSpeed(2.0f)
                     isLongPressSpeedActive = true
-                    binding.tvGestureIndicator.text = "⏩ 2x Speed Active"
+                    binding.tvGestureIndicator.text = "⏩ 2x Speed"
                     binding.tvGestureIndicator.visibility = View.VISIBLE
                 }
             }
@@ -1391,7 +1560,7 @@ class PlayerActivity : AppCompatActivity() {
                 distanceX: Float,
                 distanceY: Float
             ): Boolean {
-                if (isScreenLocked || ignoreCurrentSwipe || !prefs.isSwipeVolumeBrightnessEnabled || e1 == null) {
+                if (isScreenLocked || ignoreCurrentSwipe || !gestureState.volBright || e1 == null) {
                     return false
                 }
                 if (abs(distanceY) > abs(distanceX)) {
@@ -1400,23 +1569,20 @@ class PlayerActivity : AppCompatActivity() {
                     val delta = distanceY / h
 
                     if (e1.x < w / 2) {
-                        // Left Side Swipe -> Brightness
                         val lp = window.attributes
-                        val currentBright = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
-                        val newBright = (currentBright + delta).coerceIn(0.02f, 1.0f)
-                        lp.screenBrightness = newBright
+                        val cur = if (lp.screenBrightness < 0) 0.5f else lp.screenBrightness
+                        val next = (cur + delta).coerceIn(0.02f, 1.0f)
+                        lp.screenBrightness = next
                         window.attributes = lp
-                        showCenterIndicator("☀️ Brightness: ${(newBright * 100).toInt()}%")
+                        showCenterIndicator("☀️ ${(next * 100).toInt()}%")
                     } else {
-                        // Right Side Swipe -> Volume
                         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
                         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
                         val step = if (delta > 0) 1 else -1
                         if (abs(distanceY) > 12) {
-                            val newVol = (curVol + step).coerceIn(0, maxVol)
-                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, newVol, 0)
-                            val pct = (newVol * 100) / maxVol
-                            showCenterIndicator("🔊 Volume: $pct%")
+                            val nextVol = (curVol + step).coerceIn(0, maxVol)
+                            audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, nextVol, 0)
+                            showCenterIndicator("🔊 ${(nextVol * 100) / maxVol}%")
                         }
                     }
                     return true
@@ -1443,25 +1609,27 @@ class PlayerActivity : AppCompatActivity() {
     private fun showGestureSettingsDialog() {
         val items = arrayOf(
             "Swipe Volume & Brightness",
-            "Pinch In/Out to Zoom",
+            "Pinch In/Out Zoom",
             "Double-Tap 10s Seek",
-            "Press & Hold for 2x Speed"
+            "Hold for 2x Speed"
         )
         val checked = booleanArrayOf(
-            prefs.isSwipeVolumeBrightnessEnabled,
-            prefs.isPinchZoomEnabled,
-            prefs.isDoubleTapSeekEnabled,
-            prefs.isLongPress2xEnabled
+            gestureState.volBright,
+            gestureState.pinchZoom,
+            gestureState.doubleTap,
+            gestureState.longPress2x
         )
 
         AlertDialog.Builder(this)
-            .setTitle("Gesture Settings")
+            .setTitle("Gesture Controls")
             .setMultiChoiceItems(items, checked) { _, which, isChecked ->
-                when (which) {
-                    0 -> prefs.isSwipeVolumeBrightnessEnabled = isChecked
-                    1 -> prefs.isPinchZoomEnabled = isChecked
-                    2 -> prefs.isDoubleTapSeekEnabled = isChecked
-                    3 -> prefs.isLongPress2xEnabled = isChecked
+                lifecycleScope.launch {
+                    when (which) {
+                        0 -> dataStore.updateGesture(DataStoreManager.KEY_VOL_BRIGHT, isChecked)
+                        1 -> dataStore.updateGesture(DataStoreManager.KEY_PINCH, isChecked)
+                        2 -> dataStore.updateGesture(DataStoreManager.KEY_DOUBLE_TAP, isChecked)
+                        3 -> dataStore.updateGesture(DataStoreManager.KEY_LONG_PRESS, isChecked)
+                    }
                 }
             }
             .setPositiveButton("Done", null)
@@ -1476,20 +1644,19 @@ class PlayerActivity : AppCompatActivity() {
             if (!isLongPressSpeedActive) {
                 binding.tvGestureIndicator.visibility = View.GONE
             }
-        }, "HIDE_IND", android.os.SystemClock.uptimeMillis() + 900)
+        }, "HIDE_IND", android.os.SystemClock.uptimeMillis() + 800)
     }
 
     private fun seekBy(ms: Long) {
         player?.let {
-            val target = (it.currentPosition + ms).coerceAtLeast(0L)
-            it.seekTo(target)
+            it.seekTo((it.currentPosition + ms).coerceAtLeast(0L))
         }
     }
 
     private fun updatePlayPauseIcon() {
         val playing = player?.isPlaying == true
         binding.btnPlayPause.setImageResource(
-            if (playing) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play
+            if (playing) R.drawable.ic_pause else R.drawable.ic_play_arrow
         )
     }
 
@@ -1535,9 +1702,7 @@ class PlayerActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
-        if (!isInPictureInPictureMode) {
-            player?.pause()
-        }
+        if (!isInPictureInPictureMode) player?.pause()
     }
 
     override fun onDestroy() {
@@ -1555,13 +1720,12 @@ def main():
         os.makedirs(os.path.dirname(path) if os.path.dirname(path) else ".", exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-    print("Project files created successfully!")
+    print("Updated project files generated!")
 
-    # Pack everything into BlueStreamPlayer_Source.zip
     with zipfile.ZipFile("BlueStreamPlayer_Source.zip", "w", zipfile.ZIP_DEFLATED) as zf:
         for path in files.keys():
             zf.write(path)
-    print("ZIP created: BlueStreamPlayer_Source.zip")
+    print("Updated ZIP created: BlueStreamPlayer_Source.zip")
 
 if __name__ == "__main__":
     main()
