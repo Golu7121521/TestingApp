@@ -21,6 +21,10 @@ jobs:
         run: |
           mkdir -p app/src/main/java/com/gitactionbuild app/src/main/res/values app/src/main/res/values-night app/src/main/res/drawable
 
+          cat > gradle.properties <<'EOF'
+          android.useAndroidX=true
+          EOF
+
           cat > settings.gradle.kts <<'EOF'
           pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement { repositories { google(); mavenCentral() } }
