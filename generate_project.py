@@ -206,7 +206,7 @@ dependencies {
     "app/src/main/res/color/input_stroke_selector.xml": """<?xml version="1.0" encoding="utf-8"?>
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
     <item android:color="@color/blue_accent" android:state_focused="true"/>
-    <item android:color="@color/blue_accent" android:state_Activated="true"/>
+    <item android:color="@color/blue_accent" android:state_activated="true"/>
     <item android:color="@color/border_subtle"/>
 </selector>
 """,
