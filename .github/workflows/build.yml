@@ -180,8 +180,9 @@ jobs:
 
           class CodeView(c: Context) : EditText(c) {
               val gp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
-              val lnp = Paint().apply { strokeWidth = 2f }
+              val lnp = Paint().apply { strokeWidth = 2f; style = Paint.Style.STROKE }
               val bgp = Paint().apply { style = Paint.Style.FILL }
+              val gutterPath = Path()
               var gw = 0f; var dg = 0; var gc = 0
               val d = resources.displayMetrics.density
               var acc = 1f; var multi = false
@@ -191,7 +192,6 @@ jobs:
                   setHorizontallyScrolling(true) 
                   setBackgroundColor(Color.TRANSPARENT)
                   setPadding(0, dp(8), dp(8), dp(8))
-                  // Use hardware acceleration for smoother rendering
                   setLayerType(View.LAYER_TYPE_HARDWARE, null)
               }
 
@@ -200,12 +200,14 @@ jobs:
               val sd = ScaleGestureDetector(c, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                   override fun onScale(s: ScaleGestureDetector): Boolean {
                       acc *= s.scaleFactor
-                      // Increased threshold to fix lag on low-end devices like Redmi 9 Prime
-                      if (acc > 1.25f || acc < 0.75f) { 
+                      return true
+                  }
+                  
+                  override fun onScaleEnd(detector: ScaleGestureDetector) {
+                      if (acc > 1.1f || acc < 0.9f) { 
                           setTextSize(TypedValue.COMPLEX_UNIT_PX, (textSize * acc).coerceIn(8 * d, 40 * d))
                           acc = 1f; pad(true)
                       }
-                      return true
                   }
               })
 
@@ -218,7 +220,7 @@ jobs:
               }
 
               override fun onDraw(cv: Canvas) {
-                  bgp.color = gc and 0x11FFFFFF // Gutter Background
+                  bgp.color = gc and 0x11FFFFFF
                   cv.drawRect(scrollX.toFloat(), 0f, scrollX + gw + 4 * d, height.toFloat() + scrollY.toFloat(), bgp)
                   
                   val l = layout
@@ -236,7 +238,18 @@ jobs:
                               cv.drawText(lineNo[i].toString(), scrollX + gw - 6 * d, l.getLineBaseline(i) + pt.toFloat(), gp) 
                           }
                       }
-                      cv.drawLine(scrollX + gw, clip.top.toFloat(), scrollX + gw, clip.bottom.toFloat(), lnp)
+                      
+                      gutterPath.reset()
+                      val xPos = scrollX + gw
+                      gutterPath.moveTo(xPos, clip.top.toFloat())
+                      gutterPath.lineTo(xPos, clip.bottom.toFloat())
+                      
+                      val pi = gutterPath.iterator()
+                      val pts = FloatArray(8)
+                      while (pi.hasNext()) {
+                          pi.next(pts)
+                      }
+                      cv.drawPath(gutterPath, lnp)
                   }
                   super.onDraw(cv)
               }
@@ -279,10 +292,9 @@ jobs:
               val NUM = Regex("\\b\\d+(\\.\\d+)?\\b")
               val STR = Regex("\"[^\"\\n]*\"|'[^'\\n]*'")
               val CMT = Regex("//.*|/\\*[\\s\\S]*?\\*/|#.*")
-              val TY = Regex("\\b[A-Z][a-zA-Z0-9_]*\\b") // Types / Classes
-              val FN = Regex("\\b[a-z_][a-zA-Z0-9_]*(?=\\s*\\()") // Functions
+              val TY = Regex("\\b[A-Z][a-zA-Z0-9_]*\\b")
+              val FN = Regex("\\b[a-z_][a-zA-Z0-9_]*(?=\\s*\\()")
 
-              // ---------- helpers ----------
               fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
               fun col(i: Int) = getColor(i)
               fun ui(f: () -> Unit) = runOnUiThread(f)
@@ -310,7 +322,6 @@ jobs:
                   setOnClickListener { f() }
               }
 
-              // Editor Compact Button
               fun smallBtn(t: String, f: () -> Unit) = Button(this).apply {
                   text = t; isAllCaps = false; textSize = 11f; setTextColor(-1)
                   minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0; stateListAnimator = null
@@ -406,7 +417,6 @@ jobs:
                   root.addView(b, lp(-1, -2, 0f, 12)); return b
               }
 
-              // ---------- lifecycle ----------
               override fun onCreate(b: Bundle?) {
                   super.onCreate(b)
                   val night = (resources.configuration.uiMode and 0x30) == 0x20
@@ -450,7 +460,6 @@ jobs:
                   b.addView(btn("Continue") { sp.edit().putString("t", e.text.toString().trim()).apply(); repos() })
               }
 
-              // ---------- repositories ----------
               fun repos() {
                   val l = page("Repositories", btn("Token") { tokenScreen() })
                   val wait = tv("Loading repositories...", 14, false, R.color.muted); l.addView(wait)
@@ -481,7 +490,6 @@ jobs:
                   }
               }
 
-              // ---------- file manager ----------
               fun sz(f: File) = if (f.isDirectory) (f.listFiles()?.size ?: 0).toString() + " items" else if (f.length() < 1024) f.length().toString() + " B" else (f.length() / 1024).toString() + " KB"
 
               fun browse(repo: File, dir: File) {
@@ -593,19 +601,28 @@ jobs:
                   }
               }
 
-              // ---------- code editor ----------
               fun hl(e: Editable) {
-                  for (s in e.getSpans(0, e.length, Hl::class.java)) e.removeSpan(s)
-                  if (e.length > 200000) return
                   val t = e.toString()
-                  fun mark(r: Regex, c: Int) { for (m in r.findAll(t)) e.setSpan(Hl(c), m.range.first, m.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+                  if (t.length > 200000) return
                   
-                  mark(FN, col(R.color.fn))
-                  mark(TY, col(R.color.ty))
-                  mark(KW, col(R.color.kw))
-                  mark(NUM, col(R.color.nu))
-                  mark(STR, col(R.color.st))
-                  mark(CMT, col(R.color.cm))
+                  bg {
+                      val spans = ArrayList<Pair<IntRange, Int>>()
+                      fun mark(r: Regex, c: Int) { for (m in r.findAll(t)) spans.add(m.range to c) }
+                      
+                      mark(FN, col(R.color.fn))
+                      mark(TY, col(R.color.ty))
+                      mark(KW, col(R.color.kw))
+                      mark(NUM, col(R.color.nu))
+                      mark(STR, col(R.color.st))
+                      mark(CMT, col(R.color.cm))
+                      
+                      ui {
+                          for (s in e.getSpans(0, e.length, Hl::class.java)) e.removeSpan(s)
+                          for ((range, c) in spans) {
+                              if (range.last < e.length) e.setSpan(Hl(c), range.first, range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                          }
+                      }
+                  }
               }
 
               fun edit(repo: File, dir: File, f: File) {
@@ -644,7 +661,6 @@ jobs:
                   
                   val frame = FrameLayout(this).apply { layoutParams = lp(-1, 0, 1f) }
                   
-                  // Floating Search Box (70% Transparent)
                   val searchBox = LinearLayout(this).apply {
                       orientation = LinearLayout.VERTICAL
                       background = box(col(R.color.card), col(R.color.stroke), 12).apply { alpha = 180 }
@@ -728,7 +744,6 @@ jobs:
                   root.addView(frame)
               }
 
-              // ---------- GitHub API ----------
               fun http(m: String, u: String, body: String? = null): HttpURLConnection {
                   val c = URL(if (u.startsWith("http")) u else "https://api.github.com$u").openConnection() as HttpURLConnection
                   c.requestMethod = m
@@ -819,7 +834,6 @@ jobs:
                   }
               }
 
-              // ---------- GitHub Web Actions Monitor UI ----------
               fun tail(t: String): String {
                   val ansi = Regex("\u001B\\[[0-9;]*m"); val ts = Regex("^\\uFEFF?\\d{4}-\\d\\d-\\d\\dT[\\d:.]+Z ")
                   return t.lines().map { ts.replace(ansi.replace(it, ""), "") }.takeLast(80).joinToString("\n")
