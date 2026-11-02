@@ -71,8 +71,8 @@ class _HomeScreenState extends State<HomeScreen>
     setState(() => isLoading = true);
 
     try {
-      // Explicit generic type <List<Movie>> compilation crash ko rokta hai
-      final results = await Future.wait<List<Movie>>([
+      // Independent safe execution - ek call fail hone se poora app block nahi hoga
+      final results = await Future.wait([
         TmdbService.getTrendingIndia().catchError((_) => <Movie>[]),
         TmdbService.getHindiWebSeries().catchError((_) => <Movie>[]),
         TmdbService.getSouthHindiDubbed().catchError((_) => <Movie>[]),
@@ -260,15 +260,13 @@ class _HomeScreenState extends State<HomeScreen>
             onPageChanged: (i) => setState(() => _currentBannerPage = i),
             itemBuilder: (context, index) {
               final item = bannerMovies[index];
-              final imgUrl = item.backdropPath != null && item.backdropPath!.isNotEmpty
-                  ? 'https://image.tmdb.org/t/p/w780${item.backdropPath}'
-                  : 'https://image.tmdb.org/t/p/w500${item.posterPath}';
-
               return Stack(
                 fit: StackFit.expand,
                 children: [
                   CachedNetworkImage(
-                    imageUrl: imgUrl,
+                    imageUrl: item.realBackdropUrl.isNotEmpty
+                        ? item.realBackdropUrl
+                        : item.realPosterUrl,
                     fit: BoxFit.cover,
                     alignment: Alignment.topCenter,
                     placeholder: (_, __) =>
@@ -452,10 +450,6 @@ class _HomeScreenState extends State<HomeScreen>
               separatorBuilder: (_, __) => const SizedBox(width: 10),
               itemBuilder: (context, i) {
                 final item = list[i];
-                final posterUrl = item.posterPath != null && item.posterPath!.isNotEmpty
-                    ? 'https://image.tmdb.org/t/p/w342${item.posterPath}'
-                    : '';
-
                 return InkWell(
                   onTap: () => openDetail(item),
                   child: Column(
@@ -464,7 +458,7 @@ class _HomeScreenState extends State<HomeScreen>
                       ClipRRect(
                         borderRadius: BorderRadius.circular(6),
                         child: CachedNetworkImage(
-                          imageUrl: posterUrl,
+                          imageUrl: item.realPosterUrl,
                           width: 105,
                           height: 145,
                           fit: BoxFit.cover,

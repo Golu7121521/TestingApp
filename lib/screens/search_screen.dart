@@ -276,9 +276,6 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
                           itemBuilder: (context, i) {
                             final item = displayList[i];
                             final isTV = item.mediaType == 'tv';
-                            final posterUrl = item.posterPath != null && item.posterPath!.isNotEmpty
-                                ? 'https://image.tmdb.org/t/p/w185${item.posterPath}'
-                                : '';
 
                             return InkWell(
                               onTap: () => openDetail(item),
@@ -288,7 +285,7 @@ class _SearchScreenState extends State<SearchScreen> with AutomaticKeepAliveClie
                                   ClipRRect(
                                     borderRadius: BorderRadius.circular(6),
                                     child: CachedNetworkImage(
-                                      imageUrl: posterUrl,
+                                      imageUrl: item.realPosterUrl,
                                       width: 58,
                                       height: 82,
                                       fit: BoxFit.cover,

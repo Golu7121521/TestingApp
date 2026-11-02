@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
+    <!-- Base configuration allowing cleartext (HTTP) and trusting both system and user CAs -->
     <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
             <certificates src="system" />
@@ -7,14 +8,14 @@
         </trust-anchors>
     </base-config>
 
+    <!-- Explicit sub-domain permissions for media streaming CDNs -->
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">themoviedb.org</domain>
         <domain includeSubdomains="true">tmdb.org</domain>
-        <domain includeSubdomains="true">strem.fun</domain>
-        <domain includeSubdomains="true">strem.io</domain>
-        <domain includeSubdomains="true">cinemeta.strem.io</domain>
-        <domain includeSubdomains="true">images.metahub.space</domain>
         <domain includeSubdomains="true">weserv.nl</domain>
+        <domain includeSubdomains="true">vidsrc.me</domain>
+        <domain includeSubdomains="true">webtor.io</domain>
+        <domain includeSubdomains="true">strem.fun</domain>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />

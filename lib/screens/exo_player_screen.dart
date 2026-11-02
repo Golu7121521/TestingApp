@@ -1,263 +1,286 @@
-import 'dart:async';
-import 'package:better_player_plus/better_player_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:better_player_plus/better_player_plus.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
 class ExoPlayerScreen extends StatefulWidget {
-  const ExoPlayerScreen({super.key, required this.filePath, required this.title});
-
-  final String filePath;
+  final String videoUrl;
   final String title;
+  final Map<String, String>? headers;
+
+  const ExoPlayerScreen({
+    super.key,
+    required this.videoUrl,
+    required this.title,
+    this.headers,
+  });
 
   @override
   State<ExoPlayerScreen> createState() => _ExoPlayerScreenState();
 }
 
 class _ExoPlayerScreenState extends State<ExoPlayerScreen> {
-  static const _channel = MethodChannel('com.cineflix.app/torrent');
-  static const _speeds = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0];
-
-  late final BetterPlayerController _controller;
-
-  bool _locked = false;
-  double _volume = 0.5;
-  double _speed = 1.0;
-  String? _hud;
-  Timer? _hudTimer;
+  BetterPlayerController? _controller;
+  WebViewController? _webViewController;
+  bool _isLoading = true;
+  String? _errorMessage;
+  bool _isEmbedStream = false;
 
   @override
   void initState() {
     super.initState();
+
+    // 1. Force landscape orientation and keep screen on
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    WakelockPlus.enable();
 
-    _controller = BetterPlayerController(
-      const BetterPlayerConfiguration(
-        autoPlay: true,
+    // 2. Check if the URL is an embed/web iframe or a direct stream
+    final url = widget.videoUrl.toLowerCase();
+    if (url.contains('vidsrc') || url.contains('/embed') || url.contains('.html')) {
+      _isEmbedStream = true;
+      _initWebviewPlayer();
+    } else {
+      _initializeExoPlayer();
+    }
+  }
+
+  void _initWebviewPlayer() {
+    try {
+      _webViewController = WebViewController()
+        ..setJavaScriptMode(JavaScriptMode.unrestricted)
+        ..setBackgroundColor(Colors.black)
+        ..setNavigationDelegate(
+          NavigationDelegate(
+            onPageFinished: (_) {
+              if (mounted) setState(() => _isLoading = false);
+            },
+            onWebResourceError: (error) {
+              if (mounted) {
+                setState(() {
+                  _isLoading = false;
+                  _errorMessage = "Embed Player Error: ${error.description}";
+                });
+              }
+            },
+          ),
+        )
+        ..loadRequest(
+          Uri.parse(widget.videoUrl),
+          headers: widget.headers ?? {
+            'User-Agent':
+                'Mozilla/5.0 (Linux; Android 10) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36',
+          },
+        );
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+    }
+  }
+
+  void _initializeExoPlayer() {
+    try {
+      final isHls = widget.videoUrl.contains('.m3u8');
+
+      final BetterPlayerConfiguration playerConfig = BetterPlayerConfiguration(
         aspectRatio: 16 / 9,
         fit: BoxFit.contain,
-        handleLifecycle: true,
-        controlsConfiguration: BetterPlayerControlsConfiguration(
-          enableFullscreen: false,
-          enableOverflowMenu: false,
-          enableSkips: true,
+        autoPlay: true,
+        looping: false,
+        fullScreenByDefault: false,
+        allowedScreenSleep: false,
+        autoDispose: true,
+        controlsConfiguration: const BetterPlayerControlsConfiguration(
+          enableAudioTracks: true,
+          enableSubtitles: true,
+          enableQualities: true,
+          enablePlaybackSpeed: true,
+          enablePip: true,
+          backgroundColor: Colors.black54,
+          controlBarColor: Colors.black87,
+          iconsColor: Colors.white,
+          progressBarPlayedColor: Color(0xFFE50914),
+          progressBarHandleColor: Color(0xFFE50914),
+          progressBarBufferedColor: Colors.white24,
+          progressBarBackgroundColor: Colors.white10,
+          loadingColor: Color(0xFFE50914),
+          overflowModalColor: Color(0xFF1E1E1E),
+          overflowModalTextColor: Colors.white,
+          overflowMenuIconsColor: Colors.white70,
         ),
-      ),
-      betterPlayerDataSource: BetterPlayerDataSource(
-        BetterPlayerDataSourceType.file,
-        widget.filePath,
-      ),
-    );
+      );
+
+      final BetterPlayerDataSource dataSource = BetterPlayerDataSource(
+        BetterPlayerDataSourceType.network,
+        widget.videoUrl,
+        videoFormat: isHls ? BetterPlayerVideoFormat.hls : BetterPlayerVideoFormat.other,
+        useAsmsSubtitles: true,
+        useAsmsTracks: true,
+        headers: widget.headers ?? {
+          'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        },
+        notificationConfiguration: BetterPlayerNotificationConfiguration(
+          showNotification: true,
+          title: widget.title,
+          author: "CineFlix",
+        ),
+      );
+
+      _controller = BetterPlayerController(playerConfig);
+      _controller!.setupDataSource(dataSource).then((_) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      }).catchError((err) {
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = "Playback Error: Stream format unsupported or link offline.";
+          });
+        }
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = e.toString();
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
-    _hudTimer?.cancel();
-    _controller.dispose();
-    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    WakelockPlus.disable();
+    _controller?.clearCache();
+    _controller?.dispose();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 
-  void _showHud(String text) {
-    setState(() => _hud = text);
-    _hudTimer?.cancel();
-    _hudTimer = Timer(const Duration(milliseconds: 800), () {
-      if (mounted) setState(() => _hud = null);
-    });
-  }
-
-  void _onDragUpdate(DragUpdateDetails d, double height) {
-    final delta = -d.delta.dy / (height * 0.7);
-    _volume = (_volume + delta).clamp(0.0, 1.0);
-    _controller.setVolume(_volume);
-    _showHud('Volume ${(_volume * 100).round()}%');
-  }
-
-  Future<void> _pickSpeed() async {
-    final picked = await showDialog<double>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Playback speed'),
-        children: [
-          for (final s in _speeds)
-            RadioListTile<double>(
-              value: s,
-              groupValue: _speed,
-              title: Text(s == 1.0 ? 'Normal (1.0x)' : '${s}x'),
-              onChanged: (v) => Navigator.pop(ctx, v),
-            ),
-        ],
-      ),
-    );
-    if (picked != null) {
-      await _controller.setSpeed(picked);
-      setState(() => _speed = picked);
-    }
-  }
-
-  Future<void> _pickAudioTrack() async {
-    List<Map<String, dynamic>> tracks = [];
-    try {
-      final raw = await _channel.invokeListMethod<Map>(
-        'listAudioTracks',
-        {'path': widget.filePath},
-      );
-      tracks = (raw ?? []).map((m) => Map<String, dynamic>.from(m)).toList();
-    } on PlatformException catch (_) {}
-
-    if (!mounted) return;
-    if (tracks.length < 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('This file has a single audio track.')),
-      );
-      return;
-    }
-
-    final picked = await showDialog<Map<String, dynamic>>(
-      context: context,
-      builder: (ctx) => SimpleDialog(
-        title: const Text('Audio track'),
-        children: [
-          for (final t in tracks)
-            ListTile(
-              leading: const Icon(Icons.audiotrack),
-              title: Text(_languageName(t['language'] as String)),
-              subtitle: Text('Track ${(t['index'] as int) + 1} · ${t['mime']}'
-                  '${t['channels'] != null ? ' · ${t['channels']}ch' : ''}'),
-              onTap: () => Navigator.pop(ctx, t),
-            ),
-        ],
-      ),
-    );
-    if (picked == null) return;
-
-    _controller.setAudioTrack(BetterPlayerAsmsAudioTrack(
-      id: picked['index'] as int,
-      label: picked['language'] as String,
-      language: picked['language'] as String,
-    ));
-    _showHud('Audio: ${_languageName(picked['language'] as String)}');
-  }
-
-  String _languageName(String code) {
-    const names = {
-      'eng': 'English', 'en': 'English', 'hin': 'Hindi', 'hi': 'Hindi',
-      'spa': 'Spanish', 'es': 'Spanish', 'fra': 'French', 'fre': 'French',
-      'fr': 'French', 'deu': 'German', 'ger': 'German', 'de': 'German',
-      'jpn': 'Japanese', 'ja': 'Japanese', 'kor': 'Korean', 'ko': 'Korean',
-      'tam': 'Tamil', 'tel': 'Telugu', 'por': 'Portuguese', 'rus': 'Russian',
-      'ita': 'Italian', 'zho': 'Chinese', 'chi': 'Chinese', 'und': 'Unknown',
-    };
-    return names[code.toLowerCase()] ?? code.toUpperCase();
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: LayoutBuilder(builder: (context, c) {
-        return Stack(
-          fit: StackFit.expand,
+    return PopScope(
+      canPop: true,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) {
+          WakelockPlus.disable();
+          SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: Stack(
           children: [
-            IgnorePointer(
-              ignoring: _locked,
-              child: Center(child: BetterPlayer(controller: _controller)),
-            ),
-
-            if (!_locked)
-              Positioned(
-                left: 0,
-                right: 0,
-                top: c.maxHeight * 0.15,
-                bottom: c.maxHeight * 0.15,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.translucent,
-                  onVerticalDragUpdate: (d) => _onDragUpdate(d, c.maxHeight),
-                ),
+            // Native Player
+            if (!_isEmbedStream && _controller != null && _errorMessage == null)
+              Center(
+                child: BetterPlayer(controller: _controller!),
               ),
 
-            if (!_locked)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black54, Colors.transparent],
+            // Embed Webview Player Fallback
+            if (_isEmbedStream && _webViewController != null && _errorMessage == null)
+              WebViewWidget(controller: _webViewController!),
+
+            // Loading Indicator
+            if (_isLoading)
+              Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const CircularProgressIndicator(color: Color(0xFFE50914)),
+                    const SizedBox(height: 14),
+                    Text(
+                      _isEmbedStream
+                          ? "Connecting to Cloud Stream..."
+                          : "Connecting to ExoPlayer Stream...",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.8),
+                        fontSize: 13,
+                        letterSpacing: 0.5,
+                      ),
                     ),
-                  ),
-                  child: SafeArea(
-                    bottom: false,
-                    child: Row(children: [
-                      IconButton(
-                        color: Colors.white,
-                        icon: const Icon(Icons.arrow_back),
-                        onPressed: () => Navigator.of(context).maybePop(),
-                      ),
-                      Expanded(
-                        child: Text(widget.title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.white, fontSize: 16)),
-                      ),
-                      IconButton(
-                        tooltip: 'Audio track',
-                        color: Colors.white,
-                        icon: const Icon(Icons.audiotrack),
-                        onPressed: _pickAudioTrack,
-                      ),
-                      TextButton(
-                        onPressed: _pickSpeed,
-                        child: Text('${_speed}x',
-                            style: const TextStyle(color: Colors.white)),
-                      ),
-                    ]),
-                  ),
+                  ],
                 ),
               ),
 
-            Positioned(
-              left: 12,
-              top: 0,
-              bottom: 0,
-              child: Center(
-                child: Material(
-                  color: Colors.black45,
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    color: Colors.white,
-                    tooltip: _locked ? 'Unlock' : 'Lock controls',
-                    icon: Icon(_locked ? Icons.lock : Icons.lock_open),
-                    onPressed: () {
-                      setState(() => _locked = !_locked);
-                      _showHud(_locked ? 'Locked' : 'Unlocked');
-                    },
-                  ),
-                ),
-              ),
-            ),
-
-            if (_hud != null)
+            // Error Fallback View
+            if (_errorMessage != null)
               Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding: const EdgeInsets.all(24),
+                  margin: const EdgeInsets.symmetric(horizontal: 24),
                   decoration: BoxDecoration(
-                    color: Colors.black54,
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFF161616),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white12),
                   ),
-                  child: Text(_hud!, style: const TextStyle(color: Colors.white)),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.error_outline_rounded,
+                        color: Color(0xFFE50914),
+                        size: 46,
+                      ),
+                      const SizedBox(height: 12),
+                      Text(
+                        _errorMessage!,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white70, fontSize: 13),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFE50914),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                        onPressed: () {
+                          setState(() {
+                            _isLoading = true;
+                            _errorMessage = null;
+                          });
+                          if (_isEmbedStream) {
+                            _initWebviewPlayer();
+                          } else {
+                            _initializeExoPlayer();
+                          }
+                        },
+                        child: const Text("Retry", style: TextStyle(color: Colors.white)),
+                      ),
+                    ],
+                  ),
                 ),
               ),
+
+            // Floating Back Button
+            Positioned(
+              top: 20,
+              left: 20,
+              child: CircleAvatar(
+                backgroundColor: Colors.black54,
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ),
+            ),
           ],
-        );
-      }),
+        ),
+      ),
     );
   }
 }

@@ -5,9 +5,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     name: Build Android APK
@@ -30,567 +27,47 @@ jobs:
           channel: 'stable'
           cache: false
 
-      - name: Download & Extract jlibtorrent JAR and Native SO Files
-        run: |
-          mkdir -p android/app/libs
-          mkdir -p android/app/src/main/jniLibs/armeabi-v7a
-          mkdir -p android/app/src/main/jniLibs/arm64-v8a
-
-          python3 - << 'EOF'
-          import urllib.request
-          import json
-          import zipfile
-          import os
-          import sys
-
-          print("Fetching release URLs from GitHub API...")
-          req = urllib.request.Request(
-              "https://api.github.com/repos/frostwire/frostwire-jlibtorrent/releases",
-              headers={'User-Agent': 'Mozilla/5.0'}
-          )
-          
-          jar_url = arm_url = arm64_url = None
-          try:
-              with urllib.request.urlopen(req) as resp:
-                  releases = json.loads(resp.read().decode())
-                  for release in releases:
-                      for asset in release.get('assets', []):
-                          name = asset.get('name', '')
-                          url = asset.get('browser_download_url', '')
-                          if name == 'jlibtorrent-1.2.19.0.jar':
-                              jar_url = url
-                          elif name == 'jlibtorrent-android-arm-1.2.19.0.jar':
-                              arm_url = url
-                          elif name == 'jlibtorrent-android-arm64-1.2.19.0.jar':
-                              arm64_url = url
-                      if jar_url and arm_url and arm64_url:
-                          break
-          except Exception as e:
-              print("API Fetch Error:", e)
-              sys.exit(1)
-
-          def download(url, dest):
-              print("Downloading:", url)
-              r = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-              with urllib.request.urlopen(r) as resp, open(dest, 'wb') as f:
-                  f.write(resp.read())
-
-          def extract_so(zip_path, target_path):
-              with zipfile.ZipFile(zip_path) as z:
-                  extracted = False
-                  for name in z.namelist():
-                      if name.endswith(".so"):
-                          with open(target_path, "wb") as f:
-                              f.write(z.read(name))
-                          extracted = True
-                          break
-                  if not extracted:
-                      print(f"Error: No .so file found in {zip_path}")
-                      sys.exit(1)
-
-          if jar_url:
-              download(jar_url, "android/app/libs/jlibtorrent-1.2.19.0.jar")
-
-          if arm_url:
-              download(arm_url, "arm.zip")
-              extract_so("arm.zip", "android/app/src/main/jniLibs/armeabi-v7a/libjlibtorrent.so")
-
-          if arm64_url:
-              download(arm64_url, "arm64.zip")
-              extract_so("arm64.zip", "android/app/src/main/jniLibs/arm64-v8a/libjlibtorrent.so")
-          EOF
-
-      - name: Clean Duplicate Files & Generate Native Download Engine (MainActivity.kt)
-        run: |
-          find android/app/src/main/kotlin -name "MainActivity.kt" -delete
-
-          TARGET_DIR="android/app/src/main/kotlin/com/desiflix/hindi_movie_stream"
-          mkdir -p "$TARGET_DIR"
-
-          cat << 'EOF' > "$TARGET_DIR/MainActivity.kt"
-          package com.desiflix.hindi_movie_stream
-
-          import android.content.Context
-          import android.media.MediaExtractor
-          import android.media.MediaFormat
-          import android.os.Environment
-          import android.os.Handler
-          import android.os.Looper
-          import android.os.StatFs
-          import android.util.Log
-          import com.frostwire.jlibtorrent.AlertListener
-          import com.frostwire.jlibtorrent.AnnounceEntry
-          import com.frostwire.jlibtorrent.Priority
-          import com.frostwire.jlibtorrent.SessionHandle
-          import com.frostwire.jlibtorrent.SessionManager
-          import com.frostwire.jlibtorrent.SessionParams
-          import com.frostwire.jlibtorrent.SettingsPack
-          import com.frostwire.jlibtorrent.Sha1Hash
-          import com.frostwire.jlibtorrent.TorrentFlags
-          import com.frostwire.jlibtorrent.TorrentHandle
-          import com.frostwire.jlibtorrent.alerts.AddTorrentAlert
-          import com.frostwire.jlibtorrent.alerts.Alert
-          import com.frostwire.jlibtorrent.alerts.AlertType
-          import com.frostwire.jlibtorrent.alerts.MetadataReceivedAlert
-          import com.frostwire.jlibtorrent.swig.settings_pack
-          import io.flutter.embedding.android.FlutterActivity
-          import io.flutter.embedding.engine.FlutterEngine
-          import io.flutter.plugin.common.MethodChannel
-          import java.io.File
-          import java.util.Locale
-          import java.util.concurrent.ConcurrentHashMap
-          import java.util.concurrent.Executors
-
-          object TorrentEngine {
-              private const val TAG = "TorrentEngine"
-
-              private const val BOOTSTRAP =
-                  "router.bittorrent.com:6881,dht.transmissionbt.com:6881," +
-                      "router.utorrent.com:6881,dht.libtorrent.org:25401"
-
-              private val EXTRA_TRACKERS = listOf(
-                  "udp://tracker.opentrackr.org:1337/announce",
-                  "udp://open.tracker.cl:1337/announce",
-                  "udp://tracker.openbittorrent.com:6969/announce",
-                  "udp://exodus.desync.com:6969/announce",
-                  "udp://tracker.torrent.eu.org:451/announce",
-                  "udp://open.stealth.si:80/announce",
-                  "https://tracker.tamersunion.org:443/announce"
-              )
-
-              private val VIDEO_EXT = setOf("mkv", "mp4", "m4v", "webm", "avi", "mov", "ts")
-
-              private val lock = Any()
-              private var session: SessionManager? = null
-              private var appContext: Context? = null
-
-              private val idToHash = ConcurrentHashMap<String, String>()
-              private val pausedHashes: MutableSet<String> = ConcurrentHashMap.newKeySet()
-
-              fun init(context: Context) {
-                  appContext = context.applicationContext
-              }
-
-              private val listener = object : AlertListener {
-                  override fun types(): IntArray = intArrayOf(
-                      AlertType.ADD_TORRENT.swig(),
-                      AlertType.METADATA_RECEIVED.swig()
-                  )
-
-                  override fun alert(alert: Alert<*>) {
-                      try {
-                          when (alert.type()) {
-                              AlertType.ADD_TORRENT -> {
-                                  val a = alert as AddTorrentAlert
-                                  if (a.error().value() != 0) {
-                                      Log.e(TAG, "add_torrent failed: ${a.error().message()}")
-                                  } else {
-                                      prepare(a.handle())
-                                  }
-                              }
-                              AlertType.METADATA_RECEIVED ->
-                                  prepare((alert as MetadataReceivedAlert).handle())
-                              else -> Unit
-                          }
-                      } catch (t: Throwable) {
-                          Log.e(TAG, "alert handling failed", t)
-                      }
-                  }
-              }
-
-              private fun buildSettings(): SettingsPack {
-                  val sp = SettingsPack()
-                  sp.listenInterfaces("0.0.0.0:6881,[::]:6881")
-                  sp.setString(settings_pack.string_types.dht_bootstrap_nodes.swigValue(), BOOTSTRAP)
-                  sp.setBoolean(settings_pack.bool_types.enable_dht.swigValue(), true)
-                  sp.setBoolean(settings_pack.bool_types.enable_lsd.swigValue(), true)
-                  sp.setBoolean(settings_pack.bool_types.enable_upnp.swigValue(), true)
-                  sp.setBoolean(settings_pack.bool_types.enable_natpmp.swigValue(), true)
-                  sp.setInteger(settings_pack.int_types.alert_mask.swigValue(), 0x7fffffff)
-                  sp.setInteger(settings_pack.int_types.connections_limit.swigValue(), 200)
-                  sp.setInteger(settings_pack.int_types.active_downloads.swigValue(), 4)
-                  return sp
-              }
-
-              private fun ensureSession(): SessionManager = synchronized(lock) {
-                  val existing = session
-                  if (existing != null && existing.isRunning) return existing
-                  val sm = SessionManager(false)
-                  sm.addListener(listener)
-                  sm.start(SessionParams(buildSettings()))
-                  session = sm
-                  sm
-              }
-
-              private fun stopIfIdle() = synchronized(lock) {
-                  if (idToHash.isEmpty()) {
-                      session?.let {
-                          it.removeListener(listener)
-                          it.stop()
-                      }
-                      session = null
-                  }
-              }
-
-              private fun prepare(h: TorrentHandle) {
-                  if (!h.isValid) return
-                  val hash = h.infoHash().toHex().lowercase(Locale.US)
-
-                  h.setFlags(TorrentFlags.SEQUENTIAL_DOWNLOAD)
-                  EXTRA_TRACKERS.forEach { runCatching { h.addTracker(AnnounceEntry(it)) } }
-                  runCatching { h.forceDHTAnnounce() }
-                  runCatching { h.forceReannounce() }
-
-                  if (h.status().hasMetadata()) selectVideoFile(h)
-
-                  if (!pausedHashes.contains(hash)) h.resume()
-              }
-
-              private fun isVideo(path: String) =
-                  VIDEO_EXT.contains(path.substringAfterLast('.', "").lowercase(Locale.US))
-
-              private fun largestVideoIndex(h: TorrentHandle): Int {
-                  val ti = h.torrentFile() ?: return -1
-                  val fs = ti.files()
-                  var best = -1
-                  var bestSize = -1L
-                  for (i in 0 until fs.numFiles()) {
-                      if (isVideo(fs.filePath(i)) && fs.fileSize(i) > bestSize) {
-                          best = i
-                          bestSize = fs.fileSize(i)
-                      }
-                  }
-                  return best
-              }
-
-              private fun selectVideoFile(h: TorrentHandle) {
-                  val ti = h.torrentFile() ?: return
-                  val best = largestVideoIndex(h)
-                  if (best < 0) return
-                  val n = ti.files().numFiles()
-                  h.prioritizeFiles(Array(n) { if (it == best) Priority.SEVEN else Priority.IGNORE })
-              }
-
-              private fun parseHash(magnet: String): String? {
-                  val m = Regex("xt=urn:btih:([^&]+)", RegexOption.IGNORE_CASE).find(magnet) ?: return null
-                  val raw = m.groupValues[1]
-                  return when (raw.length) {
-                      40 -> raw.lowercase(Locale.US)
-                      32 -> base32ToHex(raw)
-                      else -> null
-                  }
-              }
-
-              private fun base32ToHex(s: String): String? {
-                  val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-                  var bits = 0
-                  var value = 0
-                  val sb = StringBuilder()
-                  for (c in s.uppercase(Locale.US)) {
-                      val idx = alphabet.indexOf(c)
-                      if (idx < 0) return null
-                      value = (value shl 5) or idx
-                      bits += 5
-                      if (bits >= 8) {
-                          bits -= 8
-                          sb.append(String.format("%02x", (value shr bits) and 0xFF))
-                      }
-                  }
-                  return sb.toString().takeIf { it.length == 40 }
-              }
-
-              private fun canWrite(dir: File): Boolean = try {
-                  dir.mkdirs()
-                  val probe = File.createTempFile(".probe", null, dir)
-                  probe.delete()
-                  true
-              } catch (_: Exception) {
-                  false
-              }
-
-              private fun resolveSaveDir(requested: String?): File {
-                  val candidates = mutableListOf<File>()
-                  if (!requested.isNullOrBlank()) candidates += File(requested)
-                  candidates += File(
-                      Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-                      "CineFlix"
-                  )
-                  appContext?.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS)
-                      ?.let { candidates += File(it, "CineFlix") }
-                  appContext?.filesDir?.let { candidates += File(it, "CineFlix") }
-
-                  for (c in candidates) if (canWrite(c)) return c
-                  throw IllegalStateException("No writable download directory available")
-              }
-
-              private fun handleFor(id: String): TorrentHandle? {
-                  val hash = idToHash[id] ?: return null
-                  val h = session?.find(Sha1Hash(hash)) ?: return null
-                  return if (h.isValid) h else null
-              }
-
-              private fun formatSpeed(bytesPerSec: Int): String =
-                  if (bytesPerSec >= 1_048_576)
-                      String.format(Locale.US, "%.1f MB/s", bytesPerSec / 1_048_576.0)
-                  else
-                      String.format(Locale.US, "%d KB/s", bytesPerSec / 1024)
-
-              fun start(id: String, magnetUri: String, savePath: String?) {
-                  val hash = parseHash(magnetUri)
-                      ?: throw IllegalArgumentException("Invalid magnet URI (no btih)")
-                  val sm = ensureSession()
-                  idToHash[id] = hash
-                  pausedHashes.remove(hash)
-
-                  val existing = sm.find(Sha1Hash(hash))
-                  if (existing != null && existing.isValid) {
-                      prepare(existing)
-                      return
-                  }
-                  val dir = resolveSaveDir(savePath)
-                  // jlibtorrent 1.2.19 download takes only (String, File)
-                  sm.download(magnetUri, dir)
-              }
-
-              fun status(id: String): Map<String, Any?> {
-                  val h = handleFor(id) ?: return mapOf("exists" to false)
-                  val st = h.status()
-                  val hasMeta = st.hasMetadata()
-                  val progress = st.progress().toDouble().coerceIn(0.0, 1.0)
-                  val finished = hasMeta && (st.isFinished || st.isSeeding || progress >= 0.9999)
-                  val hash = idToHash[id]
-                  val paused = hash != null && pausedHashes.contains(hash)
-
-                  var filePath: String? = null
-                  if (finished) {
-                      val idx = largestVideoIndex(h)
-                      if (idx >= 0) {
-                          filePath = File(h.savePath(), h.torrentFile()!!.files().filePath(idx)).absolutePath
-                      }
-                  }
-                  val rate = st.downloadPayloadRate()
-                  val stateLabel = when {
-                      paused -> "Paused"
-                      !hasMeta -> "Fetching metadata…"
-                      finished -> "Finished"
-                      else -> st.state().name.lowercase(Locale.US).replace('_', ' ')
-                  }
-                  return mapOf(
-                      "exists" to true,
-                      "progress" to if (finished) 1.0 else progress,
-                      "speed" to formatSpeed(rate),
-                      "speedBytes" to rate,
-                      "filePath" to filePath,
-                      "isFinished" to finished,
-                      "isPaused" to paused,
-                      "hasMetadata" to hasMeta,
-                      "seeds" to st.numSeeds(),
-                      "peers" to st.numPeers(),
-                      "state" to stateLabel
-                  )
-              }
-
-              fun pause(id: String): Boolean {
-                  val h = handleFor(id) ?: return false
-                  idToHash[id]?.let { pausedHashes.add(it) }
-                  h.unsetFlags(TorrentFlags.AUTO_MANAGED)
-                  h.pause()
-                  return true
-              }
-
-              fun resume(id: String): Boolean {
-                  val h = handleFor(id) ?: return false
-                  idToHash[id]?.let { pausedHashes.remove(it) }
-                  h.setFlags(TorrentFlags.AUTO_MANAGED)
-                  h.resume()
-                  return true
-              }
-
-              fun delete(id: String, deleteFiles: Boolean) {
-                  val hash = idToHash.remove(id)
-                  val h = if (hash != null) session?.find(Sha1Hash(hash)) else null
-                  if (h != null && h.isValid) {
-                      val path = runCatching {
-                          val idx = largestVideoIndex(h)
-                          if (idx >= 0) File(h.savePath(), h.torrentFile()!!.files().filePath(idx)) else null
-                      }.getOrNull()
-                      if (deleteFiles) {
-                          session?.remove(h, SessionHandle.DELETE_FILES)
-                          path?.let { runCatching { it.delete() } }
-                      } else {
-                          session?.remove(h)
-                      }
-                  }
-                  hash?.let { pausedHashes.remove(it) }
-                  stopIfIdle()
-              }
-
-              fun diskSpace(): Map<String, Long> {
-                  val stat = StatFs(Environment.getExternalStorageDirectory().path)
-                  val total = stat.blockCountLong * stat.blockSizeLong
-                  val free = stat.availableBlocksLong * stat.blockSizeLong
-                  return mapOf("totalBytes" to total, "usedBytes" to (total - free), "freeBytes" to free)
-              }
-
-              fun audioTracks(path: String): List<Map<String, Any?>> {
-                  val out = mutableListOf<Map<String, Any?>>()
-                  val ex = MediaExtractor()
-                  try {
-                      ex.setDataSource(path)
-                      var audioIndex = 0
-                      for (i in 0 until ex.trackCount) {
-                          val f = ex.getTrackFormat(i)
-                          val mime = f.getString(MediaFormat.KEY_MIME) ?: continue
-                          if (!mime.startsWith("audio/")) continue
-                          val lang = if (f.containsKey(MediaFormat.KEY_LANGUAGE))
-                              f.getString(MediaFormat.KEY_LANGUAGE) else null
-                          out += mapOf(
-                              "index" to audioIndex,
-                              "language" to (lang ?: "und"),
-                              "mime" to mime,
-                              "channels" to if (f.containsKey(MediaFormat.KEY_CHANNEL_COUNT))
-                                  f.getInteger(MediaFormat.KEY_CHANNEL_COUNT) else null
-                          )
-                          audioIndex++
-                      }
-                  } finally {
-                      ex.release()
-                  }
-                  return out
-              }
-          }
-
-          class MainActivity : FlutterActivity() {
-              private val io = Executors.newSingleThreadExecutor()
-              private val main = Handler(Looper.getMainLooper())
-
-              override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
-                  super.configureFlutterEngine(flutterEngine)
-                  TorrentEngine.init(this)
-
-                  MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
-                      .setMethodCallHandler { call, result ->
-                          fun str(k: String) = call.argument<String>(k)
-                          when (call.method) {
-                              "startDownloadTask" -> run(result) {
-                                  TorrentEngine.start(str("id")!!, str("magnetUri")!!, str("savePath"))
-                                  true
-                              }
-                              "getDownloadStatus" -> run(result) { TorrentEngine.status(str("id")!!) }
-                              "pauseDownloadTask" -> run(result) { TorrentEngine.pause(str("id")!!) }
-                              "resumeDownloadTask" -> run(result) { TorrentEngine.resume(str("id")!!) }
-                              "deleteDownloadTask" -> run(result) {
-                                  TorrentEngine.delete(str("id")!!, call.argument<Boolean>("deleteFiles") ?: true)
-                                  true
-                              }
-                              "getDiskSpace" -> run(result) { TorrentEngine.diskSpace() }
-                              "listAudioTracks" -> run(result) { TorrentEngine.audioTracks(str("path")!!) }
-                              else -> result.notImplemented()
-                          }
-                      }
-              }
-
-              private fun run(result: MethodChannel.Result, block: () -> Any?) {
-                  io.execute {
-                      try {
-                          val r = block()
-                          main.post { result.success(r) }
-                      } catch (e: Exception) {
-                          Log.e("MainActivity", "channel call failed", e)
-                          main.post { result.error("TORRENT_ERROR", e.message, null) }
-                      }
-                  }
-              }
-
-              companion object {
-                  const val CHANNEL = "com.cineflix.app/torrent"
-              }
-          }
-          EOF
-
-      - name: Configure Tooling, Manifest & Resources
+      - name: Configure Android & Tooling
         run: |
           flutter config --no-analytics
 
-          mkdir -p android
-          cat << 'EOF' > android/gradle.properties
-          org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8
-          android.useAndroidX=true
-          android.enableJetifier=true
+          # 1. Clean build directory without losing root source
+          rm -rf android .metadata build
+          flutter create . --org com.desiflix --project-name hindi_movie_stream --platforms android
+
+          # 2. AGP 8.3.2 aur Kotlin 1.9.24 settings.gradle me pin karein
+          cat << 'EOF' > android/settings.gradle
+          pluginManagement {
+              def flutterSdkPath = {
+                  def properties = new Properties()
+                  file("local.properties").withInputStream { properties.load(it) }
+                  def flutterSdkPath = properties.getProperty("flutter.sdk")
+                  assert flutterSdkPath != null : "flutter.sdk not set in local.properties"
+                  return flutterSdkPath
+              }()
+
+              includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+
+          plugins {
+              id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+              id "com.android.application" version "8.3.2" apply false
+              id "org.jetbrains.kotlin.android" version "1.9.24" apply false
+          }
+
+          include ":app"
           EOF
 
-          mkdir -p android/gradle/wrapper
-          cat << 'EOF' > android/gradle/wrapper/gradle-wrapper.properties
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.4-all.zip
-          EOF
+          # 3. Gradle Wrapper 8.4 pin karein
+          sed -i 's/gradle-.*-all.zip/gradle-8.4-all.zip/' android/gradle/wrapper/gradle-wrapper.properties
 
-          cat << 'EOF' > android/app/src/main/AndroidManifest.xml
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-              <uses-permission android:name="android.permission.INTERNET"/>
-              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-              <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
-              <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
-              <uses-permission android:name="android.permission.WAKE_LOCK"/>
-
-              <!-- Public Storage Permissions -->
-              <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
-              <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29"/>
-              <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
-
-              <application
-                  android:label="ViPlayer"
-                  android:name="${applicationName}"
-                  android:icon="@android:drawable/sym_def_app_icon"
-                  android:usesCleartextTraffic="true"
-                  android:requestLegacyExternalStorage="true"
-                  android:networkSecurityConfig="@xml/network_security_config">
-
-                  <meta-data
-                      android:name="io.flutter.embedding.android.EnableImpeller"
-                      android:value="false" />
-
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:launchMode="singleTop"
-                      android:taskAffinity=""
-                      android:theme="@style/LaunchTheme"
-                      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-                      android:hardwareAccelerated="true"
-                      android:windowSoftInputMode="adjustResize">
-                      <meta-data
-                          android:name="io.flutter.embedding.android.NormalTheme"
-                          android:resource="@style/NormalTheme" />
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-                  </activity>
-
-                  <meta-data
-                      android:name="flutterEmbedding"
-                      android:value="2" />
-              </application>
-          </manifest>
-          EOF
-
-          mkdir -p android/app/src/main/res/values
-          cat << 'EOF' > android/app/src/main/res/values/styles.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
-                  <item name="android:windowBackground">@android:color/black</item>
-              </style>
-              <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
-                  <item name="android:windowBackground">@android:color/black</item>
-              </style>
-          </resources>
-          EOF
-
+          # 4. Network Security Config (CDN & HTTP cleartext support) create karein
           mkdir -p android/app/src/main/res/xml
           cat << 'EOF' > android/app/src/main/res/xml/network_security_config.xml
           <?xml version="1.0" encoding="utf-8"?>
@@ -604,11 +81,10 @@ jobs:
               <domain-config cleartextTrafficPermitted="true">
                   <domain includeSubdomains="true">themoviedb.org</domain>
                   <domain includeSubdomains="true">tmdb.org</domain>
-                  <domain includeSubdomains="true">strem.fun</domain>
-                  <domain includeSubdomains="true">strem.io</domain>
-                  <domain includeSubdomains="true">cinemeta.strem.io</domain>
-                  <domain includeSubdomains="true">images.metahub.space</domain>
                   <domain includeSubdomains="true">weserv.nl</domain>
+                  <domain includeSubdomains="true">vidsrc.me</domain>
+                  <domain includeSubdomains="true">webtor.io</domain>
+                  <domain includeSubdomains="true">strem.fun</domain>
                   <trust-anchors>
                       <certificates src="system" />
                       <certificates src="user" />
@@ -617,19 +93,46 @@ jobs:
           </network-security-config>
           EOF
 
+          # 5. AndroidManifest me Permissions, PiP aur Impeller Bypass inject karein
+          sed -i '/<application/i \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<application/<application android:usesCleartextTraffic="true" android:networkSecurityConfig="@xml\/network_security_config"/' android/app/src/main/AndroidManifest.xml
+          sed -i 's/<activity/<activity android:supportsPictureInPicture="true"/' android/app/src/main/AndroidManifest.xml
+          sed -i '/<\/application>/i \    <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />' android/app/src/main/AndroidManifest.xml
+
+          # 6. Kotlin metadata crash bypass
+          cat << 'EOF' >> android/build.gradle
+
+          allprojects {
+              tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+                  kotlinOptions {
+                      freeCompilerArgs += [
+                          "-Xskip-metadata-version-check",
+                          "-Xskip-prerelease-check"
+                      ]
+                  }
+              }
+          }
+          EOF
+
+          # 7. minSdk 21 ensure karein (ExoPlayer requirement)
+          cat << 'EOF' >> android/app/build.gradle
+
+          android {
+              defaultConfig {
+                  minSdk = 21
+              }
+          }
+          EOF
+
       - name: Fetch Dependencies
         run: flutter pub get
 
       - name: Build Android Release APK
         run: flutter build apk --release --no-tree-shake-icons
 
-      - name: Publish APK to GitHub Releases
-        uses: softprops/action-gh-release@v2
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: "v1.0.${{ github.run_number }}"
-          name: "ViPlayer Build v1.0.${{ github.run_number }}"
-          files: build/app/outputs/flutter-apk/app-release.apk
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: CineFlix-Release-APK
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
