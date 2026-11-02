@@ -1,0 +1,50 @@
+name: hindi_movie_stream
+description: "A professional Indian movie and web series streaming and downloading app."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.2.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # REST API requests (TMDb, Torrentio)
+  http: 1.2.2
+
+  # Fast Image caching for Posters & Backdrops
+  cached_network_image: 3.4.1
+
+  # Native ExoPlayer (Offline playback, HLS, Multi-Audio)
+  better_player_plus: 1.0.8
+
+  # Wakelock (Prevents screen sleep during playback)
+  wakelock_plus: 1.2.10
+
+  # Storage Permissions (Phone's default Download folder access)
+  permission_handler: 11.3.1
+
+  # Local File System & Directory Providers
+  path_provider: 2.1.5
+
+  # Download Task State Persistence
+  shared_preferences: 2.2.3
+
+  # In-App YouTube Trailer Player
+  webview_flutter: 4.10.0
+
+  # URL Launcher
+  url_launcher: 6.3.0
+
+  # Cupertino Icons
+  cupertino_icons: 1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: 3.0.0
+
+flutter:
+  uses-material-design: true
