@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -278,12 +280,12 @@ fun PlayerScreen(act: PlayerActivity, exo: ExoPlayer, title: String) {
                                 if (holding) { holding = false; exo.setPlaybackSpeed(speed); hud = null }
                             }
                         },
-                        onDoubleTap = if (dtOn) { o ->
+                        onDoubleTap = if (dtOn) ({ o: Offset ->
                             if (!locked && !act.inPip.value) {
                                 if (o.x < size.width / 2f) { seekBy(-10_000); showHud("⏪ 10 sec") }
                                 else { seekBy(10_000); showHud("10 sec ⏩") }
                             }
-                        } else null,
+                        }) else null,
                         onTap = {
                             if (!suppress) { if (locked) lockHint = !lockHint else controls = !controls }
                         }
@@ -333,7 +335,7 @@ fun PlayerScreen(act: PlayerActivity, exo: ExoPlayer, title: String) {
         // ---------- HUD ----------
         hud?.let { h ->
             Column(
-                Modifier.align(Alignment(0f, -0.55f)).clip(RoundedCornerShape(12.dp))
+                Modifier.align(BiasAlignment(0f, -0.55f)).clip(RoundedCornerShape(12.dp))
                     .background(Color(0xB3000000)).padding(horizontal = 18.dp, vertical = 10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
