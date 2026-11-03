@@ -5,7 +5,7 @@ plugins {
 
 android {
     namespace = "com.linkplayer.app"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.linkplayer.app"
