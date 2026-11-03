@@ -19,12 +19,14 @@ jobs:
           if [ -z "$F" ]; then echo "settings.gradle.kts not found"; exit 1; fi
           echo "ROOT=$(dirname "$F")" >> $GITHUB_ENV
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - uses: android-actions/setup-android@v3
+        with:
+          packages: ''
 
       - uses: gradle/actions/setup-gradle@v4
         with:
