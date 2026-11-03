@@ -891,7 +891,7 @@ jobs:
               }
 
               fun copyText(label: String, text: String) {
-                  (getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
+                  (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText(label, text))
                   toast("Copied: $label")
               }
 
