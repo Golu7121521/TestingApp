@@ -1,18 +1,4 @@
 <resources>
-    <color name="bg">#0E1018</color>
-    <color name="fg">#ECEEF6</color>
-    <color name="p1">#3B82F6</color>
-    <color name="p2">#3B82F6</color>
-    <color name="card">#171A26</color>
-    <color name="stroke">#272B3B</color>
-    <color name="muted">#8B93A8</color>
-    <color name="kw">#C678DD</color>
-    <color name="st">#98C379</color>
-    <color name="nu">#D19A66</color>
-    <color name="cm">#5C6370</color>
-    <color name="ty">#E5C07B</color>
-    <color name="fn">#61AFEF</color>
-    <color name="ok">#4ADE80</color>
-    <color name="bad">#FF6B6B</color>
-    <color name="white">#FFFFFF</color>
+    <color name="window_bg">#0E1013</color>
+    <color name="ic_bg">#2979FF</color>
 </resources>
