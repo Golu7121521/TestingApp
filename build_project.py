@@ -566,7 +566,7 @@ fun HomeScreen(
                         onValueChange = { customHeaders = it },
                         label = { Text("Additional Headers (Key: Value per line)") },
                         placeholder = {
-                            Text("Cookie: session=abcd\nAuthorization: Bearer token\nX-Forwarded-For: 1.1.1.1")
+                            Text("Cookie: session=abcd\\nAuthorization: Bearer token\\nX-Forwarded-For: 1.1.1.1")
                         },
                         modifier = Modifier
                             .fillMaxWidth()
