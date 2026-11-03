@@ -1,0 +1,2 @@
+-keep class androidx.graphics.path.** { *; }
+-keep class androidx.media3.** { *; }
