@@ -42,10 +42,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.airbnb.android.lottie.LottieComposition
-import com.airbnb.android.lottie.compose.LottieAnimation
-import com.airbnb.android.lottie.compose.LottieConstants
-import com.airbnb.android.lottie.compose.animateLottieCompositionAsState
+import com.airbnb.lottie.LottieComposition
+import com.airbnb.lottie.compose.LottieAnimation
+import com.airbnb.lottie.compose.LottieConstants
+import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.example.devicehealth.InfoSection
 
 /** Frosted-glass style card used across the app. */
