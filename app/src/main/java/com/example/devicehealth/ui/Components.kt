@@ -9,18 +9,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -40,10 +29,13 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.airbnb.lottie.LottieComposition
@@ -52,26 +44,26 @@ import com.airbnb.lottie.compose.LottieConstants
 import com.airbnb.lottie.compose.animateLottieCompositionAsState
 import com.example.devicehealth.InfoSection
 
-/** Frosted-glass style card used across the app. */
 @Composable
 fun GlassCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val scheme = MaterialTheme.colorScheme
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(Color.White.copy(alpha = 0.06f))
-            .border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(22.dp))
+            .background(scheme.surface.copy(alpha = 0.78f))
+            .border(1.dp, scheme.onSurface.copy(alpha = 0.10f), RoundedCornerShape(22.dp))
             .padding(18.dp),
         content = content
     )
 }
 
-/** Animated circular battery gauge. */
 @Composable
 fun BatteryRing(level: Int, charging: Boolean, modifier: Modifier = Modifier) {
-    val target = (level.coerceIn(0, 100)) / 100f
+    val target = level.coerceIn(0, 100) / 100f
     val animated by animateFloatAsState(target, tween(900), label = "ring")
-    val accent = if (charging) Color(0xFF34D399) else Color(0xFF7C5CFF)
+    val accent = if (charging) Color(0xFF34D399) else MaterialTheme.colorScheme.primary
+    val track = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.10f)
 
     Box(modifier.size(150.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
@@ -79,24 +71,14 @@ fun BatteryRing(level: Int, charging: Boolean, modifier: Modifier = Modifier) {
             val inset = stroke / 2
             val arcSize = Size(size.width - stroke, size.height - stroke)
             val topLeft = Offset(inset, inset)
-
             drawArc(
-                color = Color.White.copy(alpha = 0.08f),
-                startAngle = -90f,
-                sweepAngle = 360f,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(stroke, cap = StrokeCap.Round)
+                color = track, startAngle = -90f, sweepAngle = 360f, useCenter = false,
+                topLeft = topLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round)
             )
             drawArc(
                 brush = Brush.sweepGradient(listOf(accent, Color(0xFF22D3EE), accent)),
-                startAngle = -90f,
-                sweepAngle = 360f * animated,
-                useCenter = false,
-                topLeft = topLeft,
-                size = arcSize,
-                style = Stroke(stroke, cap = StrokeCap.Round)
+                startAngle = -90f, sweepAngle = 360f * animated, useCenter = false,
+                topLeft = topLeft, size = arcSize, style = Stroke(stroke, cap = StrokeCap.Round)
             )
         }
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -104,18 +86,25 @@ fun BatteryRing(level: Int, charging: Boolean, modifier: Modifier = Modifier) {
                 text = if (level >= 0) "$level%" else "--",
                 fontSize = 34.sp,
                 fontWeight = FontWeight.Bold,
-                color = Color.White
             )
             Text(
                 text = if (charging) "Charging" else "On battery",
                 fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.6f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
-/** Premium gradient button with a looping Lottie icon and a spring press effect. */
+@Composable
+fun LottieHero(composition: LottieComposition?, size: Dp) {
+    val progress by animateLottieCompositionAsState(
+        composition = composition,
+        iterations = LottieConstants.IterateForever
+    )
+    LottieAnimation(composition = composition, progress = { progress }, modifier = Modifier.size(size))
+}
+
 @Composable
 fun LottieGlowButton(
     text: String,
@@ -146,17 +135,12 @@ fun LottieGlowButton(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
-        LottieAnimation(
-            composition = composition,
-            progress = { progress },
-            modifier = Modifier.size(28.dp)
-        )
+        LottieAnimation(composition = composition, progress = { progress }, modifier = Modifier.size(28.dp))
         Spacer(Modifier.width(8.dp))
         Text(text, color = Color.White, fontWeight = FontWeight.SemiBold)
     }
 }
 
-/** Titled card with an icon, listing label / value pairs. */
 @Composable
 fun SectionCard(section: InfoSection) {
     GlassCard {
@@ -164,45 +148,50 @@ fun SectionCard(section: InfoSection) {
             Icon(
                 imageVector = section.icon,
                 contentDescription = null,
-                tint = Color(0xFFA5B4FC),
+                tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(20.dp)
             )
             Spacer(Modifier.width(8.dp))
             Text(
                 text = section.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = Color(0xFFA5B4FC),
+                color = MaterialTheme.colorScheme.primary,
                 fontWeight = FontWeight.SemiBold
             )
         }
         Spacer(Modifier.height(8.dp))
         section.items.forEachIndexed { index, item ->
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 9.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(item.label, color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp)
+                Text(item.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 Text(
                     text = item.value,
-                    color = Color.White,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.End,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp)
+                    modifier = Modifier.weight(1f).padding(start = 12.dp)
                 )
             }
             if (index != section.items.lastIndex) {
-                HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
             }
         }
     }
 }
 
-/** Back button + title used on tool screens. */
+@Composable
+fun StatRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 @Composable
 fun ToolHeader(title: String, onBack: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -210,9 +199,67 @@ fun ToolHeader(title: String, onBack: () -> Unit) {
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                 contentDescription = "Back",
-                tint = Color.White
+                tint = MaterialTheme.colorScheme.onSurface
             )
         }
-        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Thin bottom navigation bar: 58dp tall, sits above the gesture bar. */
+@Composable
+fun SlimBottomBar(
+    selected: Int,
+    labels: List<String>,
+    icons: List<ImageVector>,
+    onSelect: (Int) -> Unit,
+) {
+    val scheme = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(scheme.surface.copy(alpha = 0.96f))
+            .navigationBarsPadding()
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(58.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            labels.forEachIndexed { i, label ->
+                val tint = if (i == selected) scheme.primary else scheme.onSurfaceVariant
+                Column(
+                    modifier = Modifier.weight(1f).fillMaxHeight().clickable { onSelect(i) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(icons[i], contentDescription = label, tint = tint, modifier = Modifier.size(20.dp))
+                    Text(
+                        label,
+                        fontSize = 11.sp,
+                        color = tint,
+                        fontWeight = if (i == selected) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Simple line chart. */
+@Composable
+fun LineChart(values: List<Float>, color: Color, modifier: Modifier = Modifier.fillMaxWidth().height(120.dp)) {
+    Canvas(modifier) {
+        if (values.size < 2) return@Canvas
+        val max = values.max()
+        val min = values.min()
+        val range = (max - min).takeIf { it > 0f } ?: 1f
+        val stepX = size.width / (values.size - 1)
+        val path = Path()
+        values.forEachIndexed { i, v ->
+            val x = i * stepX
+            val y = size.height - ((v - min) / range) * size.height
+            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawPath(path, color, style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round))
     }
 }

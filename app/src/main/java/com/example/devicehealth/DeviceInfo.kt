@@ -43,38 +43,48 @@ data class Battery(
     val tech: String,
 )
 
-data class Snapshot(val battery: Battery, val sections: List<InfoSection>)
+data class Metrics(val ramAvailPct: Int?, val storageFreePct: Int?)
+
+data class Snapshot(val battery: Battery, val sections: List<InfoSection>, val metrics: Metrics)
 
 object DeviceInfo {
 
     fun snapshot(ctx: Context): Snapshot {
         val battery = readBattery(ctx)
+        val mem = memInfo(ctx)
+        val (total, free) = storageStat()
         val sections = listOf(
             InfoSection("Battery", Icons.Filled.BatteryFull, batteryItems(battery)),
             InfoSection(
                 "Temperature",
                 Icons.Filled.Thermostat,
                 listOf(
-                    InfoItem("Battery temp", battery.tempC?.let { String.format(Locale.US, "%.1f °C", it) } ?: "N/A"),
-                    InfoItem(
-                        "CPU / thermal (max)",
-                        thermalMaxC()?.let { String.format(Locale.US, "%.1f °C", it) } ?: "N/A (restricted)"
-                    ),
+                    InfoItem("Battery temp", battery.tempC?.let { String.format(Locale.US, "%.1f C", it) } ?: "N/A"),
+                    InfoItem("CPU / thermal (max)", thermalMaxC()?.let { String.format(Locale.US, "%.1f C", it) } ?: "N/A (restricted)"),
                 )
             ),
-            InfoSection("RAM", Icons.Filled.Memory, ramItems(ctx)),
-            InfoSection("Storage", Icons.Filled.SdStorage, storageItems()),
+            InfoSection("RAM", Icons.Filled.Memory, ramItems(mem)),
+            InfoSection("Storage", Icons.Filled.SdStorage, storageItems(total, free)),
             InfoSection("Processor", Icons.Filled.DeveloperBoard, cpuItems()),
             InfoSection("Display", Icons.Filled.Fullscreen, displayItems(ctx)),
             InfoSection("Device and OS", Icons.Filled.PhoneAndroid, deviceItems()),
-            InfoSection(
-                "Uptime",
-                Icons.Filled.Schedule,
-                listOf(InfoItem("Since boot", formatDuration(SystemClock.elapsedRealtime())))
-            ),
+            InfoSection("Uptime", Icons.Filled.Schedule,
+                listOf(InfoItem("Since boot", formatDuration(SystemClock.elapsedRealtime())))),
         )
-        return Snapshot(battery, sections)
+        val metrics = Metrics(
+            ramAvailPct = pct(mem.availMem, mem.totalMem),
+            storageFreePct = pct(free, total),
+        )
+        return Snapshot(battery, sections, metrics)
     }
+
+    fun memInfo(ctx: Context): ActivityManager.MemoryInfo {
+        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+        return ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+    }
+
+    private fun pct(part: Long, total: Long): Int? =
+        if (total > 0) (part * 100 / total).toInt() else null
 
     // ---------- Battery ----------
 
@@ -98,7 +108,6 @@ object DeviceInfo {
         val healthPct = if (designUah != null && fullUah != null && designUah > 0) {
             (fullUah * 100 / designUah).toInt()
         } else null
-
         val designMah = designUah?.let { it / 1000 } ?: powerProfileCapacity(ctx)
 
         return Battery(
@@ -165,19 +174,15 @@ object DeviceInfo {
     private fun thermalMaxC(): Float? = runCatching {
         File("/sys/class/thermal").listFiles()
             ?.filter { it.name.startsWith("thermal_zone") }
-            ?.mapNotNull { zone ->
-                File(zone, "temp").takeIf { it.canRead() }?.readText()?.trim()?.toIntOrNull()
-            }
+            ?.mapNotNull { zone -> File(zone, "temp").takeIf { it.canRead() }?.readText()?.trim()?.toIntOrNull() }
             ?.filter { it in 1..150_000 }
             ?.maxOrNull()
             ?.let { it / 1000f }
     }.getOrNull()
 
-    // ---------- RAM ----------
+    // ---------- RAM / Storage ----------
 
-    private fun ramItems(ctx: Context): List<InfoItem> {
-        val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-        val mi = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+    private fun ramItems(mi: ActivityManager.MemoryInfo): List<InfoItem> {
         val used = mi.totalMem - mi.availMem
         val pct = if (mi.totalMem > 0) used * 100 / mi.totalMem else 0
         return listOf(
@@ -189,12 +194,12 @@ object DeviceInfo {
         )
     }
 
-    // ---------- Storage ----------
-
-    private fun storageItems(): List<InfoItem> {
+    private fun storageStat(): Pair<Long, Long> {
         val st = StatFs(Environment.getDataDirectory().path)
-        val total = st.blockCountLong * st.blockSizeLong
-        val free = st.availableBlocksLong * st.blockSizeLong
+        return (st.blockCountLong * st.blockSizeLong) to (st.availableBlocksLong * st.blockSizeLong)
+    }
+
+    private fun storageItems(total: Long, free: Long): List<InfoItem> {
         val used = total - free
         val pct = if (total > 0) used * 100 / total else 0
         return listOf(
@@ -205,7 +210,7 @@ object DeviceInfo {
         )
     }
 
-    // ---------- CPU ----------
+    // ---------- CPU / Display / Device ----------
 
     private fun cpuItems(): List<InfoItem> {
         val cores = Runtime.getRuntime().availableProcessors()
@@ -220,15 +225,10 @@ object DeviceInfo {
         return listOf(
             InfoItem("Chipset", hardware),
             InfoItem("Cores", "$cores"),
-            InfoItem(
-                "Max frequency",
-                maxKhz?.let { String.format(Locale.US, "%.2f GHz", it / 1_000_000.0) } ?: "N/A"
-            ),
+            InfoItem("Max frequency", maxKhz?.let { String.format(Locale.US, "%.2f GHz", it / 1_000_000.0) } ?: "N/A"),
             InfoItem("ABI", Build.SUPPORTED_ABIS.joinToString()),
         )
     }
-
-    // ---------- Display ----------
 
     private fun displayItems(ctx: Context): List<InfoItem> {
         val dm = ctx.resources.displayMetrics
@@ -240,8 +240,6 @@ object DeviceInfo {
             InfoItem("Refresh rate", String.format(Locale.US, "%.0f Hz", hz)),
         )
     }
-
-    // ---------- Device and OS ----------
 
     private fun deviceItems() = listOf(
         InfoItem("Brand", Build.MANUFACTURER),
@@ -265,9 +263,6 @@ object DeviceInfo {
 
     private fun formatDuration(ms: Long): String {
         val s = ms / 1000
-        val d = s / 86400
-        val h = (s % 86400) / 3600
-        val m = (s % 3600) / 60
-        return "${d}d ${h}h ${m}m"
+        return "${s / 86400}d ${(s % 86400) / 3600}h ${(s % 3600) / 60}m"
     }
 }
