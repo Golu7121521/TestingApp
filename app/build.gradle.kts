@@ -12,8 +12,8 @@ android {
         applicationId = "com.example.devicehealth"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
     }
 
     buildFeatures {
@@ -39,10 +39,10 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
 
-    // Lottie: core library + Compose wrapper (both explicit so classes are always on classpath)
     implementation("com.airbnb.android:lottie:6.4.1")
     implementation("com.airbnb.android:lottie-compose:6.4.1")
 }

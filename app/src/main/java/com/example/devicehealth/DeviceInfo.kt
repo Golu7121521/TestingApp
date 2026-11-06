@@ -10,12 +10,22 @@ import android.os.Environment
 import android.os.StatFs
 import android.os.SystemClock
 import android.view.WindowManager
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BatteryFull
+import androidx.compose.material.icons.filled.DeveloperBoard
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.SdStorage
+import androidx.compose.material.icons.filled.Thermostat
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.io.File
 import java.util.Locale
 
 data class InfoItem(val label: String, val value: String)
 
-data class InfoSection(val title: String, val items: List<InfoItem>)
+data class InfoSection(val title: String, val icon: ImageVector, val items: List<InfoItem>)
 
 data class Battery(
     val level: Int,
@@ -40,9 +50,10 @@ object DeviceInfo {
     fun snapshot(ctx: Context): Snapshot {
         val battery = readBattery(ctx)
         val sections = listOf(
-            InfoSection("🔋 Battery", batteryItems(battery)),
+            InfoSection("Battery", Icons.Filled.BatteryFull, batteryItems(battery)),
             InfoSection(
-                "🌡️ Temperature",
+                "Temperature",
+                Icons.Filled.Thermostat,
                 listOf(
                     InfoItem("Battery temp", battery.tempC?.let { String.format(Locale.US, "%.1f °C", it) } ?: "N/A"),
                     InfoItem(
@@ -51,12 +62,16 @@ object DeviceInfo {
                     ),
                 )
             ),
-            InfoSection("🧠 RAM", ramItems(ctx)),
-            InfoSection("💾 Storage", storageItems()),
-            InfoSection("⚙️ Processor", cpuItems()),
-            InfoSection("📺 Display", displayItems(ctx)),
-            InfoSection("📱 Device & OS", deviceItems()),
-            InfoSection("⏱️ Uptime", listOf(InfoItem("Since boot", formatDuration(SystemClock.elapsedRealtime())))),
+            InfoSection("RAM", Icons.Filled.Memory, ramItems(ctx)),
+            InfoSection("Storage", Icons.Filled.SdStorage, storageItems()),
+            InfoSection("Processor", Icons.Filled.DeveloperBoard, cpuItems()),
+            InfoSection("Display", Icons.Filled.Fullscreen, displayItems(ctx)),
+            InfoSection("Device and OS", Icons.Filled.PhoneAndroid, deviceItems()),
+            InfoSection(
+                "Uptime",
+                Icons.Filled.Schedule,
+                listOf(InfoItem("Since boot", formatDuration(SystemClock.elapsedRealtime())))
+            ),
         )
         return Snapshot(battery, sections)
     }
@@ -78,7 +93,6 @@ object DeviceInfo {
         val chargeUah = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER)
         val currentUa = bm.getLongProperty(BatteryManager.BATTERY_PROPERTY_CURRENT_NOW)
 
-        // Sysfs values (may be blocked by SELinux on some MIUI builds)
         val designUah = readSys("/sys/class/power_supply/battery/charge_full_design")?.toLongOrNull()
         val fullUah = readSys("/sys/class/power_supply/battery/charge_full")?.toLongOrNull()
         val healthPct = if (designUah != null && fullUah != null && designUah > 0) {
@@ -221,13 +235,13 @@ object DeviceInfo {
         @Suppress("DEPRECATION")
         val hz = (ctx.getSystemService(Context.WINDOW_SERVICE) as WindowManager).defaultDisplay.refreshRate
         return listOf(
-            InfoItem("Resolution", "${dm.widthPixels} × ${dm.heightPixels}"),
+            InfoItem("Resolution", "${dm.widthPixels} x ${dm.heightPixels}"),
             InfoItem("Density", "${dm.densityDpi} dpi"),
             InfoItem("Refresh rate", String.format(Locale.US, "%.0f Hz", hz)),
         )
     }
 
-    // ---------- Device & OS ----------
+    // ---------- Device and OS ----------
 
     private fun deviceItems() = listOf(
         InfoItem("Brand", Build.MANUFACTURER),

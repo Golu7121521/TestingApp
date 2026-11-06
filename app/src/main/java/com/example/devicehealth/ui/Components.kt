@@ -22,7 +22,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -103,7 +107,7 @@ fun BatteryRing(level: Int, charging: Boolean, modifier: Modifier = Modifier) {
                 color = Color.White
             )
             Text(
-                text = if (charging) "Charging ⚡" else "On battery",
+                text = if (charging) "Charging" else "On battery",
                 fontSize = 12.sp,
                 color = Color.White.copy(alpha = 0.6f)
             )
@@ -111,9 +115,7 @@ fun BatteryRing(level: Int, charging: Boolean, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * Premium gradient button with a looping Lottie icon and a spring press effect.
- */
+/** Premium gradient button with a looping Lottie icon and a spring press effect. */
 @Composable
 fun LottieGlowButton(
     text: String,
@@ -154,16 +156,25 @@ fun LottieGlowButton(
     }
 }
 
-/** A titled card listing label / value pairs. */
+/** Titled card with an icon, listing label / value pairs. */
 @Composable
 fun SectionCard(section: InfoSection) {
     GlassCard {
-        Text(
-            text = section.title,
-            style = MaterialTheme.typography.titleMedium,
-            color = Color(0xFFA5B4FC),
-            fontWeight = FontWeight.SemiBold
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = section.icon,
+                contentDescription = null,
+                tint = Color(0xFFA5B4FC),
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                text = section.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color(0xFFA5B4FC),
+                fontWeight = FontWeight.SemiBold
+            )
+        }
         Spacer(Modifier.height(8.dp))
         section.items.forEachIndexed { index, item ->
             Row(
@@ -188,5 +199,20 @@ fun SectionCard(section: InfoSection) {
                 HorizontalDivider(color = Color.White.copy(alpha = 0.06f))
             }
         }
+    }
+}
+
+/** Back button + title used on tool screens. */
+@Composable
+fun ToolHeader(title: String, onBack: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        IconButton(onClick = onBack) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White
+            )
+        }
+        Text(title, fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }
