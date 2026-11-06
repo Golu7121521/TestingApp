@@ -43,5 +43,5 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
 
     // Lottie animations
-    implementation("com.airbnb.android:lottie-compose:6.5.2")
+    implementation("com.airbnb.android:lottie-compose:6.4.1")
 }
