@@ -1,20 +1,30 @@
-# Device Health (Redmi 9 Prime / Android 10)
+# File Recovery (Android, Jetpack Compose + Material 3)
 
-Phone ki health details dikhane wala app: battery (level, temp, voltage, health, charging, cycles),
-RAM, storage, CPU, display, device info, uptime. Premium dark UI + Lottie animated buttons.
+Deleted photos, videos, audio, PDFs aur doosri files ko Android ke Trash/Recently-deleted
+folders se dhund kar restore karta hai.
 
-## GitHub Actions se APK banana
-1. GitHub par ek naya repository banaiye (Private ya Public).
-2. Is folder ki saari files (`.github` folder sahit) repository mein upload kariye.
-   - Mobile par Desktop site mode on karke upload karein, ya Termux mein `git push` karein.
-   - `.github/workflows/build.yml` ka path bilkul aisa hona chahiye.
-3. Code push hote hi "Actions" tab mein "Build Android APK" chalega.
-4. Workflow green hone ke baad uske page ke neeche "DeviceHealth-debug-apk" artifact download kariye.
-5. ZIP extract karke `app-debug.apk` ko phone mein install karein
-   (Settings > Install unknown apps / Security mein permission dein).
+## Kaise kaam karta hai
+Android 11+ par jab file trash mein jaati hai, to uska naam `.trashed-<expiry>-<naam>`
+ho jaata hai aur file wahi rehti hai. All-files access ke saath app ye files dhundh kar
+original naam par wapas rename kar deti hai.
 
-## Notes
-- Battery "Health estimate", "Cycle count" aur CPU thermal kuch MIUI builds par system restrict karta hai,
-  tab woh "N/A" dikhayega. Yeh app ki galti nahi hai.
-- Lottie animation `app/src/main/res/raw/pulse.json` mein hai. LottieFiles.com se koi bhi
-  JSON download karke isi naam se replace kar sakte hain.
+## Limitations (zaroori)
+- Jo file permanently delete ho chuki hai (trash expire ho gaya ya `rm` jaisa delete),
+  uske liye root ya forensic tools chahiye. Ye app woh nahi kar sakti.
+- Google Photos ka apna trash alag hota hai, uske liye Google Photos app mein restore karo.
+- Sirf apne device ki files ke liye kaam karta hai.
+
+## Build (GitHub Actions se, bina PC ke)
+1. Is folder ko ek naye GitHub repo mein upload karo (web se "Add file > Upload files" ya zip extract karke).
+2. Repo mein **Actions** tab kholo, "Build APK" workflow apne aap chalega (ya "Run workflow" dabao).
+3. Run complete hone par neeche **Artifacts** se `FileRecovery-debug-apk` download karo.
+4. APK ko phone mein install karo (Unknown apps install ki permission dene ko kaha jaayega).
+5. App mein "All files access kholo" dabao aur permission do.
+
+## Structure
+- `MainActivity.kt` - entry point, permission gate
+- `data/TrashScanner.kt` - scan + restore logic
+- `ui/RecoveryViewModel.kt` - state management
+- `ui/Screens.kt` - Compose screens
+- `ui/components/AnimatedButtons.kt` - fancy animated buttons (gradient, shine, press spring, pulse)
+- `ui/theme/Theme.kt` - Material 3 colors
