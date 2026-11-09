@@ -1,30 +1,26 @@
-# File Recovery (Android, Jetpack Compose + Material 3)
+# LiteTube
 
-Deleted photos, videos, audio, PDFs aur doosri files ko Android ke Trash/Recently-deleted
-folders se dhund kar restore karta hai.
+YouTube jaisa dark UI, NewPipeExtractor se video data (API key ki zaroorat nahi).
 
-## Kaise kaam karta hai
-Android 11+ par jab file trash mein jaati hai, to uska naam `.trashed-<expiry>-<naam>`
-ho jaata hai aur file wahi rehti hai. All-files access ke saath app ye files dhundh kar
-original naam par wapas rename kar deti hai.
+## Features
+- Dark YouTube-style UI
+- Bottom navigation: Home, Shorts, Subscriptions, Library
+- Home: search + trending
+- Video player (ExoPlayer) with YouTube-style controls
+- Mini player bottom mein (tap karke full player kholo)
+- Related videos list player ke neeche
 
-## Limitations (zaroori)
-- Jo file permanently delete ho chuki hai (trash expire ho gaya ya `rm` jaisa delete),
-  uske liye root ya forensic tools chahiye. Ye app woh nahi kar sakti.
-- Google Photos ka apna trash alag hota hai, uske liye Google Photos app mein restore karo.
-- Sirf apne device ki files ke liye kaam karta hai.
+## GitHub Actions se APK banana
+1. GitHub par naya repository banao (e.g. LiteTube).
+2. Is zip ka content repo mein upload karo (folder structure same rahe, `.github` folder bhi).
+3. Push hote hi "Actions" tab mein "Build APK" chalega.
+4. Complete hone par run page ke neeche "Artifacts" se `LiteTube-debug-apk` download karo.
+5. zip kholo, `app-debug.apk` ko phone mein install karo (Settings > Install unknown apps allow karo).
 
-## Build (GitHub Actions se, bina PC ke)
-1. Is folder ko ek naye GitHub repo mein upload karo (web se "Add file > Upload files" ya zip extract karke).
-2. Repo mein **Actions** tab kholo, "Build APK" workflow apne aap chalega (ya "Run workflow" dabao).
-3. Run complete hone par neeche **Artifacts** se `FileRecovery-debug-apk` download karo.
-4. APK ko phone mein install karo (Unknown apps install ki permission dene ko kaha jaayega).
-5. App mein "All files access kholo" dabao aur permission do.
-
-## Structure
-- `MainActivity.kt` - entry point, permission gate
-- `data/TrashScanner.kt` - scan + restore logic
-- `ui/RecoveryViewModel.kt` - state management
-- `ui/Screens.kt` - Compose screens
-- `ui/components/AnimatedButtons.kt` - fancy animated buttons (gradient, shine, press spring, pulse)
-- `ui/theme/Theme.kt` - Material 3 colors
+## Notes
+- Subscriptions aur Library abhi placeholder hain.
+- Muxed (video+audio) streams use hote hain, isliye quality ~360p tak milegi. 720p+ ke liye DASH merge next step hai.
+- NewPipeExtractor ka version (app/build.gradle.kts) latest tag se check karo: https://github.com/TeamNewPipe/NewPipeExtractor/releases
+- YouTube ke changes se kabhi-kabhi extractor break ho sakta hai; tab extractor update karna padega.
+- Personal use ke liye. Play Store par YouTube branding ke saath publish karna YouTube ToS ke against hai.
+- NewPipeExtractor GPLv3 license mein hai; isliye project bhi GPLv3 ke terms follow karega agar distribute karo.
