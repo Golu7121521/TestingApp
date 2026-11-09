@@ -6,78 +6,104 @@ import android.os.Environment
 import java.io.File
 
 /**
- * Android 11+ jab file ko Trash/Recently Deleted mein bhejta hai,
- * to file ka naam ".trashed-<expiryEpoch>-<originalName>" ho jaata hai
- * aur wo usi folder mein rehti hai. All-files access ho to hum use dhund sakte hain.
+ * Normal (non-root) scan. Teen jagah dekhta hai:
+ * 1) Android 11+ trash: ".trashed-<expiry>-<naam>"
+ * 2) Hidden trash folders (.Trash, .recycle etc.) jo kuch phones/file managers banate hain
+ * 3) Thumbnail cache (.thumbnails, .thumbdata*): deleted photos ka chhota preview
  */
 object TrashScanner {
 
-    private val trashRegex = Regex("^\\.trashed-(\\d+)-(.+)$")
+    private val trashedRegex = Regex("^\\.trashed-(\\d+)-(.+)$")
+    private val hiddenTrashDirs = setOf(".trash", ".trashed", ".recycle", ".recyclebin", ".deleted")
 
     fun scan(
         root: File = Environment.getExternalStorageDirectory(),
         onProgress: (String) -> Unit = {}
     ): List<RecoverableFile> {
         val results = mutableListOf<RecoverableFile>()
+        var lastDir: File? = null
+
         root.walkTopDown()
-            .onFail { _, _ -> /* permission nahi mila, skip karo */ }
+            .onFail { _, _ -> }
             .forEach { f ->
                 if (!f.isFile) return@forEach
-                val match = trashRegex.matchEntire(f.name) ?: return@forEach
-                val expiry = match.groupValues[1].toLongOrNull() ?: 0L
-                val original = match.groupValues[2]
-                onProgress(f.parentFile?.name ?: "/")
-                results += RecoverableFile(
-                    file = f,
-                    originalName = original,
-                    expiresAt = expiry,
-                    sizeBytes = f.length(),
-                    category = categorize(original)
-                )
+
+                val parentFile = f.parentFile
+                if (parentFile != lastDir) {
+                    lastDir = parentFile
+                    onProgress(parentFile?.name ?: "/")
+                }
+                val parent = parentFile?.name?.lowercase() ?: ""
+
+                val trashed = trashedRegex.matchEntire(f.name)
+                when {
+                    trashed != null -> results += RecoverableFile(
+                        file = f,
+                        originalName = trashed.groupValues[2],
+                        expiresAt = trashed.groupValues[1].toLongOrNull() ?: 0L,
+                        sizeBytes = f.length(),
+                        category = categorize(trashed.groupValues[2]),
+                        source = Source.TRASH
+                    )
+                    parent in hiddenTrashDirs -> results += RecoverableFile(
+                        file = f,
+                        originalName = f.name,
+                        expiresAt = 0L,
+                        sizeBytes = f.length(),
+                        category = categorize(f.name),
+                        source = Source.TRASH
+                    )
+                    (parent == ".thumbnails" || f.name.startsWith(".thumbdata")) && isJpeg(f) ->
+                        results += RecoverableFile(
+                            file = f,
+                            originalName = "thumbnail_${f.nameWithoutExtension}.jpg",
+                            expiresAt = 0L,
+                            sizeBytes = f.length(),
+                            category = FileCategory.PHOTOS,
+                            source = Source.THUMBNAIL
+                        )
+                }
             }
         return results.sortedByDescending { it.expiresAt }
     }
 
-    /** Returns ids of files jo successfully restore hue. */
+    private fun isJpeg(f: File): Boolean = runCatching {
+        f.inputStream().use { s ->
+            val b = ByteArray(3)
+            s.read(b) == 3 && b[0] == 0xFF.toByte() && b[1] == 0xD8.toByte() && b[2] == 0xFF.toByte()
+        }
+    }.getOrDefault(false)
+
+    /** Restore: trash wali files apni jagah rename hoti hain, baaki Downloads/FileRecovery/Restored mein copy. */
     fun restore(context: Context, items: List<RecoverableFile>): List<String> {
         val done = mutableListOf<String>()
-        val fallbackDir = File(
+        val outDir = File(
             Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS),
-            "Recovered"
+            "FileRecovery/Restored"
         ).apply { mkdirs() }
 
         for (item in items) {
-            val dir = item.file.parentFile ?: continue
-            // Pehle original folder mein rename (sabse sahi restore)
-            val target = uniqueIn(dir, item.originalName)
-            val ok = item.file.renameTo(target) || runCatching {
-                // Fallback: Downloads/Recovered mein copy
-                val out = uniqueIn(fallbackDir, item.originalName)
-                item.file.copyTo(out)
-                item.file.delete()
-                MediaScannerConnection.scanFile(context, arrayOf(out.absolutePath), null, null)
+            val ok = runCatching {
+                if (item.restoreInPlace) {
+                    val target = uniqueIn(item.file.parentFile!!, item.originalName)
+                    if (!item.file.renameTo(target)) error("rename failed")
+                    rescan(context, target)
+                } else {
+                    val target = uniqueIn(outDir, item.originalName)
+                    item.file.copyTo(target)
+                    if (item.source != Source.THUMBNAIL) item.file.delete()
+                    rescan(context, target)
+                }
                 true
             }.getOrDefault(false)
-
-            if (ok) {
-                if (target.exists()) {
-                    MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), null, null)
-                }
-                done += item.id
-            }
+            if (ok) done += item.id
         }
         return done
     }
 
-    fun categorize(name: String): FileCategory =
-        when (name.substringAfterLast('.', "").lowercase()) {
-            "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp" -> FileCategory.PHOTOS
-            "mp4", "mkv", "3gp", "webm", "mov", "avi" -> FileCategory.VIDEOS
-            "mp3", "m4a", "wav", "ogg", "flac", "aac", "opus" -> FileCategory.AUDIO
-            "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "csv" ->
-                FileCategory.DOCS
-            else -> FileCategory.OTHER
-        }
+    private fun rescan(context: Context, f: File) {
+        MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath), null, null)
+    }
 
     private fun uniqueIn(dir: File, name: String): File {
         var candidate = File(dir, name)

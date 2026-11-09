@@ -14,14 +14,25 @@ enum class FileCategory(val label: String) {
     OTHER("Other")
 }
 
+enum class Source(val label: String) {
+    TRASH("Trash"),
+    THUMBNAIL("Thumbnail cache"),
+    CARVED("Deep scan (root)")
+}
+
 data class RecoverableFile(
     val file: File,
     val originalName: String,
-    val expiresAt: Long,        // epoch seconds (Android trash expiry)
+    val expiresAt: Long,        // epoch seconds, sirf Android 11+ trash ke liye
     val sizeBytes: Long,
-    val category: FileCategory
+    val category: FileCategory,
+    val source: Source
 ) {
     val id: String get() = file.absolutePath
+
+    /** true = file ko usi folder mein rename karke restore kar sakte hain */
+    val restoreInPlace: Boolean
+        get() = source == Source.TRASH && file.name.startsWith(".trashed-")
 }
 
 fun formatSize(bytes: Long): String = when {
@@ -33,3 +44,13 @@ fun formatSize(bytes: Long): String = when {
 
 fun formatExpiry(epochSeconds: Long): String =
     SimpleDateFormat("dd MMM yyyy", Locale.getDefault()).format(Date(epochSeconds * 1000))
+
+fun categorize(name: String): FileCategory =
+    when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg", "png", "gif", "webp", "heic", "heif", "bmp" -> FileCategory.PHOTOS
+        "mp4", "mkv", "3gp", "webm", "mov", "avi" -> FileCategory.VIDEOS
+        "mp3", "m4a", "wav", "ogg", "flac", "aac", "opus" -> FileCategory.AUDIO
+        "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "rtf", "odt", "csv" ->
+            FileCategory.DOCS
+        else -> FileCategory.OTHER
+    }

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
@@ -69,14 +70,14 @@ fun PermissionScreen(onGrant: () -> Unit, onAllFiles: () -> Unit) {
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            "Deleted files dhundhne ke liye app ko storage aur 'All files access' permission chahiye. Sab kuch aapke phone par hi hota hai, kahin upload nahi hota.",
+            "Deleted files dhundhne ke liye app ko storage permission chahiye. Sab kuch aapke phone par hi hota hai, kahin upload nahi hota.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(32.dp))
         FancyGradientButton(
-            text = "Media permission do",
+            text = "Storage permission do",
             icon = Icons.Default.Check,
             onClick = onGrant,
             modifier = Modifier.fillMaxWidth()
@@ -122,7 +123,7 @@ fun RecoveryScreen(vm: RecoveryViewModel) {
                 PulseRing(Modifier.matchParentSize())
             }
             FancyGradientButton(
-                text = if (state.scanning) "Scanning..." else "Deleted files scan karo",
+                text = if (state.scanning) "Scanning..." else "Trash & thumbnails scan karo",
                 icon = Icons.Default.Search,
                 onClick = vm::scan,
                 modifier = Modifier.fillMaxWidth(0.9f),
@@ -130,7 +131,16 @@ fun RecoveryScreen(vm: RecoveryViewModel) {
             )
         }
 
-        Spacer(Modifier.height(16.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center
+        ) {
+            TextButton(onClick = vm::deepScan, enabled = !state.scanning) {
+                Text("Deep scan (root phone)")
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
 
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(FileCategory.entries) { category ->
@@ -199,6 +209,11 @@ fun FileRow(
     onToggle: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val info = if (file.expiresAt > 0) {
+        "Expires ${formatExpiry(file.expiresAt)}"
+    } else {
+        file.source.label
+    }
     Card(
         onClick = onToggle,
         modifier = modifier
@@ -224,7 +239,7 @@ fun FileRow(
                     fontWeight = FontWeight.SemiBold
                 )
                 Text(
-                    "${formatSize(file.sizeBytes)} • Expires ${formatExpiry(file.expiresAt)}",
+                    "${formatSize(file.sizeBytes)} • $info",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
