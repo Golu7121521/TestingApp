@@ -1,7 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.PlayVid" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">#0E0F13</item>
-        <item name="android:statusBarColor">@android:color/transparent</item>
-        <item name="android:navigationBarColor">@android:color/transparent</item>
+    <style name="Theme.NewTube" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/yt_red</item>
+        <item name="colorPrimaryVariant">@color/yt_black</item>
+        <item name="colorOnPrimary">@color/yt_white</item>
+        <item name="colorSecondary">@color/yt_red</item>
+        <item name="android:statusBarColor">@color/yt_bg</item>
+        <item name="android:navigationBarColor">@color/yt_bg</item>
+        <item name="android:windowBackground">@color/yt_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+
+    <style name="BottomNavTextActive" parent="TextAppearance.AppCompat.Caption">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/yt_text</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="BottomNavTextInactive" parent="TextAppearance.AppCompat.Caption">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">@color/yt_gray_text</item>
     </style>
 </resources>
