@@ -40,6 +40,7 @@ val HomeCategories = listOf(
     "Movies", "Education", "Technology", "Sports", "Podcasts",
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(viewModel: HomeViewModel = hiltViewModel()) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
