@@ -1,7 +1,0 @@
-build/
-.gradle/
-.idea/
-local.properties
-*.apk
-*.aab
-.DS_Store
