@@ -1,0 +1,15 @@
+# Gradle / build output
+.gradle/
+build/
+*/build/
+.idea/
+*.iml
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# OS files
+.DS_Store
+Thumbs.db

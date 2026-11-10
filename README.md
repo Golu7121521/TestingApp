@@ -1,61 +1,84 @@
-# NewTube (YouTube Clone powered by TeamNewPipe Extractor)
+# StreamX
 
-Yeh Android project khaas **Redmi 9 Prime (Android 10 / API 29)** aur upar ke sabhi Android devices ke liye banaya gaya hai. Ismein **NewPipeExtractor (`com.github.TeamNewPipe:NewPipeExtractor`)** aur **Media3 ExoPlayer** ka use kiya gaya hai.
+A YouTube-inspired Android video streaming app, built with Kotlin and Jetpack Compose.
+This project follows a phased plan. **This build contains Phase 1 only.**
 
-## Features Included
-1. **Original YouTube Dark UI (`#0F0F0F`)**: YouTube logo, search bar, 16:9 video cards, duration badge, aur channel avatars.
-2. **YouTube Video Player Controls**: Custom ExoPlayer overlay jisme Center Play/Pause, 10-second Rewind/Forward, Red Seekbar (`DefaultTimeBar`), Top-left Minimize button (`v`), aur Fullscreen toggle hai.
-3. **YouTube-Style Bottom Mini Player**: Jab aap video ko minimize karte hain ya Back button dabate hain, toh video band nahi hota balki bottom navigation bar ke theek upar **Mini Player** mein chalta rehta hai (Thumbnail + Title + Channel + Play/Pause + Close button + Red progress bar ke saath).
-4. **Slim 4-Tab Bottom Navigation Bar (`46dp`)**:
-   - **Home**: Trending videos load karta hai.
-   - **Shorts**: Short-form vertical videos load karta hai.
-   - **Subscriptions**: Aapke subscribed channels ke videos dikhata hai.
-   - **Library**: Aapki local Watch History dikhata hai.
-5. **No PC Required (GitHub Actions Ready)**: Ismein `.github/workflows/android_build.yml` pre-configured hai jo bina PC ke cloud par APK build kar dega.
+> StreamX is not affiliated with YouTube or Google. It does not use YouTube's logo,
+> branding, or the official YouTube API. Content will be retrieved through
+> NewPipeExtractor in a later phase, subject to the source platform's terms.
 
----
+## Status
 
-## Mobile Se GitHub Actions Par APK Kaise Build Karein? (Step-by-Step)
+| Phase | Scope | Status |
+|---|---|---|
+| 1 | Project setup, Gradle, Material 3 theme (dark/light), 5-tab bottom navigation, Home screen shell with category chips, pull-to-refresh, loading / empty / error states, ViewModel tests | **Done** |
+| 2 | NewPipeExtractor integration, search, live video feed | Not started |
+| 3 | Video details, ExoPlayer, fullscreen, quality selection | Not started |
+| 4 | Shorts, channel screen, related videos | Not started |
+| 5 | History, playlists, Watch Later, subscriptions (Room) | Not started |
+| 6 | Background playback, Picture-in-Picture, Settings | Not started |
+| 7 | Testing, performance, release APK | Not started |
 
-1. Apne Redmi 9 Prime phone mein **GitHub.com** (browser mein Desktop Mode on karke) kholein aur ek **New Repository** banayein (e.g., `NewTube-App`).
-2. Is ZIP file (`NewTube_YouTube_Clone_Redmi9Prime.zip`) ko apne phone ke File Manager mein **Extract (Unzip)** karein.
-3. Apne GitHub repository mein **Add file -> Upload files** par tap karein aur extract kiye huye saare folders (`.github`, `app`, `build.gradle`, `settings.gradle`, `gradle.properties`) upload karke **Commit changes** par tap karein.
-   *(Tip: Agar mobile browser se `.github` hidden folder upload karne mein dikkat aaye, toh GitHub repo mein **Add file -> Create new file** par tap karein, file ka naam `.github/workflows/android_build.yml` likhein, aur uske andar workflow ka code paste karke commit kar dein).*
-4. Commit hote hi upar **Actions** tab mein jayein. Wahan `Build NewTube APK (Redmi 9 Prime / Android 10)` workflow apne aap chalna shuru ho jayega.
-5. 3 se 5 minute mein build green tick (`Success`) ho jayega. Workflow run par tap karein, neeche **Artifacts** section mein **`NewTube-Redmi9Prime-Debug-APK`** par tap karke APK download karein aur apne Redmi 9 Prime mein install kar lein!
+In Phase 1 the Home feed shows its **empty state**, because no real data source is wired yet.
+No fake videos are generated. The Shorts, Subscriptions, Library and Profile tabs are
+placeholder screens with a short description.
 
-## Version 1.2.0 – Naye features
-- **Subscriptions save hote hain**: Subscribe karne par channel phone mein save hota hai (app band karne ke baad bhi).
-- **Subscriptions tab**: subscribed channels ki latest videos dikhata hai. Khali ho to message aata hai.
-- **Manage subscriptions**: Subscriptions tab ke header mein "Manage" se channel unsubscribe kar sakte hain.
-- **Watch history save hoti hai**: Library tab mein history dikhti hai, "Clear" se khali ho jati hai.
-- **Shorts grid**: Shorts tab mein 2-column portrait grid (sirf short videos).
-- **Section header aur empty state**: Har tab ke liye message aur search results ka title.
-- UI, colors, bottom nav, mini player aur player controls pehle jaise hi hain.
+## Tech stack
 
-## Version 1.3.0 – YouTube jaisa naya UI + buffering fix
-### Buffering / speed
-- **DASH adaptive streaming (default Auto quality)**: ExoPlayer network dekh kar quality khud badalta hai, isliye stall kam hote hain.
-- **Bada buffer**: `DefaultLoadControl` mein 30s-120s buffer, playback 1.5s mein shuru.
-- **Progressive stream ko priority**: 480p tak single connection, video+audio merge sirf upar ki quality ke liye.
-- **OkHttp connection pool + retry** enable kiya gaya.
-- **Home ka trending aur Shorts data parallel load** hota hai.
+- Kotlin, Jetpack Compose, Material 3
+- Hilt (dependency injection)
+- Navigation Compose
+- Coil (image loading)
+- Planned: Room, DataStore, NewPipeExtractor, Media3 ExoPlayer, MediaSessionService
 
-### Player controls (YouTube jaise)
-- Top: minimize (chevron), title, captions (CC), settings (gear).
-- Center: previous, play/pause, next.
-- Bottom: time, quality (SD/720p label), speed (1.0), fullscreen, red seekbar.
-- Settings: Quality (Auto aur manual), Playback speed (0.5x - 2x), Captions.
-- Video ke neeche: title, channel avatar, Subscribe button, like, dislike, share.
-- Next = Up Next ka pehla video. Previous = 3 sec se kam chala ho to pichhla history video.
+Minimum SDK 26 (Android 8.0), target SDK 35.
 
-### UI (screenshots ke hisaab se)
-- Light YouTube theme. Top bar: logo, camera, search (search icon dabane par search bar khulta hai).
-- Home: category chips (All, Gaming, Hyped, Live, Music), video cards (16:9 thumbnail, channel avatar, title, metadata, 3 dots), beech mein Shorts shelf.
-- Subscriptions: upar subscribed channels ki avatar row (long press = unsubscribe, tap = channel ki videos), chips (All, Videos, Shorts, Live).
-- Shorts tab: 2-column grid.
-- Library: watch history, "Clear" se khali.
+## Project structure
 
-### Notes
-- Channel avatar feed mein initial letter dikhta hai (search results mein avatar URL nahi milta).
-- Comments section abhi nahi hai.
+```
+app/src/main/java/com/streamx/app/
+├── StreamXApplication.kt        Hilt entry point
+├── MainActivity.kt              Hosts the Compose app and theme
+├── core/
+│   ├── common/                  Shared utilities (UiState)
+│   └── designsystem/            Colors, typography, theme
+├── navigation/                  Bottom-nav destinations and root scaffold
+├── domain/
+│   ├── model/                   Pure Kotlin models (Video)
+│   └── repository/              Repository interfaces (VideoRepository)
+├── data/
+│   ├── repository/              Implementations (Phase 1: empty stand-in)
+│   └── di/                      Hilt bindings
+└── feature/
+    ├── home/                    Home screen + ViewModel
+    ├── components/              Reusable UI (VideoCard, skeleton, empty/error states)
+    ├── shorts/ subscriptions/ library/ profile/   Placeholder tabs
+app/src/test/                    ViewModel unit tests
+```
+
+## Build and run
+
+Requirements: Android Studio (Ladybug or newer), JDK 17, Android SDK 35.
+
+1. Unzip the project and open the `StreamX` folder in Android Studio.
+2. Android Studio will offer to sync Gradle. Accept it. The Gradle wrapper files
+   (`gradlew`, `gradle/wrapper/gradle-wrapper.jar`) are not included in this archive.
+   If they are missing, run `gradle wrapper --gradle-version 8.9` once from the project
+   root, or let Android Studio generate them.
+3. Run the `app` configuration on a device or emulator (API 26+).
+
+Command line, after the wrapper exists:
+
+```
+./gradlew :app:testDebugUnitTest   # unit tests
+./gradlew :app:assembleDebug       # debug APK
+```
+
+## Notes on the spec
+
+- **Not verified by compiling.** Phase 1 was written without an Android SDK in the
+  environment. Run the build above first and report any errors.
+- **Library versions** are pinned in `app/build.gradle.kts`. Check them against
+  current stable releases before release.
+- **Terms and copyright.** Extraction and playback will respect the source platform's
+  terms. DRM, paywalls and access controls will not be bypassed.

@@ -1,4 +1,2 @@
--keep class org.schabi.newpipe.extractor.** { *; }
--dontwarn org.schabi.newpipe.extractor.**
--keep class org.mozilla.javascript.** { *; }
--dontwarn org.mozilla.javascript.**
+# Add project-specific ProGuard/R8 rules here.
+# NewPipeExtractor keep rules will be added in Phase 2.
