@@ -76,12 +76,9 @@ object Repo {
         ex.initialPage.items.filterIsInstance<StreamInfoItem>().map { it.toVideo() }
     }
 
-    suspend fun channelVideos(channelUrl: String, max: Int = 3): List<VideoItem> =
-        withContext(Dispatchers.IO) {
-            val ex = ServiceList.YouTube.getChannelExtractor(channelUrl)
-            ex.fetchPage()
-            ex.initialPage.items.filterIsInstance<StreamInfoItem>().take(max).map { it.toVideo() }
-        }
+    /** Channel ke latest videos: channel naam se search karke usi channel ke videos filter karo */
+    suspend fun channelVideos(name: String, channelUrl: String, max: Int = 3): List<VideoItem> =
+        search(name).filter { it.channelUrl == channelUrl }.take(max)
 
     /** Video ka playable URL (HLS ho to best, warna progressive) */
     suspend fun resolve(url: String): String = withContext(Dispatchers.IO) {

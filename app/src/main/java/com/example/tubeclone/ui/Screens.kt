@@ -10,15 +10,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.item
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -35,7 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,8 +69,9 @@ fun HomeScreen(onPlay: (VideoItem) -> Unit) {
     var videos by remember { mutableStateOf<List<VideoItem>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
+    var retry by remember { mutableStateOf(0) }
 
-    LaunchedEffect(query) {
+    LaunchedEffect(query, retry) {
         loading = true
         error = null
         runCatching { Repo.search(query) }
@@ -115,7 +114,7 @@ fun HomeScreen(onPlay: (VideoItem) -> Unit) {
                 loading -> Loading()
                 error != null -> Column(Modifier.padding(16.dp)) {
                     Text("Error: $error", color = Color.White)
-                    TextButton(onClick = { query = query + " " }) { Text("Retry", color = RedYt) }
+                    TextButton(onClick = { retry++ }) { Text("Retry", color = RedYt) }
                 }
                 else -> LazyColumn {
                     items(videos, key = { it.url }) { v ->
@@ -136,9 +135,8 @@ fun ShortsScreen(onPlay: (VideoItem) -> Unit) {
 
     LaunchedEffect(Unit) {
         loading = true
-        shorts = runCatching { Repo.search("shorts") }
-            .getOrElse { emptyList() }
-            .filter { it.durationSec in 1..60 }
+        val all = runCatching { Repo.search("shorts") }.getOrDefault(emptyList())
+        shorts = all.filter { it.durationSec in 1..60 }
         loading = false
     }
 
@@ -210,7 +208,7 @@ fun SubsScreen(onPlay: (VideoItem) -> Unit) {
         if (subs.isEmpty()) return@LaunchedEffect
         loading = true
         feed = subs.flatMap { c ->
-            runCatching { Repo.channelVideos(c.url) }.getOrDefault(emptyList())
+            runCatching { Repo.channelVideos(c.name, c.url) }.getOrDefault(emptyList())
         }
         loading = false
     }
@@ -230,10 +228,8 @@ fun SubsScreen(onPlay: (VideoItem) -> Unit) {
                 modifier = Modifier.padding(16.dp)
             )
             loading -> Loading()
-            else -> Box(Modifier.weight(1f)) {
-                LazyColumn {
-                    items(feed, key = { it.url }) { v -> VideoCard(v) { onPlay(v) } }
-                }
+            else -> LazyColumn(Modifier.fillMaxSize()) {
+                items(feed, key = { it.url }) { v -> VideoCard(v) { onPlay(v) } }
             }
         }
     }
@@ -299,7 +295,13 @@ private fun ChannelRow(c: Channel, onUnsub: () -> Unit) {
         Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(c.name, color = Color.White, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            c.name,
+            color = Color.White,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
         TextButton(onClick = onUnsub) { Text("Unsubscribe", color = Grey) }
     }
 }
