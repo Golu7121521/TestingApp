@@ -1,6 +1,7 @@
 package com.newtube.player
 
 import android.content.pm.ActivityInfo
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -10,27 +11,37 @@ import android.widget.ImageButton
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
+import androidx.annotation.OptIn
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.exoplayer.source.MergingMediaSource
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.recyclerview.widget.LinearLayoutManager
 import coil.load
 import com.newtube.player.databinding.ActivityMainBinding
 import kotlinx.coroutines.launch
 
+@OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var feedAdapter: VideoFeedAdapter
     private lateinit var relatedAdapter: VideoFeedAdapter
     private var exoPlayer: ExoPlayer? = null
+    private lateinit var okHttpDataSourceFactory: OkHttpDataSource.Factory
 
     private var isFullscreen = false
     private val progressHandler = Handler(Looper.getMainLooper())
 
-    // Local lists for Library History & Subscriptions
     private val watchHistory = mutableListOf<VideoItem>()
     private val subscribedChannels = mutableSetOf<String>()
 
@@ -45,22 +56,39 @@ class MainActivity : AppCompatActivity() {
         setupSearchAndMiniPlayerControls()
         setupBackNavigation()
 
-        // Load initial Home feed (Trending India Videos via NewPipeExtractor)
+        // Load initial Home feed
         loadCategoryFeed("Trending India music gaming tech")
     }
 
     private fun setupExoPlayer() {
-        exoPlayer = ExoPlayer.Builder(this).build().also { player ->
-            binding.exoPlayerView.player = player
-            player.addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    val iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
-                    binding.miniPlayerPlayPause.setImageResource(iconRes)
-                }
-            })
-        }
+        // Use OkHttpDataSource with proper User-Agent so googlevideo.com CDN never blocks stream playback (HTTP 403 fix)
+        okHttpDataSourceFactory = OkHttpDataSource.Factory(NewPipeOkHttpDownloader.instance.client)
+            .setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0")
 
-        // Bind custom buttons inside the YouTube Player Overlay
+        val mediaSourceFactory = DefaultMediaSourceFactory(this)
+            .setDataSourceFactory(okHttpDataSourceFactory)
+
+        exoPlayer = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .build()
+            .also { player ->
+                binding.exoPlayerView.player = player
+                player.addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        val iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play
+                        binding.miniPlayerPlayPause.setImageResource(iconRes)
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "Playback error: ${error.errorCodeName}",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                })
+            }
+
         val btnMinimize = binding.exoPlayerView.findViewById<ImageButton>(R.id.btn_minimize_player)
         val btnFullscreen = binding.exoPlayerView.findViewById<ImageButton>(R.id.btn_fullscreen)
 
@@ -72,7 +100,6 @@ class MainActivity : AppCompatActivity() {
             toggleFullscreen()
         }
 
-        // Update thin red progress bar on bottom MiniPlayer every second
         progressHandler.post(object : Runnable {
             override fun run() {
                 exoPlayer?.let { player ->
@@ -108,7 +135,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupBottomNavigation() {
         binding.bottomNavigation.setOnItemSelectedListener { item ->
-            // If user taps a bottom tab while player is expanded, dock it into the bottom MiniPlayer!
             if (binding.expandedPlayerSheet.visibility == View.VISIBLE) {
                 minimizeToBottomMiniPlayer()
             }
@@ -135,7 +161,7 @@ class MainActivity : AppCompatActivity() {
                     if (watchHistory.isNotEmpty()) {
                         binding.feedLoadingSpinner.visibility = View.GONE
                         feedAdapter.submitList(watchHistory.toList())
-                        Toast.makeText(this, "Showing Watch History (${watchHistory.size} videos)", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this, "Watch History (${watchHistory.size} videos)", Toast.LENGTH_SHORT).show()
                     } else {
                         loadCategoryFeed("Hindi songs lofi mix")
                     }
@@ -164,7 +190,6 @@ class MainActivity : AppCompatActivity() {
             } else false
         }
 
-        // Clicking Bottom MiniPlayer expands back to full YouTube Player sheet
         binding.miniPlayerBar.setOnClickListener {
             expandFromMiniPlayer()
         }
@@ -209,41 +234,77 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun playVideo(video: VideoItem) {
-        // Save to Library watch history
         watchHistory.removeAll { it.videoUrl == video.videoUrl }
         watchHistory.add(0, video)
 
-        // Show Expanded Player Sheet and hide MiniPlayer bar
         binding.miniPlayerBar.visibility = View.GONE
         binding.expandedPlayerSheet.visibility = View.VISIBLE
 
         binding.expandedVideoTitle.text = video.title
         binding.expandedChannelName.text = video.uploaderName
-        binding.expandedVideoMeta.text = "Loading stream via NewPipeExtractor..."
+        binding.expandedVideoMeta.text = "Extracting stream..."
         binding.exoPlayerView.findViewById<TextView>(R.id.player_overlay_title)?.text = video.title
 
-        // Populate MiniPlayer details in advance
         binding.miniPlayerTitle.text = video.title
         binding.miniPlayerChannel.text = video.uploaderName
         binding.miniPlayerThumb.load(video.thumbnailUrl)
 
-        lifecycleScope.launch {
-            val details = NewPipeRepository.extractStreamDetails(video.videoUrl)
-            if (details != null) {
-                binding.expandedVideoTitle.text = details.title
-                binding.expandedChannelName.text = details.uploaderName
-                binding.expandedVideoMeta.text = details.viewsAndDate
-                relatedAdapter.submitList(details.relatedItems)
+        exoPlayer?.stop()
 
-                exoPlayer?.apply {
-                    setMediaItem(MediaItem.fromUri(details.streamUrl))
-                    prepare()
-                    playWhenReady = true
+        lifecycleScope.launch {
+            when (val result = NewPipeRepository.extractStreamDetails(video.videoUrl)) {
+                is StreamExtractionResult.Success -> {
+                    val details = result.data
+                    binding.expandedVideoTitle.text = details.title
+                    binding.expandedChannelName.text = details.uploaderName
+                    binding.expandedVideoMeta.text = details.viewsAndDate
+                    relatedAdapter.submitList(details.relatedItems)
+
+                    startExoPlayerStream(details)
                 }
-            } else {
-                Toast.makeText(this@MainActivity, "Failed to extract video stream", Toast.LENGTH_SHORT).show()
+                is StreamExtractionResult.Error -> {
+                    binding.expandedVideoMeta.text = "Error: ${result.message}"
+                    Toast.makeText(
+                        this@MainActivity,
+                        "Stream Error: ${result.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
             }
         }
+    }
+
+    private fun startExoPlayerStream(details: PlayedVideoStream) {
+        val player = exoPlayer ?: return
+        val videoUri = Uri.parse(details.videoStreamUrl)
+
+        val mediaSource = when {
+            details.isHls -> {
+                HlsMediaSource.Factory(okHttpDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(videoUri))
+            }
+            details.isDashManifest -> {
+                DashMediaSource.Factory(okHttpDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(videoUri))
+            }
+            !details.audioStreamUrl.isNullOrEmpty() -> {
+                // Merge Adaptive Video-Only stream + Audio-Only stream seamlessly
+                val videoSource = ProgressiveMediaSource.Factory(okHttpDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(videoUri))
+                val audioUri = Uri.parse(details.audioStreamUrl)
+                val audioSource = ProgressiveMediaSource.Factory(okHttpDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(audioUri))
+                MergingMediaSource(videoSource, audioSource)
+            }
+            else -> {
+                ProgressiveMediaSource.Factory(okHttpDataSourceFactory)
+                    .createMediaSource(MediaItem.fromUri(videoUri))
+            }
+        }
+
+        player.setMediaSource(mediaSource)
+        player.prepare()
+        player.playWhenReady = true
     }
 
     private fun minimizeToBottomMiniPlayer() {

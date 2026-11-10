@@ -10,10 +10,9 @@ android {
     defaultConfig {
         applicationId "com.newtube.player"
         minSdk 24
-        // Target and tested specifically for Android 10 (API 29 - Redmi 9 Prime) up to Android 14
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 2
+        versionName "1.1.0"
 
         multiDexEnabled true
     }
@@ -30,7 +29,6 @@ android {
     }
 
     compileOptions {
-        // Core library desugaring required by NewPipeExtractor on Android 10 (API 29)
         coreLibraryDesugaringEnabled true
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
@@ -57,21 +55,25 @@ dependencies {
     implementation 'androidx.swiperefreshlayout:swiperefreshlayout:1.1.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.7.0'
 
-    // NewPipe Extractor Library (Official TeamNewPipe GitHub Repo via JitPack)
-    implementation 'com.github.TeamNewPipe:NewPipeExtractor:v0.24.2'
+    // Latest TeamNewPipe Extractor from GitHub JitPack (dev-SNAPSHOT has the latest YouTube player JS decryption fixes)
+    implementation 'com.github.TeamNewPipe:NewPipeExtractor:dev-SNAPSHOT'
 
-    // OkHttp for NewPipe Downloader implementation
+    // Mozilla Rhino JS Engine (Required by NewPipeExtractor on Android to decrypt YouTube stream URLs & throttling n-params)
+    implementation 'org.mozilla:rhino:1.7.14'
+
+    // OkHttp for NewPipe Downloader & ExoPlayer DataSource
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
 
-    // Media3 ExoPlayer for YouTube-style Video Playback & Controls
+    // Media3 ExoPlayer (with DASH, HLS, and OkHttp DataSource for MergingMediaSource video+audio playback)
     implementation 'androidx.media3:media3-exoplayer:1.3.0'
     implementation 'androidx.media3:media3-exoplayer-dash:1.3.0'
     implementation 'androidx.media3:media3-exoplayer-hls:1.3.0'
+    implementation 'androidx.media3:media3-datasource-okhttp:1.3.0'
     implementation 'androidx.media3:media3-ui:1.3.0'
 
     // Coil for loading YouTube thumbnails & Channel avatars
     implementation 'io.coil-kt:coil:2.6.0'
 
-    // Coroutines for background stream extraction
+    // Coroutines
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
 }

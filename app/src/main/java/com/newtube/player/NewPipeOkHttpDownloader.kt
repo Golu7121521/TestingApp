@@ -10,15 +10,17 @@ import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.util.concurrent.TimeUnit
 
 /**
- * Custom Downloader implementation required by NewPipeExtractor.
- * Uses OkHttp3 to fetch YouTube pages and stream manifests without YouTube API keys.
+ * Official-style OkHttp Downloader for NewPipeExtractor.
+ * Preserves NewPipe's internal Innertube headers (User-Agent, X-YouTube-Client-Name, Origin, etc.)
+ * and passes the SOCS cookie to bypass EU/Global consent walls.
  */
 class NewPipeOkHttpDownloader : Downloader() {
 
-    private val client: OkHttpClient = OkHttpClient.Builder()
+    val client: OkHttpClient = OkHttpClient.Builder()
         .readTimeout(30, TimeUnit.SECONDS)
         .connectTimeout(30, TimeUnit.SECONDS)
         .followRedirects(true)
+        .followSslRedirects(true)
         .build()
 
     override fun execute(request: NPRequest): Response {
@@ -27,20 +29,33 @@ class NewPipeOkHttpDownloader : Downloader() {
         val headers = request.headers()
         val dataToSend = request.dataToSend()
 
-        val requestBody = dataToSend?.toRequestBody(null)
+        val requestBody = if (dataToSend != null) {
+            dataToSend.toRequestBody(null)
+        } else if (httpMethod == "POST" || httpMethod == "PUT") {
+            ByteArray(0).toRequestBody(null)
+        } else {
+            null
+        }
 
         val requestBuilder = Request.Builder()
             .url(url)
             .method(httpMethod, requestBody)
-            .header(
-                "User-Agent",
-                "Mozilla/5.0 (Linux; Android 10; M2004J19I) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Mobile Safari/537.36"
-            )
 
+        // Default desktop User-Agent ONLY if NewPipeExtractor didn't specify its own Innertube client User-Agent
+        requestBuilder.header(
+            "User-Agent",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:128.0) Gecko/20100101 Firefox/128.0"
+        )
+        // Add YouTube consent cookie so stream extraction is never blocked by consent pages
+        requestBuilder.header("Cookie", "SOCS=CAI; PREF=hl=en&gl=IN")
+
+        // Apply all headers set by NewPipeExtractor (this overrides User-Agent when NewPipe uses IOS/ANDROID Innertube clients)
         for ((headerName, headerValueList) in headers) {
-            requestBuilder.removeHeader(headerName)
-            for (headerValue in headerValueList) {
-                requestBuilder.addHeader(headerName, headerValue)
+            if (headerValueList.isNotEmpty()) {
+                requestBuilder.removeHeader(headerName)
+                for (headerValue in headerValueList) {
+                    requestBuilder.addHeader(headerName, headerValue)
+                }
             }
         }
 
@@ -59,5 +74,9 @@ class NewPipeOkHttpDownloader : Downloader() {
             bodyString,
             latestUrl
         )
+    }
+
+    companion object {
+        val instance: NewPipeOkHttpDownloader by lazy { NewPipeOkHttpDownloader() }
     }
 }
