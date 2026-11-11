@@ -90,18 +90,19 @@ public class BoostOverlayService extends Service {
         wm = (WindowManager) getSystemService(WINDOW_SERVICE);
 
         bubble = new TextView(this);
-        bubble.setText("⚡\nBOOST");
+        bubble.setText("⚡");
         bubble.setTextColor(Color.WHITE);
-        bubble.setTextSize(12);
+        bubble.setTextSize(11);
         bubble.setGravity(Gravity.CENTER);
-        bubble.setTypeface(null, android.graphics.Typeface.BOLD);
+        bubble.setPadding(0, 0, 0, 0);
+        bubble.setAlpha(0.3f); // 70% transparent
 
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.OVAL);
         bg.setColor(0xDDFF5722);
         bubble.setBackground(bg);
 
-        int size = dp(68);
+        int size = dp(23); // pehle 68dp tha, ab 1/3
         lp = new WindowManager.LayoutParams(
                 size,
                 size,
@@ -167,13 +168,13 @@ public class BoostOverlayService extends Service {
         final long before = BoostUtil.availRam(this);
         final int killed = BoostUtil.killBackgroundApps(this, gamePkg);
 
-        bubble.setText("✔\n" + killed);
+        bubble.setText("✔");
         handler.postDelayed(() -> {
             long freed = Math.max(0, BoostUtil.availRam(this) - before) / BoostUtil.MB;
             Toast.makeText(this,
                     "Boost: " + killed + " apps band, ~" + freed + " MB free",
                     Toast.LENGTH_SHORT).show();
-            if (bubble != null) bubble.setText("⚡\nBOOST");
+            if (bubble != null) bubble.setText("⚡");
         }, 1500);
     }
 
