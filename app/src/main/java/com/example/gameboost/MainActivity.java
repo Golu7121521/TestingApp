@@ -1,14 +1,16 @@
 package com.example.gameboost;
 
 import android.app.Activity;
-import android.app.ActivityManager;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
@@ -26,7 +28,6 @@ public class MainActivity extends Activity {
     private static final String PREFS = "gameboost_prefs";
     private static final String KEY_GAMES = "games";
     private static final String KEY_SELECTED = "selected";
-    private static final long MB = 1024L * 1024L;
 
     private SharedPreferences prefs;
     private PackageManager pm;
@@ -184,9 +185,27 @@ public class MainActivity extends Activity {
             return;
         }
 
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        final long before = availRam(am);
-        final int killed = killBackgroundApps(am, game);
+        // Floating button ke liye "Display over other apps" permission chahiye
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this,
+                    "Permission allow karo (Display over other apps), phir BOOST & PLAY dabao",
+                    Toast.LENGTH_LONG).show();
+            startActivity(new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+            return;
+        }
+
+        final long before = BoostUtil.availRam(this);
+        final int killed = BoostUtil.killBackgroundApps(this, game);
+
+        // Floating boost button start karo (game ke upar dikhega)
+        Intent overlay = new Intent(this, BoostOverlayService.class);
+        overlay.putExtra(BoostOverlayService.EXTRA_GAME, game);
+        if (Build.VERSION.SDK_INT >= 26) {
+            startForegroundService(overlay);
+        } else {
+            startService(overlay);
+        }
 
         Intent launch = pm.getLaunchIntentForPackage(game);
         if (launch == null) {
@@ -196,10 +215,8 @@ public class MainActivity extends Activity {
             startActivity(launch);
         }
 
-        // Memory settle hone ke baad result dikhao
         ramText.postDelayed(() -> {
-            long after = availRam(am);
-            long freed = Math.max(0, after - before) / MB;
+            long freed = Math.max(0, BoostUtil.availRam(this) - before) / BoostUtil.MB;
             Toast.makeText(this,
                     "Boost done: " + killed + " apps band, ~" + freed + " MB free hua",
                     Toast.LENGTH_LONG).show();
@@ -207,30 +224,8 @@ public class MainActivity extends Activity {
         }, 1500);
     }
 
-    /** Game aur Game Booster ko chhod kar baaki sab background apps ko kill karta hai. */
-    private int killBackgroundApps(ActivityManager am, String keepPkg) {
-        int count = 0;
-        String self = getPackageName();
-        for (ApplicationInfo ai : pm.getInstalledApplications(0)) {
-            String p = ai.packageName;
-            if (p.equals(keepPkg) || p.equals(self)) continue;
-            if (p.equals("android") || p.startsWith("com.android.systemui")) continue;
-            am.killBackgroundProcesses(p);
-            count++;
-        }
-        return count;
-    }
-
-    private long availRam(ActivityManager am) {
-        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
-        am.getMemoryInfo(mi);
-        return mi.availMem;
-    }
-
     private void updateRamText() {
-        ActivityManager am = (ActivityManager) getSystemService(ACTIVITY_SERVICE);
-        ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
-        am.getMemoryInfo(mi);
-        ramText.setText("RAM free: " + (mi.availMem / MB) + " MB / " + (mi.totalMem / MB) + " MB");
+        ramText.setText("RAM free: " + (BoostUtil.availRam(this) / BoostUtil.MB) + " MB / "
+                + (BoostUtil.totalRam(this) / BoostUtil.MB) + " MB");
     }
 }
