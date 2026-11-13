@@ -11,5 +11,5 @@ android {
 }
 
 dependencies {
-    implementation("io.github.rosemoe:editor:0.23.4")
+    implementation("io.github.rosemoe:editor:0.23.7")
 }
