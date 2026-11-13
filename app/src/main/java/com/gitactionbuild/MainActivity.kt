@@ -137,6 +137,8 @@ class MainActivity : Activity() {
     val TW = Color.parseColor("#E6FFEE")   // near-white: commands / running
     val PROMPT = arrayOf("root@gab" to TG, ":" to TW, "~" to TBL, "# " to TW)
     val typedSeen = HashSet<String>()
+    val JCOL = intArrayOf(Color.parseColor("#4DD0E1"), Color.parseColor("#C792EA"), Color.parseColor("#FFB86C"),
+        Color.parseColor("#FF79C6"), Color.parseColor("#61AFEF"), Color.parseColor("#B8E986"))
     val curViews = ArrayList<TextView>()
     var lastReleaseTag = ""
 
@@ -721,14 +723,6 @@ class MainActivity : Activity() {
 
     fun tmono(cs: CharSequence, size: Float = 13f) = mono("", size, TG).also { typeIn(it, cs) }
 
-    fun promptRow(): LinearLayout {
-        val r = LinearLayout(this).apply { setPadding(0, dp(10), 0, dp(24)) }
-        val p = mono("", 13f, TG); p.text = mspan(*PROMPT)
-        val c = mono("█", 13f, TG); curViews.add(c)
-        r.addView(p); r.addView(c)
-        return r
-    }
-
     // colorize raw CI log lines by meaning
     fun colorLog(t: String): CharSequence {
         val sb = SpannableStringBuilder()
@@ -756,22 +750,23 @@ class MainActivity : Activity() {
         setOnClickListener { f() }
     }
 
-    // full-screen hacker terminal: typed prompt + command, blinking cursor, spinning [ - ] tags
+    var procView: TextView? = null
+    fun hideProc() = ui { procView?.visibility = View.GONE }
+
+    // full-screen hacker terminal: typed lines, spinning [ - ] tags, "Processing....." footer
     fun term(cmd: String, my: Int, close: () -> Unit): LinearLayout {
         onBack = close
         root.removeAllViews(); root.gravity = Gravity.TOP
-        root.setBackgroundColor(TB); bars(true); spinViews.clear(); curViews.clear(); typedSeen.clear()
+        root.setBackgroundColor(TB); bars(true); spinViews.clear(); typedSeen.clear()
 
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(10)) }
-        val hdr = mono("", 13f, TG).apply { setSingleLine() }
-        val cur = mono("█", 13f, TG)
-        top.addView(hdr); top.addView(cur)
-        top.addView(View(this), lp(0, 1, 1f))
+        val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(0, dp(4), 0, dp(8)) }
         top.addView(mono("[x]", 15f, TR).apply { setPadding(dp(12), dp(4), dp(4), dp(4)); setOnClickListener { close() } })
         root.addView(top)
-        root.addView(View(this).apply { setBackgroundColor(TD) }, lp(-1, dp(1)).apply { bottomMargin = dp(8) })
         val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         root.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
+        val pv = mono("", 13f, TA).apply { setPadding(0, dp(10), 0, dp(6)) }
+        procView = pv
+        root.addView(pv)
         anim(99)
 
         val fr = "|/-\\"
@@ -780,11 +775,8 @@ class MainActivity : Activity() {
             override fun run() {
                 if (my != live) return
                 tick++
-                hdr.text = mspan(*PROMPT, cmd.substring(0, minOf(tick, cmd.length)) to TW)
-                val on = (tick / 5) % 2 == 0
-                cur.text = if (on) "█" else " "
-                for (c in curViews) c.text = if (on) "█" else " "
                 val f = fr[(tick / 2) % 4]
+                pv.text = mspan("$f " to TG, "Processing" to TA, ".".repeat((tick / 4) % 6) to TG)
                 for (s in spinViews) s.text = "[ $f ]"
                 h.postDelayed(this, 90)
             }
@@ -831,7 +823,7 @@ class MainActivity : Activity() {
         row.addView(tbtn("[ copy error ]", TR) { copyText("error", msg) }, lp(-2, -2).apply { rightMargin = dp(8) })
         row.addView(tbtn("[ back ]", TG) { live++; browse(repo, repo) })
         l.addView(row, lp(-2, -2).apply { bottomMargin = dp(8) })
-        l.addView(promptRow())
+        hideProc()
         scrollEnd(l)
     }
 
@@ -875,17 +867,17 @@ class MainActivity : Activity() {
                 val head = JSONObject(api("GET", "/repos/$full/git/ref/heads/$br")).getJSONObject("object").getString("sha")
                 tdone(r2, true, mspan("HEAD " to TD, head.take(7) to TM))
                 val all = files(repo)
-                val r3 = tstep(l, "uploading blobs 0/" + all.size)
                 val tree = JSONArray()
                 for ((n, f) in all.withIndex()) {
                     if (my != live) return@bg
                     val rel = f.relativeTo(repo).path
-                    tset(r3, mspan("blob " to TD, "${n + 1}/${all.size}" to TA, "  " to TD, rel to TBL))
+                    val cnt = "(" + (n + 1) + "/" + all.size + ") "
+                    val row = tstep(l, mspan(cnt to TA, "uploading " to TW, rel to TBL))
                     val b = JSONObject(api("POST", "/repos/$full/git/blobs", JSONObject()
                         .put("content", Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)).put("encoding", "base64").toString())).getString("sha")
                     tree.put(JSONObject().put("path", rel).put("mode", "100644").put("type", "blob").put("sha", b))
+                    tdone(row, true, mspan(cnt to TA, rel to TBL, "  " + sz(f) to TD))
                 }
-                tdone(r3, true, mspan("uploaded " to TD, all.size.toString() to TA, " blobs" to TD))
                 val r4 = tstep(l, "creating tree")
                 val t = JSONObject(api("POST", "/repos/$full/git/trees", JSONObject().put("tree", tree).toString())).getString("sha")
                 tdone(r4, true, mspan("tree " to TD, t.take(7) to TM))
@@ -935,7 +927,8 @@ class MainActivity : Activity() {
                 jst == "in_progress" -> TA
                 else -> TD
             }
-            val jl = mspan("$ " to TG, "job::" to TD, jname to TC)
+            val jcolr = JCOL[k % JCOL.size]
+            val jl = mspan("$ " to TG, "job::" to TD, jname to jcolr)
             if (jc.isNotEmpty()) { jl.append(mspan("  => " to TD, jc.uppercase() to jcol)) }
             l.addView(tmono(jl).apply { setPadding(0, dp(10), 0, dp(4)) })
 
@@ -949,10 +942,10 @@ class MainActivity : Activity() {
                     val isRunning = stStatus == "in_progress"
                     val isFailed = stConcl == "failure"
 
-                    if (isRunning) l.addView(tline("[ - ]", TA, name, TW, true))
+                    if (isRunning) l.addView(tline("[ - ]", TA, name, jcolr, true))
                     else if (stStatus == "completed") {
                         when (stConcl) {
-                            "success" -> l.addView(tline("[ OK ]", TG, name, TT))
+                            "success" -> l.addView(tline("[ OK ]", TG, name, jcolr))
                             "failure" -> l.addView(tline("[FAIL]", TR, name, TR))
                             else -> l.addView(tline("[SKIP]", TD, name, TD))
                         }
@@ -964,7 +957,7 @@ class MainActivity : Activity() {
                             shown = true
                             l.addView(mono("", 10.5f, TGL).apply {
                                 text = colorLog(lg)
-                                background = box(TLOG, TD, 6)
+                                background = box(TLOG, jcolr, 6)
                                 setPadding(dp(10), dp(8), dp(10), dp(8))
                                 setHorizontallyScrolling(true)
                             }, lp(-1, -2).apply { topMargin = dp(4); bottomMargin = dp(6) })
@@ -1009,7 +1002,6 @@ class MainActivity : Activity() {
                 else mspan("$ " to TR, "exit " to TW, "1" to TR, "  // build failed" to TD)
             ).apply { setPadding(0, dp(12), 0, dp(0)) })
         }
-        l.addView(promptRow())
 
         sv?.post { if (atBottom) sv.fullScroll(View.FOCUS_DOWN) else sv.scrollTo(0, y) }
     }
@@ -1064,9 +1056,11 @@ class MainActivity : Activity() {
                         }
                         ui { if (my == live) draw(l, r, js, artifactState, full) }
                     }
+                    hideProc()
                     return@bg
                 }
             }
+            hideProc()
             ui { if (my == live) l.addView(tmono(mspan("$ " to TA, "timeout" to TA, "  // stopped watching after 30 min" to TD), 12f)) }
         }
     }
