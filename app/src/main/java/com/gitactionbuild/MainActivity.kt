@@ -13,212 +13,19 @@ import android.text.*
 import android.text.style.ForegroundColorSpan
 import android.util.Base64
 import android.util.TypedValue
+import io.github.rosemoe.sora.widget.CodeEditor
+import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import kotlin.math.abs
 import android.view.*
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
-import android.widget.*o
+import android.widget.*
 import org.json.*
 import java.io.*
 import java.net.*
 import java.util.concurrent.ConcurrentHashMap
 import java.util.zip.ZipInputStream
-
-class Hl(c: Int) : ForegroundColorSpan(c)
-
-class CodeView(c: Context) : EditText(c) {
-    val gp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
-    val lnp = Paint().apply { strokeWidth = 2f }
-    val bgp = Paint().apply { style = Paint.Style.FILL }
-    val flp = Paint().apply { style = Paint.Style.FILL }
-    var gw = 0f; var dg = 0; var gc = 0
-    val d = resources.displayMetrics.density
-    var lineNo = IntArray(0); var lastL: Layout? = null
-    var accent = Color.parseColor("#3B82F6")   // current line glow color
-    var flash = 0f                              // 0..1, green flash after save
-
-    // ---- touch: one-finger fling scroll, two-finger pinch zoom ----
-    private val slop = ViewConfiguration.get(c).scaledTouchSlop
-    private val minFling = ViewConfiguration.get(c).scaledMinimumFlingVelocity
-    private val scroller = OverScroller(c)
-    private var tracker: VelocityTracker? = null
-    private var downX = 0f; private var downY = 0f
-    private var lastX = 0f; private var lastY = 0f
-    private var scrolling = false
-    private var multi = false
-    private var zoom = 0f
-    private var zoomQueued = false
-
-    init {
-        setHorizontallyScrolling(true)
-        setBackgroundColor(Color.TRANSPARENT)
-        setPadding(0, dp(8), dp(8), dp(8))
-    }
-
-    fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
-
-    // runs at most once per frame, so a pinch re-lays out the text at most 60 times a second
-    private val zoomStep = object : Runnable {
-        override fun run() {
-            zoomQueued = false
-            setTextSize(TypedValue.COMPLEX_UNIT_PX, zoom)
-            pad(true)
-        }
-    }
-
-    private val sd = ScaleGestureDetector(c, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScaleBegin(s: ScaleGestureDetector): Boolean {
-            zoom = textSize
-            return true
-        }
-        override fun onScale(s: ScaleGestureDetector): Boolean {
-            zoom = (zoom * s.scaleFactor).coerceIn(8 * d, 40 * d)
-            if (!zoomQueued) { zoomQueued = true; postOnAnimation(zoomStep) }
-            return true
-        }
-    })
-
-    // keeps the fling going frame by frame until the scroller stops
-    private val flingStep = object : Runnable {
-        override fun run() {
-            if (scroller.computeScrollOffset()) {
-                scrollTo(scroller.currX, scroller.currY)
-                postOnAnimation(this)
-            }
-        }
-    }
-
-    private fun maxX() = (computeHorizontalScrollRange() - computeHorizontalScrollExtent()).coerceAtLeast(0)
-    private fun maxY() = (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
-
-    // tells the EditText to forget the touch so a drag does not also place the cursor or select text
-    private fun cancelEditorTouch(e: MotionEvent) {
-        val cancel = MotionEvent.obtain(e)
-        cancel.action = MotionEvent.ACTION_CANCEL
-        super.onTouchEvent(cancel)
-        cancel.recycle()
-    }
-
-    fun pad(force: Boolean = false) {
-        val digits = (text.count { it == '\n' } + 1).toString().length.coerceAtLeast(3)
-        if (!force && digits == dg) return
-        dg = digits; gp.textSize = textSize * 0.85f
-        gw = gp.measureText("9".repeat(digits)) + 16 * d
-        setPadding((gw + 8 * d).toInt(), dp(12), dp(12), dp(12))
-    }
-
-    override fun onDraw(cv: Canvas) {
-        // green flash behind the code after save
-        if (flash > 0f) {
-            flp.color = context.getColor(R.color.ok)
-            flp.alpha = (flash * 60).toInt()
-            cv.drawRect(scrollX.toFloat(), scrollY.toFloat(), scrollX + width.toFloat(), scrollY + height.toFloat(), flp)
-        }
-
-        bgp.color = gc and 0x11FFFFFF
-        cv.drawRect(scrollX.toFloat(), 0f, scrollX + gw + 4 * d, height.toFloat() + scrollY, bgp)
-
-        val l = layout
-        if (l != null) {
-            if (lastL !== l || lineNo.size != l.lineCount) {
-                lastL = l; val t = text; val a = IntArray(l.lineCount); var n = 1
-                for (i in 0 until l.lineCount) { if (i > 0 && t[l.getLineStart(i) - 1] == '\n') n++; a[i] = n }
-                lineNo = a
-            }
-            val pt = compoundPaddingTop
-            val clip = cv.clipBounds
-            val f = l.getLineForVertical((clip.top - pt).coerceAtLeast(0))
-            val e = l.getLineForVertical((clip.bottom - pt).coerceAtLeast(0))
-            val focused = hasFocus()
-            val cur = if (focused) lineNo.getOrElse(l.getLineForOffset(selectionStart.coerceIn(0, text.length))) { -1 } else -1
-
-            // highlight every visual row that belongs to the cursor's logical line
-            if (cur > 0) {
-                bgp.color = Color.argb(34, Color.red(accent), Color.green(accent), Color.blue(accent))
-                for (i in f..e) {
-                    if (lineNo[i] == cur) {
-                        cv.drawRect(scrollX + gw, pt + l.getLineTop(i).toFloat(), scrollX + width.toFloat(), pt + l.getLineBottom(i).toFloat(), bgp)
-                    }
-                }
-            }
-
-            gp.color = gc; gp.isFakeBoldText = false; gp.clearShadowLayer()
-            lnp.color = gc and 0x44FFFFFF
-            for (i in f..e) {
-                if (i == 0 || text[l.getLineStart(i) - 1] == '\n') {
-                    val isCur = cur > 0 && lineNo[i] == cur
-                    gp.color = if (isCur) accent else gc
-                    gp.isFakeBoldText = isCur
-                    if (isCur) gp.setShadowLayer(10f, 0f, 0f, accent) else gp.clearShadowLayer()
-                    cv.drawText(lineNo[i].toString(), scrollX + gw - 6 * d, l.getLineBaseline(i) + pt.toFloat(), gp)
-                }
-            }
-            gp.clearShadowLayer()
-            cv.drawLine(scrollX + gw, clip.top.toFloat(), scrollX + gw, clip.bottom.toFloat(), lnp)
-        }
-        super.onDraw(cv)
-    }
-
-    override fun onTouchEvent(e: MotionEvent): Boolean {
-        sd.onTouchEvent(e)
-        val a = e.actionMasked
-
-        // pinch: two or more fingers belong to the zoom gesture
-        if (sd.isInProgress || e.pointerCount > 1) {
-            if (!multi) cancelEditorTouch(e)
-            multi = true
-            scrolling = false
-            scroller.abortAnimation()
-            return true
-        }
-        if (multi) {
-            if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) multi = false
-            return true
-        }
-
-        when (a) {
-            MotionEvent.ACTION_DOWN -> {
-                scroller.abortAnimation()
-                downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
-                scrolling = false
-                tracker?.recycle()
-                tracker = VelocityTracker.obtain().also { it.addMovement(e) }
-            }
-            MotionEvent.ACTION_MOVE -> {
-                tracker?.addMovement(e)
-                if (!scrolling && (abs(e.x - downX) > slop || abs(e.y - downY) > slop)) {
-                    scrolling = true
-                    cancelEditorTouch(e)
-                }
-                if (scrolling) {
-                    val nx = (scrollX + (lastX - e.x)).toInt().coerceIn(0, maxX())
-                    val ny = (scrollY + (lastY - e.y)).toInt().coerceIn(0, maxY())
-                    scrollTo(nx, ny)
-                    lastX = e.x; lastY = e.y
-                    return true
-                }
-            }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                if (scrolling) {
-                    scrolling = false
-                    val t = tracker
-                    t?.addMovement(e)
-                    t?.computeCurrentVelocity(1000)
-                    val vx = -(t?.xVelocity ?: 0f)
-                    val vy = -(t?.yVelocity ?: 0f)
-                    // a fast flick keeps moving after the finger is lifted
-                    if (abs(vx) > minFling || abs(vy) > minFling) {
-                        scroller.fling(scrollX, scrollY, vx.toInt(), vy.toInt(), 0, maxX(), 0, maxY())
-                        postOnAnimation(flingStep)
-                    }
-                    return true
-                }
-            }
-        }
-        return super.onTouchEvent(e)
-    }
-}
 
 class MainActivity : Activity() {
     val base = File("/storage/emulated/0/GitActonBuild")
@@ -266,13 +73,6 @@ class MainActivity : Activity() {
     val curViews = ArrayList<TextView>()
     var lastReleaseTag = ""
     var procView: TextView? = null
-
-    val KW = Regex("\\b(class|fun|val|var|def|function|return|if|else|for|while|import|package|public|private|protected|static|void|int|new|true|false|null|const|let|async|await|try|catch|from|in|is|when|override|this|echo|run|break|continue)\\b")
-    val NUM = Regex("\\b\\d+(\\.\\d+)?\\b")
-    val STR = Regex("\"[^\"\\n]*\"|'[^'\\n]*'")
-    val CMT = Regex("//.*|/\\*[\\s\\S]*?\\*/|#.*")
-    val TY = Regex("\\b[A-Z][a-zA-Z0-9_]*\\b")
-    val FN = Regex("\\b[a-z_][a-zA-Z0-9_]*(?=\\s*\\()")
 
     // ---------- helpers ----------
     val isNight get() = (resources.configuration.uiMode and 0x30) == 0x20
@@ -841,77 +641,86 @@ class MainActivity : Activity() {
         }
     }
 
-    // ---------- code editor ----------
-    fun hl(e: Editable) {
-        for (s in e.getSpans(0, e.length, Hl::class.java)) e.removeSpan(s)
-        if (e.length > 200000) return
-        val t = e.toString()
-        fun mark(r: Regex, c: Int) { for (m in r.findAll(t)) e.setSpan(Hl(c), m.range.first, m.range.last + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
-
-        mark(FN, col(R.color.fn))
-        mark(TY, col(R.color.ty))
-        mark(KW, col(R.color.kw))
-        mark(NUM, col(R.color.nu))
-        mark(STR, col(R.color.st))
-        mark(CMT, col(R.color.cm))
+    // ---------- code editor (Sora Editor) ----------
+    fun makeEditor(text: String): CodeEditor {
+        val scheme = EditorColorScheme()
+        scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, col(R.color.bg))
+        scheme.setColor(EditorColorScheme.TEXT_NORMAL, col(R.color.fg))
+        scheme.setColor(EditorColorScheme.LINE_NUMBER, col(R.color.muted))
+        scheme.setColor(EditorColorScheme.LINE_NUMBER_PANEL, col(R.color.bg))
+        scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.argb(34, 59, 130, 246))
+        val ed = CodeEditor(this)
+        ed.setColorScheme(scheme)
+        ed.setTypefaceText(Typeface.MONOSPACE)
+        ed.setTextSizePx(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 13f, resources.displayMetrics))
+        ed.setLineNumberEnabled(true)
+        ed.setText(text)
+        return ed
     }
 
     fun edit(repo: File, dir: File, f: File) {
         if (f.length() > 400000) { alert("Error", "File is too large to edit"); return }
-        var last = f.readText(); var silent = false
-        val undo = ArrayList<String>(); val redo = ArrayList<String>()
-
-        val cv = CodeView(this).apply {
-            setText(last); typeface = Typeface.MONOSPACE; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-            setTextColor(col(R.color.fg)); gravity = Gravity.TOP; gc = col(R.color.muted)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            pad(true)
-            accent = col(R.color.p1)
-            layoutParams = FrameLayout.LayoutParams(-2, -2)
-        }
-        hl(cv.text)
-        val commit = Runnable {
-            val cur = cv.text.toString()
-            if (cur != last) { undo.add(last); if (undo.size > 200) undo.removeAt(0); last = cur; redo.clear() }
-            hl(cv.text)
-        }
-        cv.addTextChangedListener(object : TextWatcher {
-            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            override fun afterTextChanged(s: Editable?) { if (!silent) { h.removeCallbacks(commit); h.postDelayed(commit, 500) }; cv.pad() }
-        })
-        fun flush() { h.removeCallbacks(commit); commit.run() }
-        fun put(s: String) { silent = true; cv.setText(s); silent = false; last = s; hl(cv.text); cv.pad(true) }
-
-        // container for the code area; the save toast slides up inside it
+        val ed = makeEditor(f.readText())
         val frame = FrameLayout(this).apply { layoutParams = lp(-1, 0, 1f) }
+        // green flash over the editor after save; the view does not take touches
+        val flashView = View(this).apply { setBackgroundColor(col(R.color.ok)); alpha = 0f }
+        frame.addView(ed, FrameLayout.LayoutParams(-1, -1))
+        frame.addView(flashView, FrameLayout.LayoutParams(-1, -1))
 
         fun flashSave() {
-            cv.flash = 1f
-            ValueAnimator.ofFloat(1f, 0f).apply {
-                duration = 900
-                addUpdateListener { cv.flash = it.animatedValue as Float; cv.invalidate() }
-                start()
-            }
+            flashView.alpha = 0.22f
+            flashView.animate().alpha(0f).setDuration(900).start()
         }
         fun save() {
-            f.writeText(cv.text.toString())
+            f.writeText(ed.text.toString())
             flashSave()
             slideToast(frame, "Saved")
         }
-
         // leaving the file (back) saves any unsaved changes first
         fun autoSave() {
-            val cur = cv.text.toString()
+            val cur = ed.text.toString()
             if (!f.exists() || f.readText() != cur) f.writeText(cur)
         }
 
+        // ---- find / replace on the text ----
+        var idx = 0
+        var match: IntRange? = null
+        fun lineCol(txt: String, off: Int): Pair<Int, Int> {
+            val before = txt.substring(0, off)
+            return before.count { it == '\n' } to (off - (before.lastIndexOf('\n') + 1))
+        }
+        fun findNext() {
+            val q = lastFind
+            if (q.isEmpty()) return
+            val txt = ed.text.toString()
+            var at = txt.indexOf(q, idx, ignoreCase = true)
+            if (at < 0) at = txt.indexOf(q, 0, ignoreCase = true) // wrap around
+            if (at < 0) { toast("No matches"); match = null; return }
+            idx = at + q.length
+            match = at until at + q.length
+            val (l1, c1) = lineCol(txt, at)
+            val (l2, c2) = lineCol(txt, at + q.length)
+            ed.setSelectionRegion(l1, c1, l2, c2)
+        }
+        fun replaceCurrent() {
+            val m = match ?: return
+            val txt = ed.text.toString()
+            ed.setText(txt.substring(0, m.first) + lastReplace + txt.substring(m.last + 1))
+            match = null
+        }
+        fun replaceAll() {
+            val q = lastFind
+            if (q.isEmpty()) return
+            ed.setText(ed.text.toString().replace(q, lastReplace, ignoreCase = true))
+            match = null; idx = 0
+            toast("Replaced all matches")
+        }
+
         root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
-        onBack = { flush(); autoSave(); browse(repo, dir) }
+        onBack = { autoSave(); browse(repo, dir) }
 
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
-        val title = tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0) }
-        top.addView(title, lp(0, -2, 1f))
+        top.addView(tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0) }, lp(0, -2, 1f))
 
         val searchBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -926,23 +735,21 @@ class MainActivity : Activity() {
             v.pivotX = (r - l) * 0.9f
             v.pivotY = 0f
         }
-
         val fInput = EditText(this).apply {
-            hint = "Find..."; setText(lastFind); textSize = 13f; setTextColor(col(R.color.fg));
+            hint = "Find..."; setText(lastFind); textSize = 13f; setTextColor(col(R.color.fg))
             background = box(col(R.color.bg), col(R.color.stroke), 6).apply { alpha = 180 }
             setPadding(dp(10), dp(10), dp(10), dp(10)); layoutParams = lp(-1, -2).apply { bottomMargin = dp(6) }
-            addTextChangedListener(object: TextWatcher {
-                override fun afterTextChanged(s: Editable?) { lastFind = s?.toString() ?: "" }
+            addTextChangedListener(object : TextWatcher {
+                override fun afterTextChanged(s: Editable?) { lastFind = s?.toString() ?: ""; idx = 0 }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
         }
-
         val rInput = EditText(this).apply {
-            hint = "Replace with..."; setText(lastReplace); textSize = 13f; setTextColor(col(R.color.fg));
+            hint = "Replace with..."; setText(lastReplace); textSize = 13f; setTextColor(col(R.color.fg))
             background = box(col(R.color.bg), col(R.color.stroke), 6).apply { alpha = 180 }
             setPadding(dp(10), dp(10), dp(10), dp(10)); layoutParams = lp(-1, -2).apply { bottomMargin = dp(10) }
-            addTextChangedListener(object: TextWatcher {
+            addTextChangedListener(object : TextWatcher {
                 override fun afterTextChanged(s: Editable?) { lastReplace = s?.toString() ?: "" }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -969,37 +776,10 @@ class MainActivity : Activity() {
                     }.start()
             }
         }
-
-        var idx = 0
         val sBtnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
-        sBtnRow.addView(smallBtn("Next") {
-            val q = lastFind
-            if (q.isNotEmpty()) {
-                val txt = cv.text.toString()
-                idx = txt.indexOf(q, idx, ignoreCase = true)
-                if (idx >= 0) {
-                    cv.setSelection(idx, idx + q.length)
-                    cv.requestFocus()
-                    idx += q.length
-                } else {
-                    idx = 0; toast("No more matches")
-                }
-            }
-        })
-        sBtnRow.addView(smallBtn("Replace") {
-            if (cv.selectionEnd > cv.selectionStart) {
-                cv.text.replace(cv.selectionStart, cv.selectionEnd, lastReplace)
-                hl(cv.text)
-            }
-        })
-        sBtnRow.addView(smallBtn("All") {
-            if (lastFind.isNotEmpty()) {
-                val nt = cv.text.toString().replace(lastFind, lastReplace, ignoreCase = true)
-                cv.setText(nt)
-                hl(cv.text)
-                toast("Replaced all matches")
-            }
-        })
+        sBtnRow.addView(smallBtn("Next") { findNext() })
+        sBtnRow.addView(smallBtn("Replace") { replaceCurrent() })
+        sBtnRow.addView(smallBtn("All") { replaceAll() })
         sBtnRow.addView(smallBtn("Close") { setSearch(false) })
         searchBox.addView(sBtnRow)
 
@@ -1007,15 +787,13 @@ class MainActivity : Activity() {
         val actRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actRow.addView(smallBtn("Save") { save() })
         actRow.addView(smallBtn("Search") { setSearch(!searchOn) })
-        actRow.addView(smallBtn("Undo") { flush(); if (undo.isNotEmpty()) { redo.add(last); put(undo.removeAt(undo.size - 1)) } })
-        actRow.addView(smallBtn("Redo") { flush(); if (redo.isNotEmpty()) { undo.add(last); put(redo.removeAt(redo.size - 1)) } })
+        actRow.addView(smallBtn("Undo") { ed.undo() })
+        actRow.addView(smallBtn("Redo") { ed.redo() })
         actRow.addView(smallBtn("Push") { save(); pushOne(repo, f) })
         actBar.addView(actRow)
         top.addView(actBar)
         root.addView(top)
 
-        // the EditText scrolls itself, so only the visible lines get laid out and drawn
-        frame.addView(cv, FrameLayout.LayoutParams(-1, -1))
         frame.addView(searchBox)
         root.addView(frame)
         anim(depthOf(repo, dir) + 1)
