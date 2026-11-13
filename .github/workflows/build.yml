@@ -4,6 +4,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,7 +23,15 @@ jobs:
       - name: Build debug APK
         run: gradle assembleDebug --no-daemon
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: GitActionBuild-apk
-          path: app/build/outputs/apk/debug/*.apk
+      - name: Publish APK to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          cp "$APK" GitActionBuild.apk
+          TAG="build-${{ github.run_number }}"
+          gh release create "$TAG" GitActionBuild.apk \
+            --title "Build #${{ github.run_number }}" \
+            --notes "APK built from commit ${{ github.sha }}" \
+            --target "${{ github.sha }}" \
+          || gh release upload "$TAG" GitActionBuild.apk --clobber

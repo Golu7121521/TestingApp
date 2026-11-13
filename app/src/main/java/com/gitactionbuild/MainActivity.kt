@@ -131,6 +131,14 @@ class MainActivity : Activity() {
     val TR = Color.parseColor("#FF5C5C")
     val TRL = Color.parseColor("#FF9C9C")
     val TLOG = Color.parseColor("#0B170E")
+    val TC = Color.parseColor("#4DD0E1")   // cyan: job / names
+    val TM = Color.parseColor("#C792EA")   // magenta: commit / branch / tags
+    val TBL = Color.parseColor("#61AFEF")  // blue: paths / repo
+    val TW = Color.parseColor("#E6FFEE")   // near-white: commands / running
+    val PROMPT = arrayOf("root@gab" to TG, ":" to TW, "~" to TBL, "# " to TW)
+    val typedSeen = HashSet<String>()
+    val curViews = ArrayList<TextView>()
+    var lastReleaseTag = ""
 
     val KW = Regex("\\b(class|fun|val|var|def|function|return|if|else|for|while|import|package|public|private|protected|static|void|int|new|true|false|null|const|let|async|await|try|catch|from|in|is|when|override|this|echo|run|break|continue)\\b")
     val NUM = Regex("\\b\\d+(\\.\\d+)?\\b")
@@ -637,11 +645,11 @@ class MainActivity : Activity() {
     }
 
     // ---------- GitHub API ----------
-    fun http(m: String, u: String, body: String? = null): HttpURLConnection {
+    fun http(m: String, u: String, body: String? = null, accept: String = "application/vnd.github+json"): HttpURLConnection {
         val c = URL(if (u.startsWith("http")) u else "https://api.github.com$u").openConnection() as HttpURLConnection
         c.requestMethod = m
         c.setRequestProperty("Authorization", "Bearer $tok")
-        c.setRequestProperty("Accept", "application/vnd.github+json")
+        c.setRequestProperty("Accept", accept)
         if (body != null) { c.doOutput = true; c.outputStream.use { it.write(body.toByteArray()) } }
         if (c.responseCode >= 400) throw Exception(c.responseCode.toString() + " " + c.errorStream?.bufferedReader()?.readText())
         return c
@@ -685,6 +693,62 @@ class MainActivity : Activity() {
     // ---------- terminal screen helpers ----------
     fun scrollEnd(l: LinearLayout) { (l.parent as? ScrollView)?.post { (l.parent as ScrollView).fullScroll(View.FOCUS_DOWN) } }
 
+    // build one colored line out of (text, color) pieces
+    fun mspan(vararg p: Pair<String, Int>): SpannableStringBuilder {
+        val sb = SpannableStringBuilder()
+        for ((t, c) in p) { val s = sb.length; sb.append(t); sb.setSpan(ForegroundColorSpan(c), s, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE) }
+        return sb
+    }
+
+    // typewriter effect: characters appear one by one with a block cursor at the end
+    fun typeIn(t: TextView, full: CharSequence, step: Int = 2) {
+        if (!typedSeen.add(full.toString())) { t.text = full; return }
+        val my = live
+        var n = 0
+        val r = object : Runnable {
+            override fun run() {
+                if (t.tag != null) return
+                if (my != live) { t.text = full; return }
+                n = minOf(n + step, full.length)
+                if (n < full.length) {
+                    t.text = SpannableStringBuilder(full.subSequence(0, n)).append("█")
+                    h.postDelayed(this, 22)
+                } else t.text = full
+            }
+        }
+        h.post(r)
+    }
+
+    fun tmono(cs: CharSequence, size: Float = 13f) = mono("", size, TG).also { typeIn(it, cs) }
+
+    fun promptRow(): LinearLayout {
+        val r = LinearLayout(this).apply { setPadding(0, dp(10), 0, dp(24)) }
+        val p = mono("", 13f, TG); p.text = mspan(*PROMPT)
+        val c = mono("█", 13f, TG); curViews.add(c)
+        r.addView(p); r.addView(c)
+        return r
+    }
+
+    // colorize raw CI log lines by meaning
+    fun colorLog(t: String): CharSequence {
+        val sb = SpannableStringBuilder()
+        for (ln in t.lines()) {
+            val c = when {
+                ln.startsWith("e: ") || ln.contains("##[error]") || ln.contains("FAILED") || ln.contains("FAILURE") || ln.contains("Exception") -> TRL
+                ln.startsWith("w: ") || ln.contains("##[warning]") || ln.contains("warning", true) -> TA
+                ln.contains("##[group]") || ln.contains("##[endgroup]") -> TC
+                ln.startsWith("> Task") -> TBL
+                ln.contains("[command]") -> TM
+                ln.contains("BUILD SUCCESSFUL") || ln.contains("successfully", true) -> TG
+                ln.startsWith("Run ") || ln.startsWith("with:") -> TW
+                else -> TGL
+            }
+            val s = sb.length; sb.append(ln).append('\n')
+            sb.setSpan(ForegroundColorSpan(c), s, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        return sb
+    }
+
     fun tbtn(t: String, c: Int, f: () -> Unit) = mono(t, 12f, c).apply {
         background = box(Color.parseColor("#0A140C"), c, 6)
         setPadding(dp(12), dp(10), dp(12), dp(10))
@@ -692,11 +756,11 @@ class MainActivity : Activity() {
         setOnClickListener { f() }
     }
 
-    // full-screen hacker terminal: typewriter prompt, blinking cursor, spinning [ - ] tags
+    // full-screen hacker terminal: typed prompt + command, blinking cursor, spinning [ - ] tags
     fun term(cmd: String, my: Int, close: () -> Unit): LinearLayout {
         onBack = close
         root.removeAllViews(); root.gravity = Gravity.TOP
-        root.setBackgroundColor(TB); bars(true); spinViews.clear()
+        root.setBackgroundColor(TB); bars(true); spinViews.clear(); curViews.clear(); typedSeen.clear()
 
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(10)) }
         val hdr = mono("", 13f, TG).apply { setSingleLine() }
@@ -716,8 +780,10 @@ class MainActivity : Activity() {
             override fun run() {
                 if (my != live) return
                 tick++
-                hdr.text = cmd.substring(0, minOf(tick * 2, cmd.length))
-                cur.text = if ((tick / 5) % 2 == 0) "█" else " "
+                hdr.text = mspan(*PROMPT, cmd.substring(0, minOf(tick, cmd.length)) to TW)
+                val on = (tick / 5) % 2 == 0
+                cur.text = if (on) "█" else " "
+                for (c in curViews) c.text = if (on) "█" else " "
                 val f = fr[(tick / 2) % 4]
                 for (s in spinViews) s.text = "[ $f ]"
                 h.postDelayed(this, 90)
@@ -727,53 +793,66 @@ class MainActivity : Activity() {
         return l
     }
 
+    fun tline(tag: String, tc: Int, text: CharSequence, xc: Int, spin: Boolean = false): LinearLayout {
+        val r = LinearLayout(this).apply { setPadding(0, dp(3), 0, dp(3)) }
+        val t = mono(tag, 13f, tc).apply { setPadding(0, 0, dp(8), 0) }
+        if (spin) spinViews.add(t)
+        val x = mono("", 13f, xc)
+        r.addView(t); r.addView(x, lp(0, -2, 1f))
+        typeIn(x, text)
+        return r
+    }
+
     // add a spinning step line (safe to call from a background thread)
-    fun tstep(l: LinearLayout, text: String): LinearLayout {
+    fun tstep(l: LinearLayout, text: CharSequence): LinearLayout {
         var row: LinearLayout? = null
         val latch = java.util.concurrent.CountDownLatch(1)
-        ui { row = tline("[ - ]", TA, text, TG, true); l.addView(row); scrollEnd(l); latch.countDown() }
+        ui { val rw = tline("[ - ]", TA, text, TW, true); row = rw; l.addView(rw); scrollEnd(l); latch.countDown() }
         latch.await()
         return row!!
     }
-    fun tset(row: LinearLayout, text: String) = ui { (row.getChildAt(1) as TextView).text = text }
-    fun tdone(row: LinearLayout, ok: Boolean, text: String? = null) = ui {
+    fun tset(row: LinearLayout, text: CharSequence) = ui { val x = row.getChildAt(1) as TextView; x.tag = "stop"; x.text = text }
+    fun tdone(row: LinearLayout, ok: Boolean, text: CharSequence? = null) = ui {
         val t = row.getChildAt(0) as TextView; spinViews.remove(t)
         t.text = if (ok) "[ OK ]" else "[FAIL]"; t.setTextColor(if (ok) TG else TR)
         val x = row.getChildAt(1) as TextView
+        x.tag = "stop"
         if (text != null) x.text = text
         x.setTextColor(if (ok) TT else TR)
     }
     fun tfail(l: LinearLayout, repo: File, msg: String) = ui {
         spinViews.clear()
-        l.addView(mono("$ exit 1  // push failed", 13f, TR).apply { setPadding(0, dp(10), 0, dp(4)) })
-        l.addView(mono(msg, 11f, TRL).apply {
+        l.addView(tmono(mspan("$ " to TR, "exit " to TW, "1" to TR, "  // push failed" to TD)).apply { setPadding(0, dp(10), 0, dp(4)) })
+        l.addView(mono("", 11f, TRL).apply {
+            text = colorLog(msg)
             background = box(TLOG, TD, 6); setPadding(dp(10), dp(8), dp(10), dp(8)); setHorizontallyScrolling(true)
         }, lp(-1, -2).apply { bottomMargin = dp(8) })
         val row = LinearLayout(this)
         row.addView(tbtn("[ copy error ]", TR) { copyText("error", msg) }, lp(-2, -2).apply { rightMargin = dp(8) })
         row.addView(tbtn("[ back ]", TG) { live++; browse(repo, repo) })
-        l.addView(row, lp(-2, -2).apply { bottomMargin = dp(24) })
+        l.addView(row, lp(-2, -2).apply { bottomMargin = dp(8) })
+        l.addView(promptRow())
         scrollEnd(l)
     }
 
     fun pushOne(repo: File, f: File) {
         val my = ++live
-        val l = term("root@gab:~# git push origin main", my) { live++; browse(repo, repo) }
+        val l = term("git push origin main", my) { live++; browse(repo, repo) }
         val rel = f.relativeTo(repo).path
 
         bg {
             val r1 = tstep(l, "resolving repository...")
             try {
                 val (full, br) = meta(repo); val p = rel.replace(" ", "%20")
-                tdone(r1, true, "repo: $full  [$br]")
-                val r2 = tstep(l, "checking remote file: $rel")
+                tdone(r1, true, mspan("repo: " to TD, full to TBL, "  " to TD, "[$br]" to TM))
+                val r2 = tstep(l, mspan("checking remote file: " to TW, rel to TBL))
                 val sha = try { JSONObject(api("GET", "/repos/$full/contents/$p?ref=$br")).getString("sha") } catch (e: Exception) { null }
-                tdone(r2, true, if (sha != null) "remote file exists, will update" else "new file, will create")
-                val r3 = tstep(l, "uploading $rel")
+                tdone(r2, true, if (sha != null) mspan("remote file exists, will update" to TA) else mspan("new file, will create" to TG))
+                val r3 = tstep(l, mspan("uploading " to TW, rel to TBL))
                 val j = JSONObject().put("message", "Update $p").put("branch", br).put("content", Base64.encodeToString(f.readBytes(), Base64.NO_WRAP))
                 if (sha != null) j.put("sha", sha)
                 val c = JSONObject(api("PUT", "/repos/$full/contents/$p", j.toString())).getJSONObject("commit").getString("sha")
-                tdone(r3, true, "pushed -> " + c.take(7))
+                tdone(r3, true, mspan("pushed -> " to TD, c.take(7) to TM))
                 if (my != live) return@bg
                 Thread.sleep(500)
                 ui { if (my == live) watch(full, c, repo) }
@@ -785,38 +864,38 @@ class MainActivity : Activity() {
 
     fun pushAll(repo: File) {
         val my = ++live
-        val l = term("root@gab:~# git push --force origin main", my) { live++; browse(repo, repo) }
+        val l = term("git push --force origin main", my) { live++; browse(repo, repo) }
 
         bg {
             val r1 = tstep(l, "resolving repository...")
             try {
                 val (full, br) = meta(repo)
-                tdone(r1, true, "repo: $full  [$br]")
+                tdone(r1, true, mspan("repo: " to TD, full to TBL, "  " to TD, "[$br]" to TM))
                 val r2 = tstep(l, "reading remote HEAD")
                 val head = JSONObject(api("GET", "/repos/$full/git/ref/heads/$br")).getJSONObject("object").getString("sha")
-                tdone(r2, true, "HEAD " + head.take(7))
+                tdone(r2, true, mspan("HEAD " to TD, head.take(7) to TM))
                 val all = files(repo)
                 val r3 = tstep(l, "uploading blobs 0/" + all.size)
                 val tree = JSONArray()
                 for ((n, f) in all.withIndex()) {
                     if (my != live) return@bg
                     val rel = f.relativeTo(repo).path
-                    tset(r3, "blob " + (n + 1) + "/" + all.size + "  " + rel)
+                    tset(r3, mspan("blob " to TD, "${n + 1}/${all.size}" to TA, "  " to TD, rel to TBL))
                     val b = JSONObject(api("POST", "/repos/$full/git/blobs", JSONObject()
                         .put("content", Base64.encodeToString(f.readBytes(), Base64.NO_WRAP)).put("encoding", "base64").toString())).getString("sha")
                     tree.put(JSONObject().put("path", rel).put("mode", "100644").put("type", "blob").put("sha", b))
                 }
-                tdone(r3, true, "uploaded " + all.size + " blobs")
+                tdone(r3, true, mspan("uploaded " to TD, all.size.toString() to TA, " blobs" to TD))
                 val r4 = tstep(l, "creating tree")
                 val t = JSONObject(api("POST", "/repos/$full/git/trees", JSONObject().put("tree", tree).toString())).getString("sha")
-                tdone(r4, true, "tree " + t.take(7))
+                tdone(r4, true, mspan("tree " to TD, t.take(7) to TM))
                 val r5 = tstep(l, "creating commit")
                 val c = JSONObject(api("POST", "/repos/$full/git/commits", JSONObject().put("message", "Push all from Git Action Build")
                     .put("tree", t).put("parents", JSONArray().put(head)).toString())).getString("sha")
-                tdone(r5, true, "commit " + c.take(7))
+                tdone(r5, true, mspan("commit " to TD, c.take(7) to TM))
                 val r6 = tstep(l, "updating ref heads/$br")
                 api("PATCH", "/repos/$full/git/refs/heads/$br", JSONObject().put("sha", c).put("force", true).toString())
-                tdone(r6, true, "ref updated")
+                tdone(r6, true, mspan("ref updated" to TG))
                 if (my != live) return@bg
                 Thread.sleep(500)
                 ui { if (my == live) watch(full, c, repo) }
@@ -832,14 +911,6 @@ class MainActivity : Activity() {
         return t.lines().joinToString("\n") { ts.replace(ansi.replace(it, ""), "") }
     }
 
-    fun tline(tag: String, tc: Int, text: String, xc: Int, spin: Boolean = false): LinearLayout {
-        val r = LinearLayout(this).apply { setPadding(0, dp(3), 0, dp(3)) }
-        val t = mono(tag, 13f, tc).apply { setPadding(0, 0, dp(8), 0) }
-        if (spin) spinViews.add(t)
-        r.addView(t); r.addView(mono(text, 13f, xc), lp(0, -2, 1f))
-        return r
-    }
-
     fun copyText(label: String, text: String) {
         (getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager).setPrimaryClip(android.content.ClipData.newPlainText(label, text))
         toast("Copied: $label")
@@ -848,9 +919,9 @@ class MainActivity : Activity() {
     fun draw(l: LinearLayout, r: JSONObject, js: JSONArray, artifactState: Int, full: String) {
         val sv = l.parent as? ScrollView; val y = sv?.scrollY ?: 0
         val atBottom = sv == null || (l.height - (sv.height + y)) < dp(80)
-        l.removeAllViews(); spinViews.clear()
+        l.removeAllViews(); spinViews.clear(); curViews.clear()
 
-        l.addView(mono("# " + r.optString("name") + "  run #" + r.optInt("run_number") + "  [" + r.optString("head_branch") + "]", 12f, TD).apply { setPadding(0, 0, 0, dp(6)) })
+        l.addView(tmono(mspan("# " to TD, r.optString("name") to TC, "  run " to TD, "#" + r.optInt("run_number") to TA, "  " to TD, "[" + r.optString("head_branch") + "]" to TM), 12f).apply { setPadding(0, 0, 0, dp(6)) })
 
         for (k in 0 until js.length()) {
             val j = js.getJSONObject(k)
@@ -864,7 +935,9 @@ class MainActivity : Activity() {
                 jst == "in_progress" -> TA
                 else -> TD
             }
-            l.addView(mono("$ job::" + jname + (if (jc.isNotEmpty()) "  => " + jc.uppercase() else ""), 13f, jcol).apply { setPadding(0, dp(10), 0, dp(4)) })
+            val jl = mspan("$ " to TG, "job::" to TD, jname to TC)
+            if (jc.isNotEmpty()) { jl.append(mspan("  => " to TD, jc.uppercase() to jcol)) }
+            l.addView(tmono(jl).apply { setPadding(0, dp(10), 0, dp(4)) })
 
             val steps = j.optJSONArray("steps"); var shown = false
             if (steps != null) {
@@ -876,7 +949,7 @@ class MainActivity : Activity() {
                     val isRunning = stStatus == "in_progress"
                     val isFailed = stConcl == "failure"
 
-                    if (isRunning) l.addView(tline("[ - ]", TA, name, TG, true))
+                    if (isRunning) l.addView(tline("[ - ]", TA, name, TW, true))
                     else if (stStatus == "completed") {
                         when (stConcl) {
                             "success" -> l.addView(tline("[ OK ]", TG, name, TT))
@@ -889,7 +962,8 @@ class MainActivity : Activity() {
                         val lg = logMap[id]
                         if (!lg.isNullOrEmpty()) {
                             shown = true
-                            l.addView(mono(lg, 10.5f, if (isFailed) TRL else TGL).apply {
+                            l.addView(mono("", 10.5f, TGL).apply {
+                                text = colorLog(lg)
                                 background = box(TLOG, TD, 6)
                                 setPadding(dp(10), dp(8), dp(10), dp(8))
                                 setHorizontallyScrolling(true)
@@ -917,21 +991,25 @@ class MainActivity : Activity() {
         }
 
         if (artifactState > 0) {
-            l.addView(mono("$ artifacts", 13f, if (artifactState == 3) TR else TA).apply { setPadding(0, dp(10), 0, dp(4)) })
+            l.addView(tmono(mspan("$ " to TG, "releases" to TC)).apply { setPadding(0, dp(10), 0, dp(4)) })
             when (artifactState) {
-                1 -> l.addView(tline("[ - ]", TA, "downloading artifact...", TG, true))
+                1 -> l.addView(tline("[ - ]", TA, "downloading apk from release...", TW, true))
                 2 -> {
-                    l.addView(tline("[ OK ]", TG, "artifact downloaded", TT))
-                    if (lastDownloadedPath.isNotEmpty()) l.addView(mono("  -> $lastDownloadedPath", 11f, TGL).apply { setHorizontallyScrolling(true) })
+                    l.addView(tline("[ OK ]", TG, mspan("apk published " to TT, "-> " to TD, lastReleaseTag to TM), TT))
+                    if (lastDownloadedPath.isNotEmpty()) l.addView(tmono(mspan("  saved: " to TD, lastDownloadedPath to TBL), 11f).apply { setHorizontallyScrolling(true) })
                 }
-                else -> l.addView(tline("[FAIL]", TR, "artifact download failed", TR))
+                else -> l.addView(tline("[FAIL]", TR, "apk download failed", TR))
             }
         }
 
         if (r.getString("status") == "completed") {
             val ok = r.optString("conclusion") == "success"
-            l.addView(mono("$ exit " + (if (ok) "0  // build passed" else "1  // build failed"), 13f, if (ok) TG else TR).apply { setPadding(0, dp(12), 0, dp(24)) })
+            l.addView(tmono(
+                if (ok) mspan("$ " to TG, "exit " to TW, "0" to TG, "  // build passed" to TD)
+                else mspan("$ " to TR, "exit " to TW, "1" to TR, "  // build failed" to TD)
+            ).apply { setPadding(0, dp(12), 0, dp(0)) })
         }
+        l.addView(promptRow())
 
         sv?.post { if (atBottom) sv.fullScroll(View.FOCUS_DOWN) else sv.scrollTo(0, y) }
     }
@@ -940,8 +1018,8 @@ class MainActivity : Activity() {
         val my = ++live; logMap.clear(); fullLog.clear()
         var artifactState = 0
 
-        val l = term("root@gab:~# tail -f build.log", my) { live++; browse(repo, repo) }
-        val w = tline("[ - ]", TA, "waiting for workflow run to start...", TG, true)
+        val l = term("tail -f build.log", my) { live++; browse(repo, repo) }
+        val w = tline("[ - ]", TA, "waiting for workflow run to start...", TW, true)
         l.addView(w)
 
         bg {
@@ -979,7 +1057,7 @@ class MainActivity : Activity() {
                 if (done) {
                     if (success) {
                         try {
-                            download(r)
+                            download(full, r)
                             artifactState = 2
                         } catch (e: Exception) {
                             artifactState = 3
@@ -989,21 +1067,27 @@ class MainActivity : Activity() {
                     return@bg
                 }
             }
-            ui { if (my == live) l.addView(mono("$ timeout  // stopped watching after 30 min", 12f, TA)) }
+            ui { if (my == live) l.addView(tmono(mspan("$ " to TA, "timeout" to TA, "  // stopped watching after 30 min" to TD), 12f)) }
         }
     }
 
-    fun download(r: JSONObject) {
-        val a = JSONObject(api("GET", r.getString("url") + "/artifacts")).getJSONArray("artifacts")
-        if (a.length() == 0) return
-        val x = a.getJSONObject(0)
+    // APK is published to GitHub Releases by the workflow (tag: build-<run_number>)
+    fun download(full: String, r: JSONObject) {
+        val n = r.optInt("run_number")
+        val tag = "build-$n"
+        val rel = JSONObject(api("GET", "/repos/$full/releases/tags/$tag"))
+        val assets = rel.getJSONArray("assets")
+        if (assets.length() == 0) throw Exception("No APK in release $tag")
+        val x = assets.getJSONObject(0)
         val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
 
-        val out = File(base, "artifacts/" + x.getString("name") + "_run" + r.optInt("run_number") + "_" + stamp + ".zip")
+        val out = File(base, "artifacts/" + x.getString("name").removeSuffix(".apk") + "_run" + n + "_" + stamp + ".apk")
         out.parentFile?.mkdirs()
 
-        http("GET", x.getString("archive_download_url")).inputStream.use { i -> out.outputStream().use { i.copyTo(it) } }
+        http("GET", "/repos/$full/releases/assets/" + x.getLong("id"), null, "application/octet-stream")
+            .inputStream.use { i -> out.outputStream().use { i.copyTo(it) } }
         lastDownloadedPath = out.absolutePath
-        ui { toast("Artifact downloaded successfully") }
+        lastReleaseTag = tag
+        ui { toast("APK downloaded from release $tag") }
     }
 }
