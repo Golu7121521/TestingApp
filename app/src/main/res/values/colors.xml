@@ -1,0 +1,18 @@
+<resources>
+    <color name="bg">#F6F7FB</color>
+    <color name="fg">#14161F</color>
+    <color name="p1">#3B82F6</color>
+    <color name="p2">#3B82F6</color>
+    <color name="card">#FFFFFF</color>
+    <color name="stroke">#E1E4EE</color>
+    <color name="muted">#6B7280</color>
+    <color name="kw">#C678DD</color>
+    <color name="st">#98C379</color>
+    <color name="nu">#D19A66</color>
+    <color name="cm">#8B93A5</color>
+    <color name="ty">#E5C07B</color>
+    <color name="fn">#61AFEF</color>
+    <color name="ok">#1A9E5C</color>
+    <color name="bad">#D93025</color>
+    <color name="white">#FFFFFF</color>
+</resources>
