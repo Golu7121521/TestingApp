@@ -1,15 +1,11 @@
 package com.gitactionbuild
 
-import android.animation.Animator
-import android.animation.AnimatorListenerAdapter
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RadialGradient
 import android.graphics.RectF
-import android.graphics.Shader
 import android.graphics.Typeface
 import android.view.Gravity
 import android.view.MotionEvent
@@ -35,96 +31,6 @@ class CountIn(inp: InputStream, private val onRead: (Long) -> Unit) : FilterInpu
         val r = super.read(b, off, len)
         if (r > 0) { n += r; onRead(n) }
         return r
-    }
-}
-
-// Green radial glow + confetti burst that plays once when a build passes.
-// Non-clickable, so touches fall through to the screen underneath.
-class FxOverlay(c: Context) : View(c) {
-    private class Bit(val x: Float, val y: Float, val vx: Float, val vy: Float,
-                      val spin: Float, val s: Float, val col: Int)
-
-    private val bits = ArrayList<Bit>()
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val glowPaint = Paint()
-    private var t = 0f
-    private var glow = 0f
-    private var gravity = 0f
-    private var anim: ValueAnimator? = null
-
-    fun celebrate(colors: IntArray) {
-        anim?.cancel()
-        val w = resources.displayMetrics.widthPixels.toFloat()
-        val h = resources.displayMetrics.heightPixels.toFloat()
-        val d = resources.displayMetrics.density
-        gravity = h * 1.1f
-        val rnd = java.util.Random()
-        bits.clear()
-        repeat(110) {
-            bits.add(
-                Bit(
-                    x = w / 2 + (rnd.nextFloat() - 0.5f) * w * 0.2f,
-                    y = h * 0.38f,
-                    vx = (rnd.nextFloat() - 0.5f) * w * 0.9f,
-                    vy = -(0.35f + rnd.nextFloat() * 0.55f) * h,
-                    spin = (rnd.nextFloat() - 0.5f) * 900f,
-                    s = (6f + rnd.nextFloat() * 6f) * d,
-                    col = colors[rnd.nextInt(colors.size)]
-                )
-            )
-        }
-        glow = 0f
-        anim = ValueAnimator.ofFloat(0f, 1f).apply {
-            duration = 2600
-            interpolator = LinearInterpolator()
-            addUpdateListener {
-                t = it.animatedFraction * 2.6f
-                glow = glowAt(t)
-                invalidate()
-            }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(a: Animator) {
-                    bits.clear(); glow = 0f; invalidate()
-                }
-            })
-            start()
-        }
-    }
-
-    // soft fade-in, then fade-out: peak 0.22 alpha
-    private fun glowAt(x: Float): Float {
-        val g = when {
-            x < 0.25f -> x / 0.25f
-            x < 1.9f -> 1f - (x - 0.25f) / 1.65f
-            else -> 0f
-        }
-        return g * 0.22f
-    }
-
-    override fun onDraw(cv: Canvas) {
-        val w = width.toFloat()
-        val h = height.toFloat()
-        if (glow > 0f) {
-            val a = (glow * 255).toInt()
-            glowPaint.shader = RadialGradient(
-                w / 2, h / 2, maxOf(w, h) * 0.7f,
-                intArrayOf(Color.argb(a, 34, 197, 94), Color.argb(0, 34, 197, 94)),
-                null, Shader.TileMode.CLAMP
-            )
-            cv.drawRect(0f, 0f, w, h, glowPaint)
-        }
-        val fade = ((2.6f - t) / 0.7f).coerceIn(0f, 1f)
-        for (b in bits) {
-            val x = b.x + b.vx * t
-            val y = b.y + b.vy * t + 0.5f * gravity * t * t
-            paint.color = b.col
-            paint.alpha = (fade * 255).toInt()
-            cv.save()
-            cv.translate(x, y)
-            cv.rotate(b.spin * t)
-            cv.drawRect(-b.s / 2, -b.s / 3, b.s / 2, b.s / 3, paint)
-            cv.restore()
-        }
     }
 }
 

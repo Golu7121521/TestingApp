@@ -141,7 +141,6 @@ class MainActivity : Activity() {
     val sp by lazy { getSharedPreferences("g", 0) }
     val tok get() = sp.getString("t", "") ?: ""
     lateinit var root: LinearLayout
-    lateinit var fx: FxOverlay
     val h = Handler(Looper.getMainLooper())
     var onBack: (() -> Unit)? = null
     var pickRepo: File? = null; var pickDir: File? = null
@@ -150,7 +149,6 @@ class MainActivity : Activity() {
     val fullLog = ConcurrentHashMap<Long, String>()
     val spinViews = ArrayList<TextView>()
     var curDepth = 0
-    var noSlide = false
     var lastPull: PullLayout? = null
     var bootBox: View? = null
     var matrixView: MatrixView? = null
@@ -363,16 +361,7 @@ class MainActivity : Activity() {
             lastPull = null
             root.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
         }
-        if (noSlide) {
-            // page opened from an expanding folder: fade in in place instead of sliding
-            noSlide = false
-            curDepth = d
-            for (i in 0 until root.childCount) {
-                val v = root.getChildAt(i)
-                v.alpha = 0f
-                v.animate().alpha(1f).setDuration(220).start()
-            }
-        } else anim(d)
+        anim(d)
         return l
     }
 
@@ -481,13 +470,10 @@ class MainActivity : Activity() {
         m.animate().alpha(0f).setDuration(900).withEndAction { m.stop() }.start()
     }
 
-    // build finished: green celebration on pass, shake + vibrate on fail
+    // build failed: shake the log box and vibrate once
     fun finale(ok: Boolean, l: LinearLayout) {
         stopMatrix()
-        if (ok) {
-            fx.celebrate(intArrayOf(TG, TC, TA, TM, TBL, TW))
-            buzz(45)
-        } else {
+        if (!ok) {
             shake((l.parent as? View) ?: l)
             buzz(180)
         }
@@ -524,9 +510,6 @@ class MainActivity : Activity() {
             }
         }
         setContentView(root)
-        // full-screen layer for the build-success celebration (touches pass through)
-        fx = FxOverlay(this)
-        addContentView(fx, ViewGroup.LayoutParams(-1, -1))
     }
     override fun onResume() { super.onResume(); if (root.childCount == 0 || !granted()) start() }
     override fun onBackPressed() { val b = onBack; if (b != null) b() else super.onBackPressed() }
@@ -650,7 +633,7 @@ class MainActivity : Activity() {
                 c.setOnClickListener {
                     val rr = rowRef
                     if (rr != null && rr.open) rr.close()
-                    else if (f.isDirectory) openFolder(repo, f, c.getChildAt(0))
+                    else if (f.isDirectory) browse(repo, f)
                     else edit(repo, dir, f)
                 }
                 val ext = if (f.isDirectory) "DIR" else f.extension.uppercase().take(4).ifEmpty { "FILE" }
@@ -699,38 +682,6 @@ class MainActivity : Activity() {
     fun deleteFile(repo: File, dir: File, f: File) {
         dlg("Delete", tv("Delete " + f.name + "? This cannot be undone.", 15, false, R.color.muted), "Delete") {
             f.deleteRecursively(); browse(repo, dir)
-        }
-    }
-
-    // folder card: a small square (the folder icon) grows to the full screen, then the folder page appears
-    fun openFolder(repo: File, f: File, icon: View) {
-        val ov = View(this)
-        ov.isClickable = true
-        val shape = GradientDrawable().apply { setColor(col(R.color.p1)); cornerRadius = dp(8).toFloat() }
-        ov.background = shape
-        addContentView(ov, ViewGroup.LayoutParams(-1, -1))
-        ov.post {
-            val loc = IntArray(2); val oloc = IntArray(2)
-            icon.getLocationInWindow(loc); ov.getLocationInWindow(oloc)
-            val fw = ov.width.toFloat(); val fh = ov.height.toFloat()
-            ov.pivotX = 0f; ov.pivotY = 0f
-            ov.translationX = (loc[0] - oloc[0]).toFloat()
-            ov.translationY = (loc[1] - oloc[1]).toFloat()
-            ov.scaleX = icon.width / fw
-            ov.scaleY = icon.height / fh
-            ov.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
-                .setDuration(340).setInterpolator(AccelerateDecelerateInterpolator())
-                .withEndAction {
-                    noSlide = true
-                    browse(repo, f)
-                    (ov.parent as? ViewGroup)?.removeView(ov)
-                }.start()
-            // square turns from folder blue into the page background as it grows
-            ValueAnimator.ofObject(ArgbEvaluator(), col(R.color.p1), col(R.color.bg)).apply {
-                duration = 340
-                addUpdateListener { shape.setColor(it.animatedValue as Int) }
-                start()
-            }
         }
     }
 
