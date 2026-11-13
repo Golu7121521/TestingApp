@@ -1,5 +1,6 @@
 package com.gitactionbuild
 
+import android.animation.*
 import android.app.*
 import android.content.*
 import android.graphics.*
@@ -13,6 +14,7 @@ import android.text.style.ForegroundColorSpan
 import android.util.Base64
 import android.util.TypedValue
 import android.view.*
+import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.view.animation.OvershootInterpolator
 import android.widget.*
@@ -28,10 +30,13 @@ class CodeView(c: Context) : EditText(c) {
     val gp = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.MONOSPACE; textAlign = Paint.Align.RIGHT }
     val lnp = Paint().apply { strokeWidth = 2f }
     val bgp = Paint().apply { style = Paint.Style.FILL }
+    val flp = Paint().apply { style = Paint.Style.FILL }
     var gw = 0f; var dg = 0; var gc = 0
     val d = resources.displayMetrics.density
     var acc = 1f; var multi = false
     var lineNo = IntArray(0); var lastL: Layout? = null
+    var accent = Color.parseColor("#3B82F6")   // current line glow color
+    var flash = 0f                              // 0..1, green flash after save
 
     init {
         setHorizontallyScrolling(true)
@@ -61,8 +66,15 @@ class CodeView(c: Context) : EditText(c) {
     }
 
     override fun onDraw(cv: Canvas) {
+        // green flash behind the code after save
+        if (flash > 0f) {
+            flp.color = context.getColor(R.color.ok)
+            flp.alpha = (flash * 60).toInt()
+            cv.drawRect(scrollX.toFloat(), scrollY.toFloat(), scrollX + width.toFloat(), scrollY + height.toFloat(), flp)
+        }
+
         bgp.color = gc and 0x11FFFFFF
-        cv.drawRect(scrollX.toFloat(), 0f, scrollX + gw + 4 * d, height.toFloat() + scrollY.toFloat(), bgp)
+        cv.drawRect(scrollX.toFloat(), 0f, scrollX + gw + 4 * d, height.toFloat() + scrollY, bgp)
 
         val l = layout
         if (l != null) {
@@ -71,14 +83,35 @@ class CodeView(c: Context) : EditText(c) {
                 for (i in 0 until l.lineCount) { if (i > 0 && t[l.getLineStart(i) - 1] == '\n') n++; a[i] = n }
                 lineNo = a
             }
-            gp.color = gc; lnp.color = gc and 0x44FFFFFF
-            val clip = cv.clipBounds; val pt = compoundPaddingTop
-            val f = l.getLineForVertical((clip.top - pt).coerceAtLeast(0)); val e = l.getLineForVertical((clip.bottom - pt).coerceAtLeast(0))
+            val pt = compoundPaddingTop
+            val clip = cv.clipBounds
+            val f = l.getLineForVertical((clip.top - pt).coerceAtLeast(0))
+            val e = l.getLineForVertical((clip.bottom - pt).coerceAtLeast(0))
+            val focused = hasFocus()
+            val cur = if (focused) lineNo.getOrElse(l.getLineForOffset(selectionStart.coerceIn(0, text.length))) { -1 } else -1
+
+            // highlight every visual row that belongs to the cursor's logical line
+            if (cur > 0) {
+                bgp.color = Color.argb(34, Color.red(accent), Color.green(accent), Color.blue(accent))
+                for (i in f..e) {
+                    if (lineNo[i] == cur) {
+                        cv.drawRect(scrollX + gw, pt + l.getLineTop(i).toFloat(), scrollX + width.toFloat(), pt + l.getLineBottom(i).toFloat(), bgp)
+                    }
+                }
+            }
+
+            gp.color = gc; gp.isFakeBoldText = false; gp.clearShadowLayer()
+            lnp.color = gc and 0x44FFFFFF
             for (i in f..e) {
                 if (i == 0 || text[l.getLineStart(i) - 1] == '\n') {
+                    val isCur = cur > 0 && lineNo[i] == cur
+                    gp.color = if (isCur) accent else gc
+                    gp.isFakeBoldText = isCur
+                    if (isCur) gp.setShadowLayer(10f, 0f, 0f, accent) else gp.clearShadowLayer()
                     cv.drawText(lineNo[i].toString(), scrollX + gw - 6 * d, l.getLineBaseline(i) + pt.toFloat(), gp)
                 }
             }
+            gp.clearShadowLayer()
             cv.drawLine(scrollX + gw, clip.top.toFloat(), scrollX + gw, clip.bottom.toFloat(), lnp)
         }
         super.onDraw(cv)
@@ -108,6 +141,7 @@ class MainActivity : Activity() {
     val sp by lazy { getSharedPreferences("g", 0) }
     val tok get() = sp.getString("t", "") ?: ""
     lateinit var root: LinearLayout
+    lateinit var fx: FxOverlay
     val h = Handler(Looper.getMainLooper())
     var onBack: (() -> Unit)? = null
     var pickRepo: File? = null; var pickDir: File? = null
@@ -116,6 +150,15 @@ class MainActivity : Activity() {
     val fullLog = ConcurrentHashMap<Long, String>()
     val spinViews = ArrayList<TextView>()
     var curDepth = 0
+    var noSlide = false
+    var lastPull: PullLayout? = null
+    var bootBox: View? = null
+    var matrixView: MatrixView? = null
+    val jobState = HashMap<Long, String>()
+    val stepSeen = HashSet<String>()
+    var prog = 0
+    var showBar = false
+    val rnd = java.util.Random()
 
     var lastFind = ""
     var lastReplace = ""
@@ -141,6 +184,7 @@ class MainActivity : Activity() {
         Color.parseColor("#FF79C6"), Color.parseColor("#61AFEF"), Color.parseColor("#B8E986"))
     val curViews = ArrayList<TextView>()
     var lastReleaseTag = ""
+    var procView: TextView? = null
 
     val KW = Regex("\\b(class|fun|val|var|def|function|return|if|else|for|while|import|package|public|private|protected|static|void|int|new|true|false|null|const|let|async|await|try|catch|from|in|is|when|override|this|echo|run|break|continue)\\b")
     val NUM = Regex("\\b\\d+(\\.\\d+)?\\b")
@@ -302,15 +346,33 @@ class MainActivity : Activity() {
         dlg(t, e, "OK") { f(e.text.toString().trim()) }
     }
 
-    fun page(t: String, act: View? = null, d: Int = 0): LinearLayout {
+    // pull = true wraps the list in a PullLayout (pull-to-refresh); the instance is kept in lastPull
+    fun page(t: String, act: View? = null, d: Int = 0, pull: Boolean = false): LinearLayout {
         onBack = null; root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(12)) }
         top.addView(tv(t, 22, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.START }, lp(0, -2, 1f))
         if (act != null) top.addView(act)
         root.addView(top)
         val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
-        anim(d)
+        if (pull) {
+            val pl = PullLayout(this)
+            pl.setContent(l)
+            lastPull = pl
+            root.addView(pl, lp(-1, 0, 1f))
+        } else {
+            lastPull = null
+            root.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
+        }
+        if (noSlide) {
+            // page opened from an expanding folder: fade in in place instead of sliding
+            noSlide = false
+            curDepth = d
+            for (i in 0 until root.childCount) {
+                val v = root.getChildAt(i)
+                v.alpha = 0f
+                v.animate().alpha(1f).setDuration(220).start()
+            }
+        } else anim(d)
         return l
     }
 
@@ -327,6 +389,128 @@ class MainActivity : Activity() {
         return b
     }
 
+    // ---------- effects ----------
+    // short haptic tap; uses the modern API when available
+    fun buzz(ms: Long) {
+        val v = getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator ?: return
+        if (Build.VERSION.SDK_INT >= 26) {
+            v.vibrate(VibrationEffect.createOneShot(ms, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            v.vibrate(ms)
+        }
+    }
+
+    // left-right-left shake (two or three swings)
+    fun shake(v: View) {
+        val a = dp(12).toFloat(); val b = dp(7).toFloat(); val c = dp(3).toFloat()
+        ObjectAnimator.ofFloat(v, View.TRANSLATION_X, 0f, -a, a, -b, b, -c, c, 0f).apply {
+            duration = 520
+            start()
+        }
+    }
+
+    // infinite alpha pulse; phase is synced to the wall clock so views recreated on each poll keep the same beat
+    fun pulse(v: View, period: Long, lo: Float) {
+        val a = ObjectAnimator.ofFloat(v, View.ALPHA, 1f, lo)
+        a.duration = period / 2
+        a.repeatCount = ObjectAnimator.INFINITE
+        a.repeatMode = ObjectAnimator.REVERSE
+        a.interpolator = AccelerateDecelerateInterpolator()
+        a.start()
+        if (Build.VERSION.SDK_INT >= 26) a.currentPlayTime = System.currentTimeMillis() % period
+        v.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(x: View) {}
+            override fun onViewDetachedFromWindow(x: View) { a.cancel() }
+        })
+    }
+
+    // status dot before a job: amber pulsing while running, green tick / red cross pop in on change
+    fun statusMark(state: String, popIn: Boolean): TextView {
+        val (glyph, color) = when (state) {
+            "in_progress" -> "\u25CF" to TA
+            "success" -> "\u2713" to TG
+            "failure" -> "\u2717" to TR
+            "queued" -> "\u25CB" to TD
+            else -> "\u2013" to TD
+        }
+        val v = mono(glyph, 15f, color).apply { gravity = Gravity.CENTER }
+        if (state == "in_progress") pulse(v, 1000L, 0.2f)
+        else if (popIn) {
+            v.scaleX = 0f; v.scaleY = 0f
+            v.animate().scaleX(1f).scaleY(1f).setDuration(420).setInterpolator(OvershootInterpolator(2.4f)).start()
+        }
+        return v
+    }
+
+    // [FAIL] tag jumps around for a moment
+    fun glitch(t: TextView) {
+        val orig = t.text.toString()
+        val junk = "#@%&*!?/\\|01"
+        val dd = resources.displayMetrics.density
+        var n = 0
+        val r = object : Runnable {
+            override fun run() {
+                if (n >= 9) { t.text = orig; t.translationX = 0f; return }
+                t.translationX = (rnd.nextInt(9) - 4) * dd
+                t.text = orig.map { if (rnd.nextInt(3) == 0) junk[rnd.nextInt(junk.length)] else it }.joinToString("")
+                n++
+                h.postDelayed(this, 55L)
+            }
+        }
+        h.post(r)
+    }
+
+    // small progress bar: [██████░░░░] 60%
+    fun bar10(p: Int): String {
+        val q = p.coerceIn(0, 100)
+        val n = q / 10
+        return "[" + "\u2588".repeat(n) + "\u2591".repeat(10 - n) + "] " + q + "%"
+    }
+
+    // clone progress: [#####-----] 50%
+    fun pbar(p: Int): String {
+        val q = p.coerceIn(0, 100)
+        val n = q / 10
+        return "[" + "#".repeat(n) + "-".repeat(10 - n) + "] " + q + "%"
+    }
+
+    fun stopMatrix() {
+        val m = matrixView ?: return
+        matrixView = null
+        m.animate().alpha(0f).setDuration(900).withEndAction { m.stop() }.start()
+    }
+
+    // build finished: green celebration on pass, shake + vibrate on fail
+    fun finale(ok: Boolean, l: LinearLayout) {
+        stopMatrix()
+        if (ok) {
+            fx.celebrate(intArrayOf(TG, TC, TA, TM, TBL, TW))
+            buzz(45)
+        } else {
+            shake((l.parent as? View) ?: l)
+            buzz(180)
+        }
+    }
+
+    // bottom toast that slides up, waits, then slides away
+    fun slideToast(parent: FrameLayout, msg: String) {
+        val t = TextView(this).apply {
+            text = msg; textSize = 13f; setTextColor(-1)
+            typeface = Typeface.create("sans-serif-medium", Typeface.BOLD)
+            background = GradientDrawable().apply { setColor(col(R.color.ok)); cornerRadius = dp(20).toFloat() }
+            setPadding(dp(16), dp(9), dp(16), dp(9))
+        }
+        parent.addView(t, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL).apply { bottomMargin = dp(20) })
+        val off = dp(90).toFloat()
+        t.translationY = off; t.alpha = 0f
+        t.animate().translationY(0f).alpha(1f).setDuration(260).setInterpolator(DecelerateInterpolator()).withEndAction {
+            h.postDelayed({
+                t.animate().translationY(off).alpha(0f).setDuration(260).withEndAction { parent.removeView(t) }.start()
+            }, 1100L)
+        }.start()
+    }
+
     // ---------- lifecycle ----------
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -340,6 +524,9 @@ class MainActivity : Activity() {
             }
         }
         setContentView(root)
+        // full-screen layer for the build-success celebration (touches pass through)
+        fx = FxOverlay(this)
+        addContentView(fx, ViewGroup.LayoutParams(-1, -1))
     }
     override fun onResume() { super.onResume(); if (root.childCount == 0 || !granted()) start() }
     override fun onBackPressed() { val b = onBack; if (b != null) b() else super.onBackPressed() }
@@ -370,30 +557,55 @@ class MainActivity : Activity() {
 
     // ---------- repositories ----------
     fun repos() {
-        val l = page("Repositories", btn("Token") { tokenScreen() }, 0)
-        val wait = tv("Loading repositories...", 14, false, R.color.muted); l.addView(wait)
+        val l = page("Repositories", btn("Token") { tokenScreen() }, 0, pull = true)
+        val pl = lastPull
+        pl?.onRefresh = { loadRepos(l, pl, false) }
+        loadRepos(l, pl, true)
+    }
+
+    fun loadRepos(l: LinearLayout, pl: PullLayout?, first: Boolean) {
+        if (first) l.addView(tv("Loading repositories...", 14, false, R.color.muted))
         bg {
-            val a = JSONArray(api("GET", "/user/repos?per_page=100&sort=updated"))
-            ui {
-                l.removeView(wait)
-                for (i in 0 until a.length()) {
-                    val j = a.getJSONObject(i); val name = j.getString("name"); val dir = File(base, name)
-                    val c = card(); val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-                    info.addView(tv(name, 17, true))
-                    info.addView(tv((if (j.getBoolean("private")) "Private" else "Public") + "  |  " + j.getString("default_branch"), 13, false, R.color.muted))
-                    c.addView(info, lp(0, -2, 1f))
-                    var b: Button? = null
-                    b = if (dir.exists()) btn("Open") { browse(dir, dir) } else btn("Clone") {
-                        b?.text = "Cloning..."; b?.isEnabled = false
-                        bg {
-                            try {
-                                unzip(http("GET", "/repos/" + j.getString("full_name") + "/zipball").inputStream, dir)
-                                File(dir, ".gab").writeText(j.getString("full_name") + "\n" + j.getString("default_branch"))
-                                ui { browse(dir, dir) }
-                            } catch (e: Exception) { dir.deleteRecursively(); ui { repos(); toast("Clone failed") } }
+            try {
+                val a = JSONArray(api("GET", "/user/repos?per_page=100&sort=updated"))
+                ui {
+                    l.removeAllViews()
+                    for (i in 0 until a.length()) {
+                        val j = a.getJSONObject(i); val name = j.getString("name"); val dir = File(base, name)
+                        val c = card(); val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+                        info.addView(tv(name, 17, true))
+                        info.addView(tv((if (j.getBoolean("private")) "Private" else "Public") + "  |  " + j.getString("default_branch"), 13, false, R.color.muted))
+                        c.addView(info, lp(0, -2, 1f))
+                        var b: Button? = null
+                        b = if (dir.exists()) btn("Open") { browse(dir, dir) } else btn("Clone") {
+                            // progress bar replaces the old "Cloning..." label
+                            b?.text = pbar(0); b?.isEnabled = false; b?.typeface = Typeface.MONOSPACE
+                            bg {
+                                try {
+                                    val conn = http("GET", "/repos/" + j.getString("full_name") + "/zipball")
+                                    val total = conn.contentLengthLong
+                                    var lastP = -1
+                                    val src = CountIn(conn.inputStream) { got ->
+                                        if (total > 0) {
+                                            val p = (got * 100 / total).toInt()
+                                            if (p != lastP) { lastP = p; ui { b?.text = pbar(p) } }
+                                        }
+                                    }
+                                    unzip(src, dir)
+                                    File(dir, ".gab").writeText(j.getString("full_name") + "\n" + j.getString("default_branch"))
+                                    ui { browse(dir, dir) }
+                                } catch (e: Exception) { dir.deleteRecursively(); ui { repos(); toast("Clone failed") } }
+                            }
                         }
+                        c.addView(b); add(l, c)
                     }
-                    c.addView(b); add(l, c)
+                    pl?.finishRefresh()
+                }
+            } catch (e: Exception) {
+                ui {
+                    pl?.finishRefresh()
+                    if (first) l.removeAllViews()
+                    alert("Error Occurred", e.message ?: "Unknown error")
                 }
             }
         }
@@ -433,7 +645,14 @@ class MainActivity : Activity() {
         }
         dir.listFiles()!!.filter { !it.name.startsWith(".gab") }
             .sortedWith(compareBy({ !it.isDirectory }, { it.name.lowercase() })).forEach { f ->
-                val c = card().apply { setOnClickListener { if (f.isDirectory) browse(repo, f) else edit(repo, dir, f) } }
+                val c = card()
+                var rowRef: SwipeRow? = null
+                c.setOnClickListener {
+                    val rr = rowRef
+                    if (rr != null && rr.open) rr.close()
+                    else if (f.isDirectory) openFolder(repo, f, c.getChildAt(0))
+                    else edit(repo, dir, f)
+                }
                 val ext = if (f.isDirectory) "DIR" else f.extension.uppercase().take(4).ifEmpty { "FILE" }
                 c.addView(tv(ext, 11, true, if (f.isDirectory) R.color.white else R.color.fg).apply {
                     gravity = Gravity.CENTER; background = box(if (f.isDirectory) col(R.color.p1) else col(R.color.stroke), 0, 8)
@@ -441,15 +660,85 @@ class MainActivity : Activity() {
                 val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
                 info.addView(tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE })
                 info.addView(tv(sz(f), 12, false, R.color.muted))
-                c.addView(info, lp(0, -2, 1f)); c.addView(dots { menu(repo, dir, f) }); add(l, c)
+                c.addView(info, lp(0, -2, 1f))
+                c.addView(dots { menu(repo, dir, f) })
+                val row = SwipeRow(this, c, swipeActions(repo, dir, f) { rowRef?.close() }, dp(150).toFloat())
+                rowRef = row
+                add(l, row)
             }
+    }
+
+    // revealed when a file row is swiped left: rename and delete
+    fun swipeActions(repo: File, dir: File, f: File, close: () -> Unit): View {
+        val v = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL or Gravity.END
+            setPadding(0, 0, dp(6), 0)
+        }
+        v.addView(actIcon("\u270E", "Rename", R.color.p1) { close(); renameFile(repo, dir, f) })
+        v.addView(actIcon("\uD83D\uDDD1", "Delete", R.color.bad) { close(); deleteFile(repo, dir, f) })
+        return v
+    }
+
+    fun actIcon(icon: String, label: String, colorRes: Int, f: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            background = box(col(colorRes), 0, 10)
+            addView(tv(icon, 16, true, R.color.white).apply { gravity = Gravity.CENTER })
+            addView(tv(label, 10, false, R.color.white).apply { gravity = Gravity.CENTER })
+            layoutParams = lp(dp(64), -1, 0f, 0).apply { setMargins(dp(3), dp(8), dp(3), dp(8)) }
+            setOnClickListener { f() }
+        }
+    }
+
+    fun renameFile(repo: File, dir: File, f: File) {
+        ask("New name", f.name) { if (it.isNotEmpty()) { f.renameTo(File(dir, it)); browse(repo, dir) } }
+    }
+
+    fun deleteFile(repo: File, dir: File, f: File) {
+        dlg("Delete", tv("Delete " + f.name + "? This cannot be undone.", 15, false, R.color.muted), "Delete") {
+            f.deleteRecursively(); browse(repo, dir)
+        }
+    }
+
+    // folder card: a small square (the folder icon) grows to the full screen, then the folder page appears
+    fun openFolder(repo: File, f: File, icon: View) {
+        val ov = View(this)
+        ov.isClickable = true
+        val shape = GradientDrawable().apply { setColor(col(R.color.p1)); cornerRadius = dp(8).toFloat() }
+        ov.background = shape
+        addContentView(ov, ViewGroup.LayoutParams(-1, -1))
+        ov.post {
+            val loc = IntArray(2); val oloc = IntArray(2)
+            icon.getLocationInWindow(loc); ov.getLocationInWindow(oloc)
+            val fw = ov.width.toFloat(); val fh = ov.height.toFloat()
+            ov.pivotX = 0f; ov.pivotY = 0f
+            ov.translationX = (loc[0] - oloc[0]).toFloat()
+            ov.translationY = (loc[1] - oloc[1]).toFloat()
+            ov.scaleX = icon.width / fw
+            ov.scaleY = icon.height / fh
+            ov.animate().translationX(0f).translationY(0f).scaleX(1f).scaleY(1f)
+                .setDuration(340).setInterpolator(AccelerateDecelerateInterpolator())
+                .withEndAction {
+                    noSlide = true
+                    browse(repo, f)
+                    (ov.parent as? ViewGroup)?.removeView(ov)
+                }.start()
+            // square turns from folder blue into the page background as it grows
+            ValueAnimator.ofObject(ArgbEvaluator(), col(R.color.p1), col(R.color.bg)).apply {
+                duration = 340
+                addUpdateListener { shape.setColor(it.animatedValue as Int) }
+                start()
+            }
+        }
     }
 
     fun menu(repo: File, dir: File, f: File) {
         menuDlg(f.name, listOf("Rename", "Delete", "Push this file", "Export to device")) { w ->
             when (w) {
-                0 -> ask("New name", f.name) { if (it.isNotEmpty()) { f.renameTo(File(dir, it)); browse(repo, dir) } }
-                1 -> dlg("Delete", tv("Delete " + f.name + "? This cannot be undone.", 15, false, R.color.muted), "Delete") { f.deleteRecursively(); browse(repo, dir) }
+                0 -> renameFile(repo, dir, f)
+                1 -> deleteFile(repo, dir, f)
                 2 -> if (f.isFile) pushOne(repo, f) else toast("Use Push all for folders")
                 3 -> bg {
                     val stamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
@@ -536,6 +825,7 @@ class MainActivity : Activity() {
             setTextColor(col(R.color.fg)); gravity = Gravity.TOP; gc = col(R.color.muted)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
             minLines = 20; pad(true)
+            accent = col(R.color.p1)
             layoutParams = FrameLayout.LayoutParams(-2, -2)
         }
         hl(cv.text)
@@ -551,7 +841,23 @@ class MainActivity : Activity() {
         })
         fun flush() { h.removeCallbacks(commit); commit.run() }
         fun put(s: String) { silent = true; cv.setText(s); silent = false; last = s; hl(cv.text); cv.pad(true) }
-        fun save() { f.writeText(cv.text.toString()); toast("Saved") }
+
+        // container for the code area; the save toast slides up inside it
+        val frame = FrameLayout(this).apply { layoutParams = lp(-1, 0, 1f) }
+
+        fun flashSave() {
+            cv.flash = 1f
+            ValueAnimator.ofFloat(1f, 0f).apply {
+                duration = 900
+                addUpdateListener { cv.flash = it.animatedValue as Float; cv.invalidate() }
+                start()
+            }
+        }
+        fun save() {
+            f.writeText(cv.text.toString())
+            flashSave()
+            slideToast(frame, "Saved")
+        }
 
         root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
         onBack = { flush(); browse(repo, dir) }
@@ -560,8 +866,6 @@ class MainActivity : Activity() {
         val title = tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0) }
         top.addView(title, lp(0, -2, 1f))
 
-        val frame = FrameLayout(this).apply { layoutParams = lp(-1, 0, 1f) }
-
         val searchBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             background = box(col(R.color.card), col(R.color.stroke), 12).apply { alpha = 180 }
@@ -569,6 +873,11 @@ class MainActivity : Activity() {
             layoutParams = FrameLayout.LayoutParams(-1, -2).apply { gravity = Gravity.TOP; setMargins(dp(10), dp(10), dp(10), dp(10)) }
             visibility = View.GONE
             elevation = dp(4).toFloat()
+        }
+        // scale from the top-right corner, where the Search button is
+        searchBox.addOnLayoutChangeListener { v, l, _, r, _, _, _, _, _ ->
+            v.pivotX = (r - l) * 0.9f
+            v.pivotY = 0f
         }
 
         val fInput = EditText(this).apply {
@@ -593,6 +902,26 @@ class MainActivity : Activity() {
             })
         }
         searchBox.addView(fInput); searchBox.addView(rInput)
+
+        // floating search: fades and scales in / out
+        var searchOn = false
+        fun setSearch(show: Boolean) {
+            if (show == searchOn) return
+            searchOn = show
+            searchBox.animate().cancel()
+            if (show) {
+                searchBox.visibility = View.VISIBLE
+                searchBox.alpha = 0f; searchBox.scaleX = 0.9f; searchBox.scaleY = 0.9f
+                searchBox.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(200)
+                    .setInterpolator(DecelerateInterpolator()).start()
+            } else {
+                searchBox.animate().alpha(0f).scaleX(0.9f).scaleY(0.9f).setDuration(160)
+                    .withEndAction {
+                        searchBox.visibility = View.GONE
+                        searchBox.alpha = 1f; searchBox.scaleX = 1f; searchBox.scaleY = 1f
+                    }.start()
+            }
+        }
 
         var idx = 0
         val sBtnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
@@ -624,13 +953,13 @@ class MainActivity : Activity() {
                 toast("Replaced all matches")
             }
         })
-        sBtnRow.addView(smallBtn("Close") { searchBox.visibility = View.GONE })
+        sBtnRow.addView(smallBtn("Close") { setSearch(false) })
         searchBox.addView(sBtnRow)
 
         val actBar = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
         val actRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         actRow.addView(smallBtn("Save") { save() })
-        actRow.addView(smallBtn("Search") { searchBox.visibility = if (searchBox.visibility == View.VISIBLE) View.GONE else View.VISIBLE })
+        actRow.addView(smallBtn("Search") { setSearch(!searchOn) })
         actRow.addView(smallBtn("Undo") { flush(); if (undo.isNotEmpty()) { redo.add(last); put(undo.removeAt(undo.size - 1)) } })
         actRow.addView(smallBtn("Redo") { flush(); if (redo.isNotEmpty()) { undo.add(last); put(redo.removeAt(redo.size - 1)) } })
         actRow.addView(smallBtn("Push") { save(); pushOne(repo, f) })
@@ -713,7 +1042,7 @@ class MainActivity : Activity() {
                 if (my != live) { t.text = full; return }
                 n = minOf(n + step, full.length)
                 if (n < full.length) {
-                    t.text = SpannableStringBuilder(full.subSequence(0, n)).append("█")
+                    t.text = SpannableStringBuilder(full.subSequence(0, n)).append("\u2588")
                     h.postDelayed(this, 22)
                 } else t.text = full
             }
@@ -750,23 +1079,34 @@ class MainActivity : Activity() {
         setOnClickListener { f() }
     }
 
-    var procView: TextView? = null
     fun hideProc() = ui { procView?.visibility = View.GONE }
 
     // full-screen hacker terminal: typed lines, spinning [ - ] tags, "Processing....." footer
-    fun term(cmd: String, my: Int, close: () -> Unit): LinearLayout {
+    // matrix = true puts falling green characters behind the screen
+    fun term(cmd: String, my: Int, matrix: Boolean = false, close: () -> Unit): LinearLayout {
         onBack = close
         root.removeAllViews(); root.gravity = Gravity.TOP
         root.setBackgroundColor(TB); bars(true); spinViews.clear(); typedSeen.clear()
+        matrixView = null; bootBox = null; prog = 0; showBar = false
 
+        val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(0, dp(4), 0, dp(8)) }
         top.addView(mono("[x]", 15f, TR).apply { setPadding(dp(12), dp(4), dp(4), dp(4)); setOnClickListener { close() } })
-        root.addView(top)
+        colv.addView(top)
         val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        root.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
+        colv.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
         val pv = mono("", 13f, TA).apply { setPadding(0, dp(10), 0, dp(6)) }
         procView = pv
-        root.addView(pv)
+        colv.addView(pv)
+
+        val frame = FrameLayout(this)
+        if (matrix) {
+            val mv = MatrixView(this)
+            matrixView = mv
+            frame.addView(mv, FrameLayout.LayoutParams(-1, -1))
+        }
+        frame.addView(colv, FrameLayout.LayoutParams(-1, -1))
+        root.addView(frame, lp(-1, 0, 1f))
         anim(99)
 
         val fr = "|/-\\"
@@ -776,13 +1116,25 @@ class MainActivity : Activity() {
                 if (my != live) return
                 tick++
                 val f = fr[(tick / 2) % 4]
-                pv.text = mspan("$f " to TG, "Processing" to TA, ".".repeat((tick / 4) % 6) to TG)
+                val dots = ".".repeat((tick / 4) % 6)
+                val line = mspan("$f " to TG, "Processing" to TA, dots to TG)
+                if (showBar) line.append(mspan("   " to TD, bar10(prog) to TG))
+                pv.text = line
                 for (s in spinViews) s.text = "[ $f ]"
                 h.postDelayed(this, 90)
             }
         }
         h.post(spin)
         return l
+    }
+
+    // the boot sequence: fake connection lines, one every 330ms
+    fun bootSeq(my: Int, box: LinearLayout, lines: List<String>, i: Int, then: () -> Unit) {
+        if (my != live) return
+        if (i >= lines.size) { then(); return }
+        box.addView(tline("[ OK ]", TG, lines[i], TT))
+        (box.parent as? LinearLayout)?.let { scrollEnd(it) }
+        h.postDelayed({ bootSeq(my, box, lines, i + 1, then) }, 330L)
     }
 
     fun tline(tag: String, tc: Int, text: CharSequence, xc: Int, spin: Boolean = false): LinearLayout {
@@ -814,17 +1166,24 @@ class MainActivity : Activity() {
     }
     fun tfail(l: LinearLayout, repo: File, msg: String) = ui {
         spinViews.clear()
+        val fl = tline("[FAIL]", TR, "push aborted", TRL)
+        l.addView(fl)
+        glitch(fl.getChildAt(0) as TextView)
         l.addView(tmono(mspan("$ " to TR, "exit " to TW, "1" to TR, "  // push failed" to TD)).apply { setPadding(0, dp(10), 0, dp(4)) })
         l.addView(mono("", 11f, TRL).apply {
             text = colorLog(msg)
             background = box(TLOG, TD, 6); setPadding(dp(10), dp(8), dp(10), dp(8)); setHorizontallyScrolling(true)
         }, lp(-1, -2).apply { bottomMargin = dp(8) })
         val row = LinearLayout(this)
-        row.addView(tbtn("[ copy error ]", TR) { copyText("error", msg) }, lp(-2, -2).apply { rightMargin = dp(8) })
+        val copyBtn = tbtn("[ copy error ]", TR) { copyText("error", msg) }
+        row.addView(copyBtn, lp(-2, -2).apply { rightMargin = dp(8) })
         row.addView(tbtn("[ back ]", TG) { live++; browse(repo, repo) })
         l.addView(row, lp(-2, -2).apply { bottomMargin = dp(8) })
+        pulse(copyBtn, 1100L, 0.4f)
         hideProc()
         scrollEnd(l)
+        shake((l.parent as? View) ?: l)
+        buzz(180)
     }
 
     fun pushOne(repo: File, f: File) {
@@ -908,12 +1267,28 @@ class MainActivity : Activity() {
         toast("Copied: $label")
     }
 
+    // removes everything except the boot-sequence box, which stays on screen
+    fun clearKeep(l: LinearLayout) {
+        for (i in l.childCount - 1 downTo 0) if (l.getChildAt(i) !== bootBox) l.removeViewAt(i)
+    }
+
     fun draw(l: LinearLayout, r: JSONObject, js: JSONArray, artifactState: Int, full: String) {
         val sv = l.parent as? ScrollView; val y = sv?.scrollY ?: 0
         val atBottom = sv == null || (l.height - (sv.height + y)) < dp(80)
-        l.removeAllViews(); spinViews.clear(); curViews.clear()
+        clearKeep(l); spinViews.clear(); curViews.clear()
 
         l.addView(tmono(mspan("# " to TD, r.optString("name") to TC, "  run " to TD, "#" + r.optInt("run_number") to TA, "  " to TD, "[" + r.optString("head_branch") + "]" to TM), 12f).apply { setPadding(0, 0, 0, dp(6)) })
+
+        // progress = completed steps / total steps
+        var total = 0; var doneSteps = 0
+        for (k in 0 until js.length()) {
+            val sa = js.getJSONObject(k).optJSONArray("steps") ?: continue
+            total += sa.length()
+            for (q in 0 until sa.length()) if (sa.getJSONObject(q).getString("status") == "completed") doneSteps++
+        }
+        val finished = r.getString("status") == "completed"
+        val pct = if (finished) 100 else minOf(99, if (total == 0) 0 else doneSteps * 100 / total)
+        prog = maxOf(prog, pct)
 
         for (k in 0 until js.length()) {
             val j = js.getJSONObject(k)
@@ -927,10 +1302,24 @@ class MainActivity : Activity() {
                 jst == "in_progress" -> TA
                 else -> TD
             }
+            val state = when {
+                jst == "in_progress" -> "in_progress"
+                jc == "success" -> "success"
+                jc == "failure" -> "failure"
+                jst == "completed" -> "skip"
+                else -> "queued"
+            }
+            val prev = jobState[id]
+            jobState[id] = state
+
             val jcolr = JCOL[k % JCOL.size]
             val jl = mspan("$ " to TG, "job::" to TD, jname to jcolr)
             if (jc.isNotEmpty()) { jl.append(mspan("  => " to TD, jc.uppercase() to jcol)) }
-            l.addView(tmono(jl).apply { setPadding(0, dp(10), 0, dp(4)) })
+
+            val jrow = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(10), 0, dp(4)) }
+            jrow.addView(statusMark(state, prev != state), lp(dp(20), -2).apply { rightMargin = dp(6) })
+            jrow.addView(tmono(jl), lp(0, -2, 1f))
+            l.addView(jrow)
 
             val steps = j.optJSONArray("steps"); var shown = false
             if (steps != null) {
@@ -942,14 +1331,18 @@ class MainActivity : Activity() {
                     val isRunning = stStatus == "in_progress"
                     val isFailed = stConcl == "failure"
 
-                    if (isRunning) l.addView(tline("[ - ]", TA, name, jcolr, true))
-                    else if (stStatus == "completed") {
-                        when (stConcl) {
-                            "success" -> l.addView(tline("[ OK ]", TG, name, jcolr))
-                            "failure" -> l.addView(tline("[FAIL]", TR, name, TR))
-                            else -> l.addView(tline("[SKIP]", TD, name, TD))
+                    val row = when {
+                        isRunning -> tline("[ - ]", TA, name, jcolr, true)
+                        stStatus == "completed" -> when (stConcl) {
+                            "success" -> tline("[ OK ]", TG, name, jcolr)
+                            "failure" -> tline("[FAIL]", TR, name, TR)
+                            else -> tline("[SKIP]", TD, name, TD)
                         }
-                    } else l.addView(tline("[ .. ]", TD, name, TD))
+                        else -> tline("[ .. ]", TD, name, TD)
+                    }
+                    l.addView(row)
+                    // glitch each failed step once, when it first shows up as failed
+                    if (isFailed && stepSeen.add("$id/$q")) glitch(row.getChildAt(0) as TextView)
 
                     if ((isRunning || isFailed) && !shown) {
                         val lg = logMap[id]
@@ -966,9 +1359,9 @@ class MainActivity : Activity() {
                 }
             }
 
-            // copy button only for failed jobs
+            // copy button only for failed jobs; it pulses red so it is easy to spot
             if (jc == "failure") {
-                l.addView(tbtn("[ copy logs of failed job: $jname ]", TR) {
+                val cb = tbtn("[ copy logs of failed job: $jname ]", TR) {
                     val cached = fullLog[id]
                     if (cached != null) copyText("job $jname", "### job: $jname (failed)\n$cached")
                     else {
@@ -979,7 +1372,9 @@ class MainActivity : Activity() {
                             ui { copyText("job $jname", "### job: $jname (failed)\n$cl") }
                         }
                     }
-                }, lp(-2, -2).apply { topMargin = dp(8); bottomMargin = dp(6) })
+                }
+                l.addView(cb, lp(-2, -2).apply { topMargin = dp(8); bottomMargin = dp(6) })
+                pulse(cb, 1100L, 0.4f)
             }
         }
 
@@ -995,7 +1390,7 @@ class MainActivity : Activity() {
             }
         }
 
-        if (r.getString("status") == "completed") {
+        if (finished) {
             val ok = r.optString("conclusion") == "success"
             l.addView(tmono(
                 if (ok) mspan("$ " to TG, "exit " to TW, "0" to TG, "  // build passed" to TD)
@@ -1007,61 +1402,80 @@ class MainActivity : Activity() {
     }
 
     fun watch(full: String, sha: String, repo: File) {
-        val my = ++live; logMap.clear(); fullLog.clear()
+        val my = ++live; logMap.clear(); fullLog.clear(); jobState.clear(); stepSeen.clear()
         var artifactState = 0
 
-        val l = term("tail -f build.log", my) { live++; browse(repo, repo) }
+        val l = term("tail -f build.log", my, matrix = true) { live++; browse(repo, repo) }
+        showBar = true
+
+        // fake boot lines first, then the real polling starts
+        val boot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        bootBox = boot
+        l.addView(boot)
         val w = tline("[ - ]", TA, "waiting for workflow run to start...", TW, true)
-        l.addView(w)
+        bootSeq(my, boot, listOf(
+            "connecting to github...",
+            "authenticating token...",
+            "repo: $full",
+            "attaching build log stream..."
+        ), 0) {
+            l.addView(w)
+            bg {
+                for (i in 0 until 600) {
+                    if (my != live) return@bg
+                    Thread.sleep(3000)
+                    val rs = try { JSONObject(api("GET", "/repos/$full/actions/runs?head_sha=$sha")).getJSONArray("workflow_runs") } catch (e: Exception) { continue }
+                    if (rs.length() == 0) continue
+                    val r = rs.getJSONObject(0)
+                    val js = try { JSONObject(api("GET", r.getString("url") + "/jobs")).getJSONArray("jobs") } catch (e: Exception) { continue }
 
-        bg {
-            for (i in 0 until 600) {
-                if (my != live) return@bg
-                Thread.sleep(3000)
-                val rs = try { JSONObject(api("GET", "/repos/$full/actions/runs?head_sha=$sha")).getJSONArray("workflow_runs") } catch(e: Exception) { continue }
-                if (rs.length() == 0) continue
-                val r = rs.getJSONObject(0)
-                val js = try { JSONObject(api("GET", r.getString("url") + "/jobs")).getJSONArray("jobs") } catch(e: Exception) { continue }
+                    for (k in 0 until js.length()) {
+                        val j = js.getJSONObject(k)
+                        val jid = j.getLong("id")
+                        val st = j.getString("status")
+                        val c = j.optString("conclusion")
+                        val failedDone = st == "completed" && c == "failure"
+                        if (st == "in_progress" || failedDone) {
+                            if (failedDone && fullLog.containsKey(jid)) continue
+                            try {
+                                val cl = clean(String(http("GET", "/repos/$full/actions/jobs/$jid/logs").inputStream.readBytes()))
+                                fullLog[jid] = cl
+                                logMap[jid] = cl.lines().takeLast(80).joinToString("\n")
+                            } catch (e: Exception) { }
+                        }
+                    }
 
-                for (k in 0 until js.length()) {
-                    val j = js.getJSONObject(k)
-                    val jid = j.getLong("id")
-                    val st = j.getString("status")
-                    val c = j.optString("conclusion")
-                    val failedDone = st == "completed" && c == "failure"
-                    if (st == "in_progress" || failedDone) {
-                        if (failedDone && fullLog.containsKey(jid)) continue
-                        try {
-                            val cl = clean(String(http("GET", "/repos/$full/actions/jobs/$jid/logs").inputStream.readBytes()))
-                            fullLog[jid] = cl
-                            logMap[jid] = cl.lines().takeLast(80).joinToString("\n")
-                        } catch (e: Exception) { }
+                    val done = r.getString("status") == "completed"
+                    val success = r.optString("conclusion") == "success"
+
+                    if (done && success && artifactState == 0) artifactState = 1
+
+                    ui { if (my == live) { if (w.parent == l) l.removeView(w); draw(l, r, js, artifactState, full) } }
+
+                    if (done) {
+                        // celebration (pass) or shake (fail), once, when the run finishes
+                        ui { if (my == live) finale(success, l) }
+                        if (success) {
+                            try {
+                                download(full, r)
+                                artifactState = 2
+                            } catch (e: Exception) {
+                                artifactState = 3
+                            }
+                            ui { if (my == live) draw(l, r, js, artifactState, full) }
+                        }
+                        hideProc()
+                        return@bg
                     }
                 }
-
-                val done = r.getString("status") == "completed"
-                val success = r.optString("conclusion") == "success"
-
-                if (done && success && artifactState == 0) artifactState = 1
-
-                ui { if (my == live) { if (w.parent == l) l.removeView(w); draw(l, r, js, artifactState, full) } }
-
-                if (done) {
-                    if (success) {
-                        try {
-                            download(full, r)
-                            artifactState = 2
-                        } catch (e: Exception) {
-                            artifactState = 3
-                        }
-                        ui { if (my == live) draw(l, r, js, artifactState, full) }
+                hideProc()
+                ui {
+                    if (my == live) {
+                        stopMatrix()
+                        l.addView(tmono(mspan("$ " to TA, "timeout" to TA, "  // stopped watching after 30 min" to TD), 12f))
                     }
-                    hideProc()
-                    return@bg
                 }
             }
-            hideProc()
-            ui { if (my == live) l.addView(tmono(mspan("$ " to TA, "timeout" to TA, "  // stopped watching after 30 min" to TD), 12f)) }
         }
     }
 
