@@ -13,6 +13,7 @@ import android.text.*
 import android.text.style.ForegroundColorSpan
 import android.util.Base64
 import android.util.TypedValue
+import kotlin.math.abs
 import android.view.*
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.view.animation.DecelerateInterpolator
@@ -33,10 +34,21 @@ class CodeView(c: Context) : EditText(c) {
     val flp = Paint().apply { style = Paint.Style.FILL }
     var gw = 0f; var dg = 0; var gc = 0
     val d = resources.displayMetrics.density
-    var acc = 1f; var multi = false
     var lineNo = IntArray(0); var lastL: Layout? = null
     var accent = Color.parseColor("#3B82F6")   // current line glow color
     var flash = 0f                              // 0..1, green flash after save
+
+    // ---- touch: one-finger fling scroll, two-finger pinch zoom ----
+    private val slop = ViewConfiguration.get(c).scaledTouchSlop
+    private val minFling = ViewConfiguration.get(c).scaledMinimumFlingVelocity
+    private val scroller = OverScroller(c)
+    private var tracker: VelocityTracker? = null
+    private var downX = 0f; private var downY = 0f
+    private var lastX = 0f; private var lastY = 0f
+    private var scrolling = false
+    private var multi = false
+    private var zoom = 0f
+    private var zoomQueued = false
 
     init {
         setHorizontallyScrolling(true)
@@ -46,16 +58,47 @@ class CodeView(c: Context) : EditText(c) {
 
     fun dp(x: Int) = (x * resources.displayMetrics.density).toInt()
 
-    val sd = ScaleGestureDetector(c, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+    // runs at most once per frame, so a pinch re-lays out the text at most 60 times a second
+    private val zoomStep = object : Runnable {
+        override fun run() {
+            zoomQueued = false
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, zoom)
+            pad(true)
+        }
+    }
+
+    private val sd = ScaleGestureDetector(c, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+        override fun onScaleBegin(s: ScaleGestureDetector): Boolean {
+            zoom = textSize
+            return true
+        }
         override fun onScale(s: ScaleGestureDetector): Boolean {
-            acc *= s.scaleFactor
-            if (acc > 1.25f || acc < 0.75f) {
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, (textSize * acc).coerceIn(8 * d, 40 * d))
-                acc = 1f; pad(true)
-            }
+            zoom = (zoom * s.scaleFactor).coerceIn(8 * d, 40 * d)
+            if (!zoomQueued) { zoomQueued = true; postOnAnimation(zoomStep) }
             return true
         }
     })
+
+    // keeps the fling going frame by frame until the scroller stops
+    private val flingStep = object : Runnable {
+        override fun run() {
+            if (scroller.computeScrollOffset()) {
+                scrollTo(scroller.currX, scroller.currY)
+                postOnAnimation(this)
+            }
+        }
+    }
+
+    private fun maxX() = (computeHorizontalScrollRange() - computeHorizontalScrollExtent()).coerceAtLeast(0)
+    private fun maxY() = (computeVerticalScrollRange() - computeVerticalScrollExtent()).coerceAtLeast(0)
+
+    // tells the EditText to forget the touch so a drag does not also place the cursor or select text
+    private fun cancelEditorTouch(e: MotionEvent) {
+        val cancel = MotionEvent.obtain(e)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        super.onTouchEvent(cancel)
+        cancel.recycle()
+    }
 
     fun pad(force: Boolean = false) {
         val digits = (text.count { it == '\n' } + 1).toString().length.coerceAtLeast(3)
@@ -119,19 +162,60 @@ class CodeView(c: Context) : EditText(c) {
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
         sd.onTouchEvent(e)
-        if (e.actionMasked == MotionEvent.ACTION_DOWN) { multi = false; acc = 1f }
-        if (e.pointerCount > 1) {
-            if (!multi) {
-                multi = true
-                val c = MotionEvent.obtain(e); c.action = MotionEvent.ACTION_CANCEL; super.onTouchEvent(c); c.recycle()
-                clearFocus()
-                val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager
-                imm.hideSoftInputFromWindow(windowToken, 0)
-            }
-            parent?.requestDisallowInterceptTouchEvent(true)
+        val a = e.actionMasked
+
+        // pinch: two or more fingers belong to the zoom gesture
+        if (sd.isInProgress || e.pointerCount > 1) {
+            if (!multi) cancelEditorTouch(e)
+            multi = true
+            scrolling = false
+            scroller.abortAnimation()
             return true
         }
-        if (multi && e.actionMasked == MotionEvent.ACTION_UP) { multi = false; return true }
+        if (multi) {
+            if (a == MotionEvent.ACTION_UP || a == MotionEvent.ACTION_CANCEL) multi = false
+            return true
+        }
+
+        when (a) {
+            MotionEvent.ACTION_DOWN -> {
+                scroller.abortAnimation()
+                downX = e.x; downY = e.y; lastX = e.x; lastY = e.y
+                scrolling = false
+                tracker?.recycle()
+                tracker = VelocityTracker.obtain().also { it.addMovement(e) }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                tracker?.addMovement(e)
+                if (!scrolling && (abs(e.x - downX) > slop || abs(e.y - downY) > slop)) {
+                    scrolling = true
+                    cancelEditorTouch(e)
+                }
+                if (scrolling) {
+                    val nx = (scrollX + (lastX - e.x)).toInt().coerceIn(0, maxX())
+                    val ny = (scrollY + (lastY - e.y)).toInt().coerceIn(0, maxY())
+                    scrollTo(nx, ny)
+                    lastX = e.x; lastY = e.y
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (scrolling) {
+                    scrolling = false
+                    val t = tracker
+                    t?.addMovement(e)
+                    t?.computeCurrentVelocity(1000)
+                    val vx = -(t?.xVelocity ?: 0f)
+                    val vy = -(t?.yVelocity ?: 0f)
+                    // a fast flick keeps moving after the finger is lifted
+                    if (abs(vx) > minFling || abs(vy) > minFling) {
+                        scroller.fling(scrollX, scrollY, vx.toInt(), vy.toInt(), 0, maxX(), 0, maxY())
+                        postOnAnimation(flingStep)
+                    }
+                    return true
+                }
+            }
+        }
         return super.onTouchEvent(e)
     }
 }
