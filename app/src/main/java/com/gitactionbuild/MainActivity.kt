@@ -598,7 +598,14 @@ class MainActivity : Activity() {
 
     fun browse(repo: File, dir: File) {
         val rel = dir.relativeTo(repo).path
-        val l = page(repo.name + (if (rel.isEmpty()) "" else "/$rel"), btn("Repos") { repos() }, depthOf(repo, dir))
+        val l = page(repo.name + (if (rel.isEmpty()) "" else "/$rel"), btn("Repos") { repos() }, depthOf(repo, dir), pull = true)
+        val pl = lastPull
+        pl?.onRefresh = { h.postDelayed({ l.removeAllViews(); fillDir(l, repo, dir); pl?.finishRefresh() }, 350L) }
+        fillDir(l, repo, dir)
+    }
+
+    // toolbar, parent link and file cards of one folder
+    fun fillDir(l: LinearLayout, repo: File, dir: File) {
         onBack = { if (dir != repo) browse(repo, dir.parentFile!!) else repos() }
         l.addView(bar(
             btn("New file") { ask("File name") {
@@ -774,7 +781,7 @@ class MainActivity : Activity() {
             setText(last); typeface = Typeface.MONOSPACE; setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
             setTextColor(col(R.color.fg)); gravity = Gravity.TOP; gc = col(R.color.muted)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            minLines = 20; pad(true)
+            pad(true)
             accent = col(R.color.p1)
             layoutParams = FrameLayout.LayoutParams(-2, -2)
         }
@@ -809,8 +816,14 @@ class MainActivity : Activity() {
             slideToast(frame, "Saved")
         }
 
+        // leaving the file (back) saves any unsaved changes first
+        fun autoSave() {
+            val cur = cv.text.toString()
+            if (!f.exists() || f.readText() != cur) f.writeText(cur)
+        }
+
         root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
-        onBack = { flush(); browse(repo, dir) }
+        onBack = { flush(); autoSave(); browse(repo, dir) }
 
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
         val title = tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0) }
@@ -917,9 +930,8 @@ class MainActivity : Activity() {
         top.addView(actBar)
         root.addView(top)
 
-        val hsv = HorizontalScrollView(this).apply { isFillViewport = true; addView(cv) }
-        val vsv = ScrollView(this).apply { isFillViewport = true; addView(hsv) }
-        frame.addView(vsv, FrameLayout.LayoutParams(-1, -1))
+        // the EditText scrolls itself, so only the visible lines get laid out and drawn
+        frame.addView(cv, FrameLayout.LayoutParams(-1, -1))
         frame.addView(searchBox)
         root.addView(frame)
         anim(depthOf(repo, dir) + 1)
@@ -1000,7 +1012,7 @@ class MainActivity : Activity() {
         h.post(r)
     }
 
-    fun tmono(cs: CharSequence, size: Float = 13f) = mono("", size, TG).also { typeIn(it, cs) }
+    fun tmono(cs: CharSequence, size: Float = 13f) = mono("", size, TG).apply { setTextIsSelectable(true) }.also { typeIn(it, cs) }
 
     // colorize raw CI log lines by meaning
     fun colorLog(t: String): CharSequence {
@@ -1066,16 +1078,17 @@ class MainActivity : Activity() {
                 if (my != live) return
                 tick++
                 val f = fr[(tick / 2) % 4]
-                // footer: static "Progress" label with the bar; the step tags keep spinning
-                val line = mspan("Progress   " to TA, bar10(prog) to TG)
-                pv.text = line
                 for (s in spinViews) s.text = "[ $f ]"
                 h.postDelayed(this, 90)
             }
         }
+        pv.text = footerText()
         h.post(spin)
         return l
     }
+
+    // footer: "Progress" label and the bar, no animation
+    fun footerText(): CharSequence = mspan("Progress   " to TA, bar10(prog) to TG)
 
     // the boot sequence: fake connection lines, one every 330ms
     fun bootSeq(my: Int, box: LinearLayout, lines: List<String>, i: Int, then: () -> Unit) {
@@ -1090,7 +1103,7 @@ class MainActivity : Activity() {
         val r = LinearLayout(this).apply { setPadding(0, dp(3), 0, dp(3)) }
         val t = mono(tag, 13f, tc).apply { setPadding(0, 0, dp(8), 0) }
         if (spin) spinViews.add(t)
-        val x = mono("", 13f, xc)
+        val x = mono("", 13f, xc).apply { setTextIsSelectable(true) }
         r.addView(t); r.addView(x, lp(0, -2, 1f))
         typeIn(x, text)
         return r
@@ -1120,6 +1133,7 @@ class MainActivity : Activity() {
         glitch(fl.getChildAt(0) as TextView)
         l.addView(tmono(mspan("$ " to TR, "exit " to TW, "1" to TR, "  // push failed" to TD)).apply { setPadding(0, dp(10), 0, dp(4)) })
         l.addView(mono("", 11f, TRL).apply {
+            setTextIsSelectable(true)
             text = colorLog(msg)
             background = box(TLOG, TD, 6); setPadding(dp(10), dp(8), dp(10), dp(8)); setHorizontallyScrolling(true)
         }, lp(-1, -2).apply { bottomMargin = dp(8) })
@@ -1298,6 +1312,7 @@ class MainActivity : Activity() {
                         if (!lg.isNullOrEmpty()) {
                             shown = true
                             l.addView(mono("", 10.5f, TGL).apply {
+                                setTextIsSelectable(true)
                                 text = colorLog(lg)
                                 background = box(TLOG, jcolr, 6)
                                 setPadding(dp(10), dp(8), dp(10), dp(8))
@@ -1347,6 +1362,7 @@ class MainActivity : Activity() {
             ).apply { setPadding(0, dp(12), 0, dp(0)) })
         }
 
+        procView?.text = footerText()
         sv?.post { if (atBottom) sv.fullScroll(View.FOCUS_DOWN) else sv.scrollTo(0, y) }
     }
 

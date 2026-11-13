@@ -204,6 +204,7 @@ class PullLayout(c: Context) : FrameLayout(c) {
     private val dd = resources.displayMetrics.density
     private val limit = 64f * dd
     private val slop = ViewConfiguration.get(c).scaledTouchSlop
+    private var sx = 0f
     private var sy = 0f
     private var pulling = false
     private var curPull = 0f
@@ -224,11 +225,13 @@ class PullLayout(c: Context) : FrameLayout(c) {
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
+                sx = e.x
                 sy = e.y
                 pulling = false
             }
             MotionEvent.ACTION_MOVE -> {
-                if (!refreshing && sv.scrollY == 0 && e.y - sy > slop) {
+                // only a mostly-vertical drag down counts as a pull (horizontal bar scrolling does not)
+                if (!refreshing && sv.scrollY == 0 && e.y - sy > slop && abs(e.y - sy) > abs(e.x - sx)) {
                     pulling = true
                     return true
                 }
