@@ -155,7 +155,6 @@ class MainActivity : Activity() {
     val jobState = HashMap<Long, String>()
     val stepSeen = HashSet<String>()
     var prog = 0
-    var showBar = false
     val rnd = java.util.Random()
 
     var lastFind = ""
@@ -1032,13 +1031,13 @@ class MainActivity : Activity() {
 
     fun hideProc() = ui { procView?.visibility = View.GONE }
 
-    // full-screen hacker terminal: typed lines, spinning [ - ] tags, "Processing....." footer
+    // full-screen hacker terminal: typed lines, spinning [ - ] tags, "Progress" footer
     // matrix = true puts falling green characters behind the screen
     fun term(cmd: String, my: Int, matrix: Boolean = false, close: () -> Unit): LinearLayout {
         onBack = close
         root.removeAllViews(); root.gravity = Gravity.TOP
         root.setBackgroundColor(TB); bars(true); spinViews.clear(); typedSeen.clear()
-        matrixView = null; bootBox = null; prog = 0; showBar = false
+        matrixView = null; bootBox = null; prog = 0
 
         val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(0, dp(4), 0, dp(8)) }
@@ -1067,9 +1066,8 @@ class MainActivity : Activity() {
                 if (my != live) return
                 tick++
                 val f = fr[(tick / 2) % 4]
-                val dots = ".".repeat((tick / 4) % 6)
-                val line = mspan("$f " to TG, "Processing" to TA, dots to TG)
-                if (showBar) line.append(mspan("   " to TD, bar10(prog) to TG))
+                // footer: static "Progress" label with the bar; the step tags keep spinning
+                val line = mspan("Progress   " to TA, bar10(prog) to TG)
                 pv.text = line
                 for (s in spinViews) s.text = "[ $f ]"
                 h.postDelayed(this, 90)
@@ -1356,7 +1354,6 @@ class MainActivity : Activity() {
     fun watch(full: String, sha: String, repo: File, l: LinearLayout, my: Int) {
         logMap.clear(); fullLog.clear(); jobState.clear(); stepSeen.clear()
         var artifactState = 0
-        showBar = true
 
         val history = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         while (l.childCount > 0) { val v = l.getChildAt(0); l.removeViewAt(0); history.addView(v) }
