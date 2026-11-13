@@ -1188,7 +1188,7 @@ class MainActivity : Activity() {
 
     fun pushOne(repo: File, f: File) {
         val my = ++live
-        val l = term("git push origin main", my) { live++; browse(repo, repo) }
+        val l = term("git push origin main", my, matrix = true) { live++; browse(repo, repo) }
         val rel = f.relativeTo(repo).path
 
         bg {
@@ -1206,7 +1206,7 @@ class MainActivity : Activity() {
                 tdone(r3, true, mspan("pushed -> " to TD, c.take(7) to TM))
                 if (my != live) return@bg
                 Thread.sleep(500)
-                ui { if (my == live) watch(full, c, repo) }
+                ui { if (my == live) watch(full, c, repo, l, my) }
             } catch (e: Exception) {
                 if (my == live) tfail(l, repo, e.message ?: "Unknown error")
             }
@@ -1215,7 +1215,7 @@ class MainActivity : Activity() {
 
     fun pushAll(repo: File) {
         val my = ++live
-        val l = term("git push --force origin main", my) { live++; browse(repo, repo) }
+        val l = term("git push --force origin main", my, matrix = true) { live++; browse(repo, repo) }
 
         bg {
             val r1 = tstep(l, "resolving repository...")
@@ -1249,7 +1249,7 @@ class MainActivity : Activity() {
                 tdone(r6, true, mspan("ref updated" to TG))
                 if (my != live) return@bg
                 Thread.sleep(500)
-                ui { if (my == live) watch(full, c, repo) }
+                ui { if (my == live) watch(full, c, repo, l, my) }
             } catch (e: Exception) {
                 if (my == live) tfail(l, repo, e.message ?: "Unknown error")
             }
@@ -1401,17 +1401,19 @@ class MainActivity : Activity() {
         sv?.post { if (atBottom) sv.fullScroll(View.FOCUS_DOWN) else sv.scrollTo(0, y) }
     }
 
-    fun watch(full: String, sha: String, repo: File) {
-        val my = ++live; logMap.clear(); fullLog.clear(); jobState.clear(); stepSeen.clear()
+    // continues on the same screen as the push: the upload log is kept in one box above the build log
+    fun watch(full: String, sha: String, repo: File, l: LinearLayout, my: Int) {
+        logMap.clear(); fullLog.clear(); jobState.clear(); stepSeen.clear()
         var artifactState = 0
-
-        val l = term("tail -f build.log", my, matrix = true) { live++; browse(repo, repo) }
         showBar = true
 
+        val history = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        while (l.childCount > 0) { val v = l.getChildAt(0); l.removeViewAt(0); history.addView(v) }
+        l.addView(history)
+        bootBox = history
+
         // fake boot lines first, then the real polling starts
-        val boot = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        bootBox = boot
-        l.addView(boot)
+        val boot = history
         val w = tline("[ - ]", TA, "waiting for workflow run to start...", TW, true)
         bootSeq(my, boot, listOf(
             "connecting to github...",
