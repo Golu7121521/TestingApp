@@ -7,6 +7,23 @@ android {
         minSdk = 24; targetSdk = 35; versionCode = 2; versionName = "1.1"
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
+
+    buildTypes {
+        release {
+            // shrink code and resources; features stay the same
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // personal use: sign with the debug key so the release APK installs directly
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += setOf("META-INF/*.kotlin_module", "META-INF/versions/**", "META-INF/LICENSE*", "META-INF/NOTICE*")
+        }
+    }
 }
 
 dependencies {
