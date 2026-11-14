@@ -17,7 +17,6 @@ import io.github.rosemoe.sora.widget.CodeEditor
 import io.github.rosemoe.sora.event.ContentChangeEvent
 import io.github.rosemoe.sora.lang.EmptyLanguage
 import io.github.rosemoe.sora.lang.Language
-import io.github.rosemoe.sora.langs.java.JavaLanguage
 import io.github.rosemoe.sora.util.regex.RegexBackrefGrammar
 import io.github.rosemoe.sora.widget.EditorSearcher
 import io.github.rosemoe.sora.widget.component.EditorAutoCompletion
@@ -651,9 +650,8 @@ class MainActivity : Activity() {
     }
 
     // ---------- code editor (Sora Editor) ----------
-    // Language by file type: Java gets highlighting, completion and auto-indent; others are plain text.
-    fun languageFor(f: File): Language =
-        if (f.extension.equals("java", ignoreCase = true)) JavaLanguage() else EmptyLanguage()
+    // Plain-text language for now. Syntax highlighting needs a language module whose package is verified first.
+    fun languageFor(f: File): Language = EmptyLanguage()
 
     fun makeEditor(f: File, text: String): CodeEditor {
         val dp = resources.displayMetrics.density
