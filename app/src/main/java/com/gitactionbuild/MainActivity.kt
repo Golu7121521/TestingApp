@@ -131,12 +131,7 @@ class MainActivity : Activity() {
 
     // list items fade + slide up with a small stagger
     fun add(l: LinearLayout, v: View) {
-        // thin line between rows (no boxes around them)
-        if (l.childCount > 0 && l.getChildAt(l.childCount - 1).tag == "row") {
-            l.addView(View(this).apply { setBackgroundColor(col(R.color.stroke)) }, lp(-1, dp(1)))
-        }
-        v.tag = "row"
-        l.addView(v, lp(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(10) })
+        l.addView(v, lp(-1, -2).apply { bottomMargin = dp(8) })
         v.alpha = 0f; v.translationY = dp(24).toFloat()
         v.animate().alpha(1f).translationY(0f).setDuration(320)
             .setStartDelay(minOf(l.childCount, 10) * 40L)
@@ -178,8 +173,8 @@ class MainActivity : Activity() {
     }
 
     fun card() = LinearLayout(this).apply {
-        gravity = Gravity.CENTER_VERTICAL
-        setPadding(0, dp(4), dp(4), dp(4))
+        gravity = Gravity.CENTER_VERTICAL; background = box(col(R.color.card), col(R.color.stroke), 12)
+        setPadding(dp(14), dp(12), dp(10), dp(12))
         press(this, 0.98f)
     }
 
@@ -265,7 +260,7 @@ class MainActivity : Activity() {
         onBack = null; root.removeAllViews(); root.gravity = Gravity.CENTER; themeBg()
         val b = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24), dp(30), dp(24), dp(30))
+            background = box(col(R.color.card), col(R.color.stroke), 16); setPadding(dp(24), dp(30), dp(24), dp(30))
         }
         b.addView(tv(title, 22, true))
         b.addView(tv(msg, 14, false, R.color.muted).apply { gravity = Gravity.CENTER; setPadding(0, dp(12), 0, dp(24)) })
@@ -655,8 +650,8 @@ class MainActivity : Activity() {
     }
 
     // ---------- code editor (Sora Editor) ----------
-    // Plain-text language for now. Syntax highlighting needs a language module whose package is verified first.
-    fun languageFor(f: File): Language = EmptyLanguage()
+    // Colored plain text for every file (keywords, strings, numbers, comments, functions, types)
+    fun languageFor(f: File): Language = TextColorLanguage()
 
     fun makeEditor(f: File, text: String): CodeEditor {
         val dp = resources.displayMetrics.density
@@ -666,6 +661,12 @@ class MainActivity : Activity() {
         scheme.setColor(EditorColorScheme.LINE_NUMBER, col(R.color.muted))
         scheme.setColor(EditorColorScheme.LINE_NUMBER_PANEL, col(R.color.bg))
         scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.argb(34, 59, 130, 246))
+        scheme.setColor(EditorColorScheme.KEYWORD, col(R.color.kw))
+        scheme.setColor(EditorColorScheme.LITERAL, col(R.color.st))
+        scheme.setColor(EditorColorScheme.COMMENT, col(R.color.cm))
+        scheme.setColor(EditorColorScheme.ATTRIBUTE_VALUE, col(R.color.nu))
+        scheme.setColor(EditorColorScheme.FUNCTION_NAME, col(R.color.fn))
+        scheme.setColor(EditorColorScheme.ANNOTATION, col(R.color.ty))
 
         val ed = CodeEditor(this)
         ed.setColorScheme(scheme)
