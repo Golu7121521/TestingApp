@@ -238,11 +238,11 @@ class MainActivity : Activity() {
     // pull = true wraps the list in a PullLayout (pull-to-refresh); the instance is kept in lastPull
     fun page(t: String, act: View? = null, d: Int = 0, pull: Boolean = false): LinearLayout {
         onBack = null; root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(8), 0, dp(12)) }
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), dp(8), dp(16), dp(12)) }
         top.addView(tv(t, 22, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.START }, lp(0, -2, 1f))
         if (act != null) top.addView(act)
         root.addView(top)
-        val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(16)) }
         if (pull) {
             val pl = PullLayout(this)
             pl.setContent(l)
@@ -397,7 +397,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(col(R.color.bg))
             setOnApplyWindowInsetsListener { v, i ->
-                v.setPadding(dp(16), i.systemWindowInsetTop + dp(12), dp(16), i.systemWindowInsetBottom + dp(12)); i
+                v.setPadding(0, i.systemWindowInsetTop, 0, i.systemWindowInsetBottom); i
             }
         }
         setContentView(root)
@@ -740,7 +740,7 @@ class MainActivity : Activity() {
         root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
         onBack = { autoSave(); ed.release(); browse(repo, dir) }
 
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(16), dp(4), dp(16), dp(12)) }
         val titleView = tv(f.name, 15, true).apply {
             setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0)
         }
@@ -954,12 +954,12 @@ class MainActivity : Activity() {
         matrixView = null; bootBox = null; prog = 0
 
         val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(0, dp(4), 0, dp(8)) }
+        val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(dp(16), dp(4), dp(16), dp(8)) }
         top.addView(mono("[x]", 15f, TR).apply { setPadding(dp(12), dp(4), dp(4), dp(4)); setOnClickListener { close() } })
         colv.addView(top)
         val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         colv.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
-        val pv = mono("", 13f, TA).apply { setPadding(0, dp(10), 0, dp(6)) }
+        val pv = mono("", 13f, TA).apply { setPadding(dp(16), dp(10), dp(16), dp(6)) }
         procView = pv
         colv.addView(pv)
 
