@@ -47,7 +47,7 @@ import java.util.zip.ZipInputStream
 
 // ---------- repositories ----------
 fun MainActivity.repos() {
-    val l = page(getString(R.string.s_repositories_de1f88), btn(getString(R.string.s_token_459a6f)) { tokenScreen() }, 0, pull = true)
+    val l = page(getString(R.string.s_repositories_de1f88), iconBtn(R.drawable.ic_key, getString(R.string.s_token_459a6f)) { tokenScreen() }, 0, pull = true)
     val pl = lastPull
     pl?.onRefresh = { loadRepos(l, pl, false) }
     loadRepos(l, pl, true)
@@ -66,10 +66,11 @@ fun MainActivity.loadRepos(l: LinearLayout, pl: PullLayout?, first: Boolean) {
                     info.addView(tv(name, 17, true))
                     info.addView(tv((if (j.getBoolean("private")) "Private" else "Public") + "  |  " + j.getString("default_branch"), 13, false, R.color.muted))
                     c.addView(info, lp(0, -2, 1f))
-                    var b: Button? = null
-                    b = if (dir.exists()) btn(getString(R.string.s_open_c3bf44)) { browse(dir, dir) } else btn(getString(R.string.s_clone_ff2459)) {
+                    val pt = tv("", 13, false, R.color.muted).apply { typeface = Typeface.MONOSPACE; visibility = View.GONE }
+                        var b: ImageView? = null
+                    b = if (dir.exists()) iconBtn(R.drawable.ic_folder, getString(R.string.s_open_c3bf44)) { browse(dir, dir) } else iconBtn(R.drawable.ic_import, getString(R.string.s_clone_ff2459)) {
                         // progress bar replaces the old "Cloning..." label
-                        b?.text = pbar(0); b?.isEnabled = false; b?.typeface = Typeface.MONOSPACE
+                        pt.text = pbar(0); b?.isEnabled = false; pt.visibility = View.VISIBLE
                         bg {
                             try {
                                 val conn = http("GET", "/repos/" + j.getString("full_name") + "/zipball")
@@ -78,7 +79,7 @@ fun MainActivity.loadRepos(l: LinearLayout, pl: PullLayout?, first: Boolean) {
                                 val src = CountIn(conn.inputStream) { got ->
                                     if (total > 0) {
                                         val p = (got * 100 / total).toInt()
-                                        if (p != lastP) { lastP = p; ui { b?.text = pbar(p) } }
+                                        if (p != lastP) { lastP = p; ui { pt.text = pbar(p) } }
                                     }
                                 }
                                 unzip(src, dir)
@@ -87,7 +88,7 @@ fun MainActivity.loadRepos(l: LinearLayout, pl: PullLayout?, first: Boolean) {
                             } catch (e: Exception) { dir.deleteRecursively(); ui { repos(); toast(getString(R.string.s_clone_failed_e76ad0)) } }
                         }
                     }
-                    c.addView(b); add(l, c)
+                    c.addView(pt); c.addView(b); add(l, c)
                 }
                 pl?.finishRefresh()
             }

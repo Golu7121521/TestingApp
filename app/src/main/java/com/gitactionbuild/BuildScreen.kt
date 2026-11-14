@@ -115,7 +115,7 @@ fun MainActivity.term(cmd: String, my: Int, matrix: Boolean = false, close: () -
 
     val colv = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     val top = LinearLayout(this).apply { gravity = Gravity.END; setPadding(dp(16), dp(4), dp(16), dp(8)) }
-    top.addView(mono("[x]", 15f, TR).apply { setPadding(dp(12), dp(4), dp(4), dp(4)); setOnClickListener { close() } })
+    top.addView(iconBtn(R.drawable.ic_close, getString(R.string.desc_close), TR) { close() })
     colv.addView(top)
     val l = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
     colv.addView(ScrollView(this).apply { addView(l) }, lp(-1, 0, 1f))
@@ -200,9 +200,9 @@ fun MainActivity.tfail(l: LinearLayout, repo: File, msg: String) = ui {
         background = box(TLOG, TD, 6); setPadding(dp(10), dp(8), dp(10), dp(8)); setHorizontallyScrolling(true)
     }, lp(-1, -2).apply { bottomMargin = dp(8) })
     val row = LinearLayout(this)
-    val copyBtn = tbtn("[ copy error ]", TR) { copyText("error", msg) }
+    val copyBtn = tIcon(R.drawable.ic_copy, getString(R.string.desc_copy), TR) { copyText("error", msg) }
     row.addView(copyBtn, lp(-2, -2).apply { rightMargin = dp(8) })
-    row.addView(tbtn("[ back ]", TG) { live++; browse(repo, repo) })
+    row.addView(tIcon(R.drawable.ic_back, getString(R.string.desc_back), TG) { live++; browse(repo, repo) })
     l.addView(row, lp(-2, -2).apply { bottomMargin = dp(8) })
     pulse(copyBtn, 1100L, 0.4f)
     hideProc()
@@ -382,7 +382,7 @@ fun MainActivity.draw(l: LinearLayout, r: JSONObject, js: JSONArray, artifactSta
 
         // copy button only for failed jobs; it pulses red so it is easy to spot
         if (jc == "failure") {
-            val cb = tbtn("[ copy logs of failed job: $jname ]", TR) {
+            val cb = tIcon(R.drawable.ic_copy, getString(R.string.desc_copy), TR) {
                 val cached = fullLog[id]
                 if (cached != null) copyText("job $jname", "### job: $jname (failed)\n$cached")
                 else {

@@ -195,9 +195,12 @@ class MainActivity : ComponentActivity() {
         setOnClickListener { f() }
     }
 
-    fun dots(f: () -> Unit) = TextView(this).apply {
-        text = "\u22EE"; textSize = 22f; setTextColor(col(R.color.muted)); gravity = Gravity.CENTER
-        setPadding(dp(10), 0, dp(6), 0); setOnClickListener { f() }
+    fun dots(f: () -> Unit) = ImageView(this).apply {
+        setImageResource(R.drawable.ic_more)
+        setColorFilter(col(R.color.muted), PorterDuff.Mode.SRC_IN)
+        contentDescription = getString(R.string.desc_more)
+        setPadding(dp(10), dp(6), dp(6), dp(6))
+        setOnClickListener { f() }
     }
 
     fun card() = LinearLayout(this).apply {
@@ -226,8 +229,8 @@ class MainActivity : ComponentActivity() {
         b.addView(tv(title, 18, true).apply { setPadding(0, 0, 0, dp(12)) })
         if (v != null) b.addView(v, if (wide) lp(-1, 0, 1f) else lp(-1, -2))
         val r = LinearLayout(this).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; setPadding(0, dp(16), 0, 0) }
-        if (cancel != null) r.addView(flat(cancel) { d.dismiss() })
-        if (ok != null) r.addView(btn(ok) { d.dismiss(); onOk() })
+        if (cancel != null) r.addView(iconBtn(R.drawable.ic_close, cancel) { d.dismiss() })
+        if (ok != null) r.addView(iconBtn(R.drawable.ic_check, ok) { d.dismiss(); onOk() })
         b.addView(r); d.setContentView(b)
         d.window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(0))
         d.window?.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE or WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
@@ -333,16 +336,20 @@ class MainActivity : ComponentActivity() {
         })
     }
 
-    // status dot before a job: amber pulsing while running, green tick / red cross pop in on change
-    fun statusMark(state: String, popIn: Boolean): TextView {
-        val (glyph, color) = when (state) {
-            "in_progress" -> "\u25CF" to TA
-            "success" -> "\u2713" to TG
-            "failure" -> "\u2717" to TR
-            "queued" -> "\u25CB" to TD
-            else -> "\u2013" to TD
+    // status mark before a job: amber dot pulsing while running, green tick / red cross pop in on change
+    fun statusMark(state: String, popIn: Boolean): ImageView {
+        val (res, color) = when (state) {
+            "in_progress" -> R.drawable.ic_dot to TA
+            "success" -> R.drawable.ic_check to TG
+            "failure" -> R.drawable.ic_close to TR
+            else -> R.drawable.ic_ring to TD
         }
-        val v = mono(glyph, 15f, color).apply { gravity = Gravity.CENTER }
+        val v = ImageView(this).apply {
+            setImageResource(res)
+            setColorFilter(color, PorterDuff.Mode.SRC_IN)
+            scaleType = ImageView.ScaleType.CENTER_INSIDE
+            contentDescription = state
+        }
         if (state == "in_progress") pulse(v, 1000L, 0.2f)
         else if (popIn) {
             v.scaleX = 0f; v.scaleY = 0f
@@ -403,6 +410,29 @@ class MainActivity : ComponentActivity() {
         }.start()
     }
 
+    // Icon-only button. desc is what TalkBack reads.
+    fun iconBtn(res: Int, desc: String, color: Int = col(R.color.fg), f: () -> Unit) = ImageView(this).apply {
+        setImageResource(res)
+        setColorFilter(color, PorterDuff.Mode.SRC_IN)
+        contentDescription = desc
+        scaleType = ImageView.ScaleType.CENTER
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        layoutParams = lp(dp(40), dp(40), 0f, 0)
+        press(this, 0.9f)
+        setOnClickListener { f() }
+    }
+
+    // Small icon button for the terminal (boxed, like the old text buttons)
+    fun tIcon(res: Int, desc: String, c: Int, f: () -> Unit) = ImageView(this).apply {
+        setImageResource(res)
+        setColorFilter(c, PorterDuff.Mode.SRC_IN)
+        contentDescription = desc
+        background = box(Color.parseColor("#0A140C"), c, 6)
+        setPadding(dp(8), dp(8), dp(8), dp(8))
+        press(this, 0.96f)
+        setOnClickListener { f() }
+    }
+
     // ---------- lifecycle ----------
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
@@ -439,7 +469,7 @@ class MainActivity : ComponentActivity() {
     fun start() {
         if (!granted()) {
             val b = center(getString(R.string.s_storage_access_c836a2), getString(R.string.s_git_action_build_needs_storage_access_to_e97e61))
-            b.addView(btn(getString(R.string.s_allow_access_db8e6e)) {
+            b.addView(iconBtn(R.drawable.ic_check, getString(R.string.s_allow_access_db8e6e)) {
                 if (Build.VERSION.SDK_INT >= 30) startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:$packageName")))
                 else requestPermissions(arrayOf("android.permission.WRITE_EXTERNAL_STORAGE", "android.permission.READ_EXTERNAL_STORAGE"), 1)
             })
@@ -488,7 +518,7 @@ class MainActivity : ComponentActivity() {
             textSize = 15f; setPadding(dp(14), dp(12), dp(14), dp(12)); background = box(col(R.color.bg), col(R.color.stroke), 8)
         }
         b.addView(e, lp(-1, -2).apply { bottomMargin = dp(16) })
-        b.addView(btn(getString(R.string.s_continue_a0bfb8)) { sp.edit().putString("t", e.text.toString().trim()).apply(); repos() })
+        b.addView(iconBtn(R.drawable.ic_check, getString(R.string.s_continue_a0bfb8)) { sp.edit().putString("t", e.text.toString().trim()).apply(); repos() })
     }
 
     override fun onActivityResult(rq: Int, rc: Int, d: Intent?) {

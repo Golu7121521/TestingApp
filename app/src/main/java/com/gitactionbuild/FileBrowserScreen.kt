@@ -48,7 +48,7 @@ import java.util.zip.ZipInputStream
 // ---------- file manager ----------
 fun MainActivity.browse(repo: File, dir: File) {
     val rel = dir.relativeTo(repo).path
-    val l = page(repo.name + (if (rel.isEmpty()) "" else "/$rel"), btn(getString(R.string.s_repos_e77ec8)) { repos() }, depthOf(repo, dir), pull = true)
+    val l = page(repo.name + (if (rel.isEmpty()) "" else "/$rel"), iconBtn(R.drawable.ic_folder, getString(R.string.s_repos_e77ec8)) { repos() }, depthOf(repo, dir), pull = true)
     val pl = lastPull
     pl?.onRefresh = { h.postDelayed({ l.removeAllViews(); fillDir(l, repo, dir); pl?.finishRefresh() }, 350L) }
     fillDir(l, repo, dir)
@@ -58,7 +58,7 @@ fun MainActivity.browse(repo: File, dir: File) {
 fun MainActivity.fillDir(l: LinearLayout, repo: File, dir: File) {
     onBack = { if (dir != repo) browse(repo, dir.parentFile!!) else repos() }
     l.addView(bar(
-        btn(getString(R.string.s_new_file_681e10)) { ask(getString(R.string.s_file_name_340826)) {
+        iconBtn(R.drawable.ic_file_add, getString(R.string.s_new_file_681e10)) { ask(getString(R.string.s_file_name_340826)) {
             if (it.isNotEmpty()) {
                 val f = File(dir, it)
                 f.parentFile?.mkdirs()
@@ -66,16 +66,16 @@ fun MainActivity.fillDir(l: LinearLayout, repo: File, dir: File) {
                 edit(repo, f.parentFile!!, f)
             }
         } },
-        btn(getString(R.string.s_new_folder_0d0a9c)) { ask(getString(R.string.s_folder_name_710417)) {
+        iconBtn(R.drawable.ic_folder_add, getString(R.string.s_new_folder_0d0a9c)) { ask(getString(R.string.s_folder_name_710417)) {
             if (it.isNotEmpty()) {
                 val f = File(dir, it)
                 f.mkdirs()
                 browse(repo, f)
             }
         } },
-        btn(getString(R.string.s_import_72d6d7)) { pickRepo = repo; pickDir = dir; importFile() },
-        btn(getString(R.string.s_search_133484)) { ask(getString(R.string.s_search_files_61aef9)) { if (it.isNotEmpty()) search(repo, it) } },
-        btn(getString(R.string.s_push_all_371255)) {
+        iconBtn(R.drawable.ic_import, getString(R.string.s_import_72d6d7)) { pickRepo = repo; pickDir = dir; importFile() },
+        iconBtn(R.drawable.ic_search, getString(R.string.s_search_133484)) { ask(getString(R.string.s_search_files_61aef9)) { if (it.isNotEmpty()) search(repo, it) } },
+        iconBtn(R.drawable.ic_push, getString(R.string.s_push_all_371255)) {
             dlg(getString(R.string.s_push_all_371255), tv(getString(R.string.s_all_existing_files_in_the_github_reposit_fc30c1), 15, false, R.color.muted), getString(R.string.s_push_9c6a9d)) { pushAll(repo) }
         }), lp(-1, -2).apply { bottomMargin = dp(12) })
     if (dir != repo) {
@@ -114,18 +114,21 @@ fun MainActivity.swipeActions(repo: File, dir: File, f: File, close: () -> Unit)
         gravity = Gravity.CENTER_VERTICAL or Gravity.END
         setPadding(0, 0, dp(6), 0)
     }
-    v.addView(actIcon("\u270E", "Rename", R.color.p1) { close(); renameFile(repo, dir, f) })
-    v.addView(actIcon("\uD83D\uDDD1", "Delete", R.color.bad) { close(); deleteFile(repo, dir, f) })
+    v.addView(actIcon(R.drawable.ic_edit, "Rename", R.color.p1) { close(); renameFile(repo, dir, f) })
+    v.addView(actIcon(R.drawable.ic_delete, "Delete", R.color.bad) { close(); deleteFile(repo, dir, f) })
     return v
 }
 
-fun MainActivity.actIcon(icon: String, label: String, colorRes: Int, f: () -> Unit): LinearLayout {
+fun MainActivity.actIcon(res: Int, label: String, colorRes: Int, f: () -> Unit): LinearLayout {
     return LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL
         gravity = Gravity.CENTER
         background = box(col(colorRes), 0, 10)
-        addView(tv(icon, 16, true, R.color.white).apply { gravity = Gravity.CENTER })
-        addView(tv(label, 10, false, R.color.white).apply { gravity = Gravity.CENTER })
+        addView(ImageView(this@actIcon).apply {
+            setImageResource(res)
+            setColorFilter(col(R.color.white), PorterDuff.Mode.SRC_IN)
+            contentDescription = label
+        }, lp(dp(22), dp(22)))
         layoutParams = lp(dp(64), -1, 0f, 0).apply { setMargins(dp(3), dp(8), dp(3), dp(8)) }
         setOnClickListener { f() }
     }
@@ -163,7 +166,7 @@ fun MainActivity.importFile() {
     startActivityForResult(Intent(Intent.ACTION_GET_CONTENT).setType("*/*").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true), 7)
 }
 fun MainActivity.search(repo: File, q: String) {
-    val l = page("Search: $q", btn(getString(R.string.s_back_0557fa)) { browse(repo, repo) }, depthOf(repo, repo) + 1)
+    val l = page("Search: $q", iconBtn(R.drawable.ic_back, getString(R.string.s_back_0557fa)) { browse(repo, repo) }, depthOf(repo, repo) + 1)
     onBack = { browse(repo, repo) }
     l.addView(tv(getString(R.string.s_searching_1243da), 14, false, R.color.muted))
     bg {

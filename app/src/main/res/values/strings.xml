@@ -46,4 +46,8 @@
     <string name="s_token_459a6f">Token</string>
     <string name="s_undo_1cdc07">Undo</string>
     <string name="s_use_push_all_for_folders_e6c270">Use Push all for folders</string>
+    <string name="desc_close">Close</string>
+    <string name="desc_copy">Copy</string>
+    <string name="desc_back">Back</string>
+    <string name="desc_more">More options</string>
 </resources>

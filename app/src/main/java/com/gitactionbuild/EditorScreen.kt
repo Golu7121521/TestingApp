@@ -208,14 +208,14 @@ fun MainActivity.edit(repo: File, dir: File, f: File) {
         }
     }
     val sBtnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
-    sBtnRow.addView(smallBtn(getString(R.string.s_next_10ac3d)) { searchNext() })
-    sBtnRow.addView(smallBtn(getString(R.string.s_replace_0ebe6d)) {
+    sBtnRow.addView(iconBtn(R.drawable.ic_next, getString(R.string.s_next_10ac3d)) { searchNext() })
+    sBtnRow.addView(iconBtn(R.drawable.ic_replace, getString(R.string.s_replace_0ebe6d)) {
         try { ed.searcher.replaceCurrentMatch(rInput.text.toString()) } catch (e: IllegalStateException) { e.printStackTrace() }
     })
-    sBtnRow.addView(smallBtn(getString(R.string.s_all_b1c94c)) {
+    sBtnRow.addView(iconBtn(R.drawable.ic_replace_all, getString(R.string.s_all_b1c94c)) {
         try { ed.searcher.replaceAll(rInput.text.toString()) } catch (e: IllegalStateException) { e.printStackTrace() }
     })
-    sBtnRow.addView(smallBtn(getString(R.string.s_close_d3d2e6)) {
+    sBtnRow.addView(iconBtn(R.drawable.ic_close, getString(R.string.s_close_d3d2e6)) {
         ed.searcher.stopSearch()
         setSearch(false)
     })
@@ -223,11 +223,11 @@ fun MainActivity.edit(repo: File, dir: File, f: File) {
 
     val actBar = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
     val actRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-    actRow.addView(smallBtn(getString(R.string.s_save_c9cc8c)) { save() })
-    actRow.addView(smallBtn(getString(R.string.s_search_133484)) { setSearch(!searchOn) })
-    actRow.addView(smallBtn(getString(R.string.s_undo_1cdc07)) { ed.undo() })
-    actRow.addView(smallBtn(getString(R.string.s_redo_5afeab)) { ed.redo() })
-    actRow.addView(smallBtn(getString(R.string.s_push_9c6a9d)) {
+    actRow.addView(iconBtn(R.drawable.ic_save, getString(R.string.s_save_c9cc8c)) { save() })
+    actRow.addView(iconBtn(R.drawable.ic_search, getString(R.string.s_search_133484)) { setSearch(!searchOn) })
+    actRow.addView(iconBtn(R.drawable.ic_undo, getString(R.string.s_undo_1cdc07)) { ed.undo() })
+    actRow.addView(iconBtn(R.drawable.ic_redo, getString(R.string.s_redo_5afeab)) { ed.redo() })
+    actRow.addView(iconBtn(R.drawable.ic_push, getString(R.string.s_push_9c6a9d)) {
         save()
         ed.release()
         pushOne(repo, f)
