@@ -20,14 +20,17 @@ jobs:
         with:
           gradle-version: 8.7
 
-      - name: Build debug APK
-        run: gradle assembleDebug --no-daemon
+      - name: Unit tests
+        run: gradle testDebugUnitTest --no-daemon
+
+      - name: Build release APK (shrunk)
+        run: gradle assembleRelease --no-daemon
 
       - name: Publish APK to Releases
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          APK=$(ls app/build/outputs/apk/debug/*.apk | head -n 1)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
           cp "$APK" GitActionBuild.apk
           TAG="build-${{ github.run_number }}"
           gh release create "$TAG" GitActionBuild.apk \
