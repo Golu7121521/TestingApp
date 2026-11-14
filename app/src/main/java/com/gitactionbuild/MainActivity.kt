@@ -14,6 +14,15 @@ import android.text.style.ForegroundColorSpan
 import android.util.Base64
 import android.util.TypedValue
 import io.github.rosemoe.sora.widget.CodeEditor
+import io.github.rosemoe.sora.event.ContentChangeEvent
+import io.github.rosemoe.sora.lang.EmptyLanguage
+import io.github.rosemoe.sora.lang.Language
+import io.github.rosemoe.sora.langs.java.JavaLanguage
+import io.github.rosemoe.sora.util.regex.RegexBackrefGrammar
+import io.github.rosemoe.sora.widget.EditorSearcher
+import io.github.rosemoe.sora.widget.component.EditorAutoCompletion
+import io.github.rosemoe.sora.widget.component.Magnifier
+import io.github.rosemoe.sora.widget.subscribeAlways
 import io.github.rosemoe.sora.widget.schemes.EditorColorScheme
 import kotlin.math.abs
 import android.view.*
@@ -642,85 +651,103 @@ class MainActivity : Activity() {
     }
 
     // ---------- code editor (Sora Editor) ----------
-    fun makeEditor(text: String): CodeEditor {
+    // Language by file type: Java gets highlighting, completion and auto-indent; others are plain text.
+    fun languageFor(f: File): Language =
+        if (f.extension.equals("java", ignoreCase = true)) JavaLanguage() else EmptyLanguage()
+
+    fun makeEditor(f: File, text: String): CodeEditor {
+        val dp = resources.displayMetrics.density
         val scheme = EditorColorScheme()
         scheme.setColor(EditorColorScheme.WHOLE_BACKGROUND, col(R.color.bg))
         scheme.setColor(EditorColorScheme.TEXT_NORMAL, col(R.color.fg))
         scheme.setColor(EditorColorScheme.LINE_NUMBER, col(R.color.muted))
         scheme.setColor(EditorColorScheme.LINE_NUMBER_PANEL, col(R.color.bg))
         scheme.setColor(EditorColorScheme.CURRENT_LINE, Color.argb(34, 59, 130, 246))
+
         val ed = CodeEditor(this)
         ed.setColorScheme(scheme)
         ed.setTypefaceText(Typeface.MONOSPACE)
         ed.setTextSizePx(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 13f, resources.displayMetrics))
+        ed.setLineSpacing(2f, 1.1f)
         ed.setLineNumberEnabled(true)
+        ed.setHighlightCurrentLine(true)      // current line background
+        ed.setHighlightCurrentBlock(true)     // current code block
+        ed.setBlockLineEnabled(true)          // code block lines
+        ed.setHighlightBracketPair(true)      // matching bracket pairs
+        ed.setWordwrap(false)
+        ed.setScalable(true)                  // pinch zoom
+        ed.setScaleTextSizes(8f * dp, 40f * dp)
+        ed.setNonPrintablePaintingFlags(
+            CodeEditor.FLAG_DRAW_WHITESPACE_LEADING or CodeEditor.FLAG_DRAW_LINE_SEPARATOR or
+                CodeEditor.FLAG_DRAW_WHITESPACE_IN_SELECTION or CodeEditor.FLAG_DRAW_SOFT_WRAP
+        )
+        ed.props.stickyScroll = true          // header lines of current block stay on top
+        ed.props.autoIndent = true
+        ed.getComponent(Magnifier::class.java).isEnabled = true
+        ed.getComponent(EditorAutoCompletion::class.java).setEnabledAnimation(true)
+        ed.setEditorLanguage(languageFor(f))
         ed.setText(text)
         return ed
     }
 
     fun edit(repo: File, dir: File, f: File) {
         if (f.length() > 400000) { alert("Error", "File is too large to edit"); return }
-        val ed = makeEditor(f.readText())
+        val ed = makeEditor(f, f.readText())
         val frame = FrameLayout(this).apply { layoutParams = lp(-1, 0, 1f) }
         // green flash over the editor after save; the view does not take touches
         val flashView = View(this).apply { setBackgroundColor(col(R.color.ok)); alpha = 0f }
         frame.addView(ed, FrameLayout.LayoutParams(-1, -1))
         frame.addView(flashView, FrameLayout.LayoutParams(-1, -1))
 
+        // Unsaved-changes dot on the title, driven by Sora's event system
+        var dirty = false
+        var title: TextView? = null
+        ed.subscribeAlways<ContentChangeEvent> {
+            if (!dirty) {
+                dirty = true
+                title?.text = f.name + " \u2022"
+            }
+        }
+
         fun flashSave() {
             flashView.alpha = 0.22f
             flashView.animate().alpha(0f).setDuration(900).start()
         }
+        fun markClean() {
+            dirty = false
+            title?.text = f.name
+        }
         fun save() {
             f.writeText(ed.text.toString())
+            markClean()
             flashSave()
             slideToast(frame, "Saved")
         }
-        // leaving the file (back) saves any unsaved changes first
+        // leaving the file (back) saves unsaved changes
         fun autoSave() {
-            val cur = ed.text.toString()
-            if (!f.exists() || f.readText() != cur) f.writeText(cur)
+            if (dirty) {
+                f.writeText(ed.text.toString())
+                markClean()
+            }
         }
 
-        // ---- find / replace on the text ----
-        var idx = 0
-        var match: IntRange? = null
-        fun lineCol(txt: String, off: Int): Pair<Int, Int> {
-            val before = txt.substring(0, off)
-            return before.count { it == '\n' } to (off - (before.lastIndexOf('\n') + 1))
-        }
-        fun findNext() {
-            val q = lastFind
-            if (q.isEmpty()) return
-            val txt = ed.text.toString()
-            var at = txt.indexOf(q, idx, ignoreCase = true)
-            if (at < 0) at = txt.indexOf(q, 0, ignoreCase = true) // wrap around
-            if (at < 0) { toast("No matches"); match = null; return }
-            idx = at + q.length
-            match = at until at + q.length
-            val (l1, c1) = lineCol(txt, at)
-            val (l2, c2) = lineCol(txt, at + q.length)
-            ed.setSelectionRegion(l1, c1, l2, c2)
-        }
-        fun replaceCurrent() {
-            val m = match ?: return
-            val txt = ed.text.toString()
-            ed.setText(txt.substring(0, m.first) + lastReplace + txt.substring(m.last + 1))
-            match = null
-        }
-        fun replaceAll() {
-            val q = lastFind
-            if (q.isEmpty()) return
-            ed.setText(ed.text.toString().replace(q, lastReplace, ignoreCase = true))
-            match = null; idx = 0
-            toast("Replaced all matches")
+        // ---- search and replace: Sora's own searcher (undo-friendly, highlights matches) ----
+        val searchOpts = EditorSearcher.SearchOptions(
+            EditorSearcher.SearchOptions.TYPE_NORMAL, true, RegexBackrefGrammar.DEFAULT
+        )
+        fun searchNext() {
+            try { ed.searcher.gotoNext() } catch (e: IllegalStateException) { e.printStackTrace() }
         }
 
         root.removeAllViews(); root.gravity = Gravity.TOP; themeBg()
-        onBack = { autoSave(); browse(repo, dir) }
+        onBack = { autoSave(); ed.release(); browse(repo, dir) }
 
         val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(0, dp(4), 0, dp(12)) }
-        top.addView(tv(f.name, 15, true).apply { setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0) }, lp(0, -2, 1f))
+        val titleView = tv(f.name, 15, true).apply {
+            setSingleLine(); ellipsize = TextUtils.TruncateAt.MIDDLE; setPadding(0, 0, dp(8), 0)
+        }
+        title = titleView
+        top.addView(titleView, lp(0, -2, 1f))
 
         val searchBox = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -740,7 +767,11 @@ class MainActivity : Activity() {
             background = box(col(R.color.bg), col(R.color.stroke), 6).apply { alpha = 180 }
             setPadding(dp(10), dp(10), dp(10), dp(10)); layoutParams = lp(-1, -2).apply { bottomMargin = dp(6) }
             addTextChangedListener(object : TextWatcher {
-                override fun afterTextChanged(s: Editable?) { lastFind = s?.toString() ?: ""; idx = 0 }
+                override fun afterTextChanged(s: Editable?) {
+                    lastFind = s?.toString() ?: ""
+                    if (lastFind.isEmpty()) ed.searcher.stopSearch()
+                    else ed.searcher.search(lastFind, searchOpts)
+                }
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             })
@@ -777,10 +808,17 @@ class MainActivity : Activity() {
             }
         }
         val sBtnRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.END }
-        sBtnRow.addView(smallBtn("Next") { findNext() })
-        sBtnRow.addView(smallBtn("Replace") { replaceCurrent() })
-        sBtnRow.addView(smallBtn("All") { replaceAll() })
-        sBtnRow.addView(smallBtn("Close") { setSearch(false) })
+        sBtnRow.addView(smallBtn("Next") { searchNext() })
+        sBtnRow.addView(smallBtn("Replace") {
+            try { ed.searcher.replaceCurrentMatch(rInput.text.toString()) } catch (e: IllegalStateException) { e.printStackTrace() }
+        })
+        sBtnRow.addView(smallBtn("All") {
+            try { ed.searcher.replaceAll(rInput.text.toString()) } catch (e: IllegalStateException) { e.printStackTrace() }
+        })
+        sBtnRow.addView(smallBtn("Close") {
+            ed.searcher.stopSearch()
+            setSearch(false)
+        })
         searchBox.addView(sBtnRow)
 
         val actBar = HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled = false }
@@ -789,7 +827,11 @@ class MainActivity : Activity() {
         actRow.addView(smallBtn("Search") { setSearch(!searchOn) })
         actRow.addView(smallBtn("Undo") { ed.undo() })
         actRow.addView(smallBtn("Redo") { ed.redo() })
-        actRow.addView(smallBtn("Push") { save(); pushOne(repo, f) })
+        actRow.addView(smallBtn("Push") {
+            save()
+            ed.release()
+            pushOne(repo, f)
+        })
         actBar.addView(actRow)
         top.addView(actBar)
         root.addView(top)
