@@ -1,0 +1,110 @@
+name: Build and Release ARM64 APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (for example 1.0.0)"
+        required: true
+        default: "1.0.0"
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.13"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform and build tools
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Prepare optional persistent signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -n "$KEYSTORE_B64" ]]; then
+            mkdir -p "$RUNNER_TEMP/signing"
+            echo "$KEYSTORE_B64" | base64 --decode > "$RUNNER_TEMP/signing/release.jks"
+            echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/signing/release.jks" >> "$GITHUB_ENV"
+            echo "ANDROID_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "ANDROID_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build checks and ARM64 release APK
+        run: |
+          gradle --no-daemon :app:lintRelease :app:assembleRelease
+
+      - name: Verify APK and calculate SHA-256
+        id: verify
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          mkdir -p release
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          fi
+          [[ "$VERSION" =~ ^[0-9A-Za-z._-]+$ ]]
+          OUT="release/UniversalVideoPlayer-arm64-v${VERSION}.apk"
+          cp "$APK" "$OUT"
+          if command -v zipinfo >/dev/null 2>&1; then
+            ABIS="$(zipinfo -1 "$OUT" | awk -F/ '$1=="lib" && NF>=3 {print $2}' | sort -u | tr '\n' ' ')"
+            if [[ -n "$ABIS" && "$ABIS" != "arm64-v8a " ]]; then
+              echo "Unexpected native ABI(s): $ABIS"
+              exit 1
+            fi
+          fi
+          sha256sum "$OUT" > release/SHA256SUMS.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "apk=$OUT" >> "$GITHUB_OUTPUT"
+          echo "sha_file=release/SHA256SUMS.txt" >> "$GITHUB_OUTPUT"
+          echo "APK size: $(du -h "$OUT" | cut -f1)"
+          echo "Native ABI entries: ${ABIS:-none (all packaged code is ABI-neutral)}"
+
+      - name: Create GitHub Release and upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.verify.outputs.version }}
+          name: Universal Video Player v${{ steps.verify.outputs.version }}
+          generate_release_notes: true
+          body: |
+            ## Universal Video Player v${{ steps.verify.outputs.version }}
+
+            - Build date: ${{ github.event.head_commit.timestamp || github.run_started_at }}
+            - Architecture target: **ARM64 (arm64-v8a)**
+            - Includes: Media3 playback foundation, Compose UI, Room history and playlists.
+            - Known limitations: website page extraction and DRM-protected content are not bypassed; see README for feature scope.
+          files: |
+            ${{ steps.verify.outputs.apk }}
+            ${{ steps.verify.outputs.sha_file }}
+          fail_on_unmatched_files: true

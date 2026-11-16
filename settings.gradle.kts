@@ -3,11 +3,7 @@ pluginManagement {
 }
 dependencyResolutionManagement {
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
-    repositories {
-        google()
-        mavenCentral()
-        maven("https://jitpack.io")
-    }
+    repositories { google(); mavenCentral() }
 }
-rootProject.name = "UniversalPlayer"
+rootProject.name = "UniversalVideoPlayer"
 include(":app")
