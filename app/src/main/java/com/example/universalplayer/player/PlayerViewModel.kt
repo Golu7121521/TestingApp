@@ -255,8 +255,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             r.directMime?.let { setMimeType(it) }
             opts.drmConfig()?.let { setDrmConfiguration(it) }
         }.build()
-        val dsf = httpFactory(opts.headers)
-        return DefaultMediaSourceFactory(dsf).setDrmHttpDataSourceFactory(dsf).createMediaSource(item)
+        return DefaultMediaSourceFactory(httpFactory(opts.headers)).createMediaSource(item)
     }
 
     private fun src(f: Fmt): MediaSource {
