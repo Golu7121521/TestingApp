@@ -1,10 +1,14 @@
-# Universal Stream Player (Android)
+# Universal Player
 
-Media3 ExoPlayer + yt-dlp based player (HLS, DASH, SmoothStreaming, MP4, MKV, RTSP, RTMP, DRM, custom headers, social links).
+Paste almost any video link and play it. Built with Kotlin, Jetpack Compose (Material 3), Media3 ExoPlayer and yt-dlp (youtubedl-android).
 
-## Build on GitHub (no PC needed)
-1. Create a new GitHub repo and upload all files/folders from this project (keep folder structure, including `.github`).
-2. Commit to `main` or `master`. The workflow in `.github/workflows/build.yml` builds an arm64-v8a debug APK.
-3. Open the **Actions** tab when it finishes, then download `UniversalStreamPlayer-arm64.apk` from **Releases**.
+## Build with GitHub Actions (no PC needed)
+1. Create a new GitHub repo and upload ALL files of this project (keep the `.github` folder).
+2. Repo -> Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions" -> Save.
+3. Repo -> Actions -> "Build and Release (arm64)" -> Run workflow -> enter a tag (e.g. v1.0).
+4. After ~5-10 min the APK `UniversalPlayer-arm64-v8a.apk` appears under Releases. No artifacts are used.
 
-Note: the build runs on GitHub's servers, so the first build is not tested locally. If the Actions log shows an error, paste it to get a fix.
+If the build fails, open the failed step log and send the error text.
+
+## Tabs
+Home (paste link) | Advanced (headers, user agent, DRM) | History | Playlist (auto plays next item)

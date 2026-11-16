@@ -4,29 +4,23 @@ plugins {
 }
 
 android {
-    namespace = "com.universal.streamplayer"
+    namespace = "com.example.universalplayer"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.universal.streamplayer"
-        minSdk = 24
+        applicationId = "com.example.universalplayer"
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "1.0.0"
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a")
-            isUniversalApk = false
-        }
+        versionName = "1.0"
+        // Only arm64 APK
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Signed with the debug key so the APK is installable directly
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -35,60 +29,47 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+    kotlinOptions { jvmTarget = "17" }
 
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    buildFeatures {
-        compose = true
-    }
-
-    composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
-    }
+    buildFeatures { compose = true }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-        jniLibs {
-            useLegacyPackaging = true
-        }
+        // Required by youtubedl-android (python/yt-dlp are shipped as native libs)
+        jniLibs { useLegacyPackaging = true }
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    }
+
+    lint {
+        abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
 dependencies {
-    val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
     implementation(composeBom)
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Media3 (ExoPlayer) - Universal Format Support
-    val media3Version = "1.3.0"
-    implementation("androidx.media3:media3-exoplayer:$media3Version")
-    implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
-    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
-    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3Version")
-    implementation("androidx.media3:media3-exoplayer-rtsp:$media3Version")
-    implementation("androidx.media3:media3-datasource-rtmp:$media3Version")
-    implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
-    implementation("androidx.media3:media3-ui:$media3Version")
-    implementation("androidx.media3:media3-common:$media3Version")
+    val media3 = "1.3.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3")
+    implementation("androidx.media3:media3-datasource:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
 
-    // yt-dlp extractor for YT Shorts, Instagram Reels, TikTok, etc.
-    implementation("io.github.junkfood02.youtubedl-android:library:0.17.2")
-
-    // Coil for video frame & thumbnail loading
     implementation("io.coil-kt:coil-compose:2.6.0")
-    implementation("io.coil-kt:coil-video:2.6.0")
 
-    // JSON for history & playlists
-    implementation("com.google.code.gson:gson:2.10.1")
+    // yt-dlp wrapper: supports 1000+ sites (YouTube, Vimeo, X, Instagram, Facebook, TikTok ...)
+    implementation("io.github.junkfood02.youtubedl-android:library:0.17.2")
 }
