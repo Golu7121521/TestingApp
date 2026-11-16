@@ -8,24 +8,22 @@ import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.slideInVertically
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.platform.LocalContext
-import android.media.AudioManager
-import android.provider.Settings
-import kotlin.math.roundToInt
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.*
@@ -33,11 +31,16 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -85,27 +88,24 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
     var flashKey by remember { mutableIntStateOf(0) }
     var scrub by remember { mutableStateOf<Float?>(null) }
     var showResume by remember { mutableStateOf(false) }
-    var hudKind by remember { mutableIntStateOf(0) }
-    var hudValue by remember { mutableFloatStateOf(0f) }
-    var hudKey by remember { mutableIntStateOf(0) }
-    val ctx = LocalContext.current
+    var lastMenu by remember { mutableStateOf(MenuType.Speed) }
+    if (menu != MenuType.None) lastMenu = menu
     val haptic = LocalHapticFeedback.current
-    val activity = remember { ctx.findActivity() }
-    val am = remember { ctx.getSystemService(AudioManager::class.java) }
-    val maxVol = remember { (am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15).coerceAtLeast(1) }
-    var volF by remember { mutableFloatStateOf((am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0).toFloat() / maxVol) }
-    var briF by remember {
-        mutableFloatStateOf(
-            (activity?.window?.attributes?.screenBrightness ?: -1f).let {
-                if (it >= 0f) it else Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) / 255f
-            }
-        )
-    }
+    val view = LocalView.current
 
     BackHandler {
-        if (locked) { controls = true; touch++ } else onBack()
+        when {
+            menu != MenuType.None -> menu = MenuType.None
+            locked -> { controls = true; touch++ }
+            else -> onBack()
+        }
     }
-    LaunchedEffect(hudKey) { if (hudKey > 0) { delay(900); hudKind = 0 } }
+    // keep the status / navigation bars hidden (e.g. after a menu choice or a quality change)
+    LaunchedEffect(menu, load, portrait, qualities) {
+        view.context.findActivity()?.window?.let {
+            WindowCompat.getInsetsController(it, view).hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
     LaunchedEffect(resumedAt) {
         if (resumedAt > 0) { showResume = true; delay(4500); showResume = false } else showResume = false
     }
@@ -136,38 +136,11 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
             // ---- gesture layer: tap, double-tap seek, press & hold 2x
             Box(
                 Modifier.fillMaxSize().pointerInput(locked) {
-                    // vertical swipe: left half = brightness, right half = volume
-                    var rightSide = false
-                    detectVerticalDragGestures(
-                        onDragStart = { o -> rightSide = o.x > size.width / 2 },
-                        onVerticalDrag = { change, dy ->
-                            if (!locked) {
-                                change.consume()
-                                val d = -dy / size.height * 1.3f
-                                if (rightSide) {
-                                    volF = (volF + d).coerceIn(0f, 1f)
-                                    am?.setStreamVolume(AudioManager.STREAM_MUSIC, (volF * maxVol).roundToInt(), 0)
-                                    hudKind = 2; hudValue = volF
-                                } else {
-                                    briF = (briF + d).coerceIn(0.02f, 1f)
-                                    activity?.window?.let { w ->
-                                        val lp = w.attributes
-                                        lp.screenBrightness = briF
-                                        w.attributes = lp
-                                    }
-                                    hudKind = 1; hudValue = briF
-                                }
-                                hudKey++
-                            }
-                        }
-                    )
-                }.pointerInput(locked) {
                     detectTapGestures(
                         onTap = { controls = !controls; touch++; menu = MenuType.None },
                         onDoubleTap = { off ->
                             if (!locked && load is LoadState.Ready) {
-                                val left = off.x < size.width / 2
-                                val side = if (left) -1 else 1
+                                val side = if (off.x < size.width / 2) -1 else 1
                                 vm.seekBy(side * 10_000L)
                                 flashTotal = if (flashSide == side) flashTotal + 10 else 10
                                 flashSide = side
@@ -175,7 +148,10 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                             }
                         },
                         onLongPress = {
-                            if (!locked && load is LoadState.Ready) { boosting = true; vm.boost(true); haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
+                            if (!locked && load is LoadState.Ready) {
+                                boosting = true; vm.boost(true)
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
                         },
                         onPress = {
                             tryAwaitRelease()
@@ -208,30 +184,6 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                         .background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(50))
                         .padding(horizontal = 14.dp, vertical = 6.dp)
                 )
-            }
-
-            // ---- brightness / volume HUD
-            AnimatedVisibility(
-                visible = hudKind != 0, enter = fadeIn(), exit = fadeOut(),
-                modifier = Modifier.align(Alignment.Center)
-            ) {
-                Column(
-                    Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
-                        .padding(horizontal = 22.dp, vertical = 14.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(
-                        if (hudKind == 1) Icons.Rounded.BrightnessMedium
-                        else if (hudValue <= 0f) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
-                        null, tint = Color.White
-                    )
-                    LinearProgressIndicator(
-                        progress = { hudValue }, modifier = Modifier.width(110.dp),
-                        color = Color.White, trackColor = Color.White.copy(alpha = 0.3f)
-                    )
-                    Text("${(hudValue * 100).roundToInt()}%", color = Color.White, fontSize = 12.sp)
-                }
             }
 
             // ---- "Resumed from" pill
@@ -280,9 +232,10 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                     visible = controls, enter = fadeIn(), exit = fadeOut(),
                     modifier = Modifier.align(Alignment.CenterStart)
                 ) {
-                    CtrlIcon(Icons.Rounded.LockOpen, "Unlock", Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)) {
-                        locked = false; touch++
-                    }
+                    CtrlIcon(
+                        Icons.Rounded.LockOpen, "Unlock",
+                        Modifier.windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp)
+                    ) { locked = false; touch++ }
                 }
             }
 
@@ -341,67 +294,22 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                         }
                     }
                     val speedBtn: @Composable () -> Unit = {
-                        MenuBox(menu == MenuType.Speed, { menu = MenuType.None }, anchor = {
-                            TextButton(onClick = { menu = MenuType.Speed }) {
-                                Text(speedLabel(ui.speed), color = Color.White, fontWeight = FontWeight.Bold)
-                            }
-                        }) {
-                            speeds.forEach { sp ->
-                                DropdownMenuItem(
-                                    text = { Text(speedLabel(sp)) },
-                                    leadingIcon = { if (sp == ui.speed) Icon(Icons.Rounded.Check, null) },
-                                    onClick = { vm.setSpeed(sp); menu = MenuType.None }
-                                )
-                            }
+                        TextButton(onClick = { menu = MenuType.Speed }) {
+                            Text(speedLabel(ui.speed), color = Color.White, fontWeight = FontWeight.Bold)
                         }
                     }
                     val otherBtns: @Composable () -> Unit = {
                         if (qualities.isNotEmpty()) {
-                            MenuBox(menu == MenuType.Quality, { menu = MenuType.None }, anchor = {
-                                CtrlIcon(Icons.Rounded.HighQuality, "Quality") { menu = MenuType.Quality }
-                            }) {
-                                qualities.forEach { o ->
-                                    DropdownMenuItem(
-                                        text = { Text(o.label) },
-                                        leadingIcon = { if (o.selected) Icon(Icons.Rounded.Check, null) },
-                                        onClick = { vm.selectQuality(o.id); menu = MenuType.None }
-                                    )
-                                }
-                            }
+                            CtrlIcon(Icons.Rounded.HighQuality, "Quality") { menu = MenuType.Quality }
                         }
                         if (audios.isNotEmpty()) {
-                            MenuBox(menu == MenuType.Audio, { menu = MenuType.None }, anchor = {
-                                CtrlIcon(Icons.Rounded.Language, "Audio language") { menu = MenuType.Audio }
-                            }) {
-                                audios.forEach { o ->
-                                    DropdownMenuItem(
-                                        text = { Text(o.label) },
-                                        leadingIcon = { if (o.selected) Icon(Icons.Rounded.Check, null) },
-                                        onClick = { vm.selectAudio(o.id); menu = MenuType.None }
-                                    )
-                                }
-                            }
+                            CtrlIcon(Icons.Rounded.Language, "Audio language") { menu = MenuType.Audio }
                         }
                         if (subs.isNotEmpty()) {
-                            MenuBox(menu == MenuType.Subs, { menu = MenuType.None }, anchor = {
-                                CtrlIcon(
-                                    if (ui.subsOn) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionOff,
-                                    "Subtitles"
-                                ) { menu = MenuType.Subs }
-                            }) {
-                                DropdownMenuItem(
-                                    text = { Text("Off") },
-                                    leadingIcon = { if (!ui.subsOn) Icon(Icons.Rounded.Check, null) },
-                                    onClick = { vm.selectSub("off"); menu = MenuType.None }
-                                )
-                                subs.forEach { o ->
-                                    DropdownMenuItem(
-                                        text = { Text(o.label) },
-                                        leadingIcon = { if (ui.subsOn && o.selected) Icon(Icons.Rounded.Check, null) },
-                                        onClick = { vm.selectSub(o.id); menu = MenuType.None }
-                                    )
-                                }
-                            }
+                            CtrlIcon(
+                                if (ui.subsOn) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionOff,
+                                "Subtitles"
+                            ) { menu = MenuType.Subs }
                         }
                         CtrlIcon(Icons.Rounded.AspectRatio, "Resize mode") {
                             resize = when (resize) {
@@ -436,7 +344,6 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                             )
                         }
                         if (portrait == true) {
-                            // narrow screen: two rows
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 playGroup(); Spacer(Modifier.weight(1f)); speedBtn()
                             }
@@ -451,7 +358,76 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                     }
                 }
             }
+
+            // ---- small glass menu (drawn inside the player, so system bars never show up)
+            AnimatedVisibility(
+                visible = menu != MenuType.None && !locked,
+                enter = fadeIn(tween(150)) + scaleIn(tween(150), initialScale = 0.9f, transformOrigin = TransformOrigin(1f, 1f)),
+                exit = fadeOut(tween(120))
+            ) {
+                Box(Modifier.fillMaxSize().pointerInput(Unit) { detectTapGestures { menu = MenuType.None } }) {
+                    GlassMenu(
+                        Modifier.align(Alignment.BottomEnd).windowInsetsPadding(WindowInsets.safeDrawing)
+                            .padding(end = 12.dp, bottom = if (portrait == true) 128.dp else 84.dp)
+                    ) {
+                        when (lastMenu) {
+                            MenuType.Speed -> speeds.forEach { sp ->
+                                GlassItem(speedLabel(sp), sp == ui.speed) { vm.setSpeed(sp); menu = MenuType.None }
+                            }
+                            MenuType.Quality -> qualities.forEach { o ->
+                                GlassItem(o.label, o.selected) { vm.selectQuality(o.id); menu = MenuType.None }
+                            }
+                            MenuType.Audio -> audios.forEach { o ->
+                                GlassItem(o.label, o.selected) { vm.selectAudio(o.id); menu = MenuType.None }
+                            }
+                            MenuType.Subs -> {
+                                GlassItem("Off", !ui.subsOn) { vm.selectSub("off"); menu = MenuType.None }
+                                subs.forEach { o ->
+                                    GlassItem(o.label, ui.subsOn && o.selected) { vm.selectSub(o.id); menu = MenuType.None }
+                                }
+                            }
+                            MenuType.None -> {}
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+/** Compact translucent "water glass" panel. */
+@Composable
+private fun GlassMenu(modifier: Modifier, content: @Composable ColumnScope.() -> Unit) {
+    val shape = RoundedCornerShape(16.dp)
+    Column(
+        modifier.widthIn(min = 110.dp, max = 190.dp).heightIn(max = 220.dp)
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    listOf(Color(0xB30B3C5D), Color(0x99086A9A), Color(0xB30288D1))
+                )
+            )
+            .border(1.dp, Color.White.copy(alpha = 0.28f), shape)
+            .pointerInput(Unit) { detectTapGestures { } }
+            .verticalScroll(rememberScrollState())
+            .padding(vertical = 6.dp),
+        content = content
+    )
+}
+
+@Composable
+private fun GlassItem(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(Modifier.width(18.dp)) {
+            if (selected) Icon(Icons.Rounded.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+        }
+        Text(
+            label, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
+        )
     }
 }
 
@@ -477,22 +453,9 @@ private fun BoxScope.BackOnly(onBack: () -> Unit) {
 }
 
 @Composable
-private fun CtrlIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, desc: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+private fun CtrlIcon(icon: ImageVector, desc: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
     IconButton(onClick = onClick, modifier = modifier.size(42.dp)) {
         Icon(icon, desc, tint = Color.White, modifier = Modifier.size(24.dp))
-    }
-}
-
-@Composable
-private fun MenuBox(
-    expanded: Boolean,
-    onDismiss: () -> Unit,
-    anchor: @Composable () -> Unit,
-    content: @Composable ColumnScope.() -> Unit
-) {
-    Box {
-        anchor()
-        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss, content = content)
     }
 }
 
@@ -568,11 +531,6 @@ private fun Immersive(portrait: Boolean?) {
                 val lp = window.attributes
                 lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
                 window.attributes = lp
-            }
-            window?.let { w ->
-                val lp = w.attributes
-                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
-                w.attributes = lp
             }
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             act?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

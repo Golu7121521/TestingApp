@@ -37,10 +37,11 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
     val ctx = LocalContext.current
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
+    var addTarget by remember { mutableStateOf<HistoryItem?>(null) }
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = { Text("History") },
                 actions = {
                     if (all.isNotEmpty()) {
@@ -107,10 +108,9 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
-                                IconButton(onClick = {
-                                    PlaylistStore.add(h)
-                                    Toast.makeText(ctx, "Added to playlist", Toast.LENGTH_SHORT).show()
-                                }) { Icon(Icons.Rounded.PlaylistAdd, "Add to playlist") }
+                                IconButton(onClick = { addTarget = h }) {
+                                    Icon(Icons.Rounded.PlaylistAdd, "Add to playlist")
+                                }
                             }
                         }
                     }
@@ -119,6 +119,7 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
         }
     }
 
+    addTarget?.let { AddToPlaylistDialog(it) { addTarget = null } }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },

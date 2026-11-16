@@ -23,7 +23,7 @@ fun HistoryItem.progress(): Float =
     if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
 @Composable
-fun Thumb(url: String?, modifier: Modifier = Modifier.width(140.dp), progress: Float = 0f) {
+fun Thumb(url: String?, modifier: Modifier = Modifier.width(140.dp), progress: Float = 0f, fit: Boolean = false) {
     Box(
         modifier.aspectRatio(16f / 9f).clip(RoundedCornerShape(10.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant),
@@ -31,7 +31,7 @@ fun Thumb(url: String?, modifier: Modifier = Modifier.width(140.dp), progress: F
     ) {
         if (url != null) {
             AsyncImage(
-                model = url, contentDescription = null, contentScale = ContentScale.Crop,
+                model = url, contentDescription = null, contentScale = if (fit) ContentScale.Fit else ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
         } else {

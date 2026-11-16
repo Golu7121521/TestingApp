@@ -45,8 +45,8 @@ object Resolver {
         val path = runCatching { Uri.parse(url).path ?: "" }.getOrDefault("").lowercase()
         val ext = path.substringAfterLast('.', "")
         return when {
-            ext == "m3u8" -> "hls"
-            ext == "mpd" -> "dash"
+            ext == "m3u8" || url.contains(".m3u8", true) -> "hls"
+            ext == "mpd" || url.contains(".mpd", true) -> "dash"
             ext in progressiveExt -> "prog"
             else -> null
         }

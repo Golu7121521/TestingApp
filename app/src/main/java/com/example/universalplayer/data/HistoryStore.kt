@@ -96,4 +96,3 @@ class ItemStore(private val fileName: String, private val newestFirst: Boolean, 
 }
 
 val HistoryStore = ItemStore("history.json", true, 300)
-val PlaylistStore = ItemStore("playlist.json", false, 500)

@@ -41,7 +41,7 @@ fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
+            TopAppBar(
                 title = { Text("Advanced") },
                 actions = { TextButton(onClick = { form.clear(); error = null }) { Text("Reset") } }
             )

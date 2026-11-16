@@ -56,11 +56,10 @@ fun HomeScreen(
     }
 
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("Universal Player") }) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { pad ->
         Column(
-            Modifier.padding(pad).fillMaxSize().verticalScroll(rememberScrollState())
+            Modifier.padding(pad).statusBarsPadding().fillMaxSize().verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -116,22 +115,6 @@ fun HomeScreen(
                 }
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Supported links", style = MaterialTheme.typography.titleSmall)
-                    Text(
-                        "YouTube, Vimeo, Dailymotion, Twitch, X (Twitter), Facebook, Instagram, TikTok, " +
-                                "Reddit and 1000+ other sites, plus direct MP4, HLS (.m3u8) and DASH (.mpd) links.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Text(
-                        "Tips: double-tap to seek 10s, press and hold for 2x, swipe up/down on the left for " +
-                                "brightness and on the right for volume.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
         }
     }
 }
