@@ -104,6 +104,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _portrait = MutableStateFlow<Boolean?>(null)
     val portrait: StateFlow<Boolean?> = _portrait.asStateFlow()
 
+    private val _resumedAt = MutableStateFlow(0L)
+    val resumedAt: StateFlow<Long> = _resumedAt.asStateFlow()
+    private val _subs = MutableStateFlow<List<Opt>>(emptyList())
+    val subs: StateFlow<List<Opt>> = _subs.asStateFlow()
+
     private val listener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) = sync()
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -135,9 +140,11 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
         viewModelScope.launch {
+            var n = 0
             while (true) {
                 sync()
                 delay(250)
+                if (++n % 40 == 0 && player.isPlaying) saveProgress()
             }
         }
     }
@@ -205,6 +212,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun startLoad(u: String) {
+        saveProgress()
         job?.cancel()
         currentUrl = u
         _load.value = LoadState.Loading
@@ -214,10 +222,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _audios.value = emptyList()
         _title.value = ""
         _portrait.value = null
+        _resumedAt.value = 0L
+        _subs.value = emptyList()
         job = viewModelScope.launch {
             try {
                 val r = Resolver.resolve(u, opts)
                 resolved = r
+                val saved = HistoryStore.items.value.firstOrNull { it.url == u }
+                val startPos = if (!r.isLive && saved != null && saved.position > 5_000) saved.position else 0L
+                val startArg = if (startPos > 0) startPos else C.TIME_UNSET
                 adaptive = r.direct
                 _title.value = r.title
                 if (r.direct) {
@@ -226,19 +239,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                         r.directMime?.let { setMimeType(it) }
                         if (opts.hasDrm) setDrmConfiguration(drmConfig(opts))
                     }.build()
-                    player.setMediaSource(directFactory(opts).createMediaSource(item))
+                    player.setMediaSource(directFactory(opts).createMediaSource(item), startArg)
                 } else {
                     val hs = heights(r)
                     selHeight = hs.firstOrNull { it <= 1080 } ?: hs.firstOrNull() ?: 0
                     selLang = audioLangs(r).firstOrNull() ?: "und"
-                    player.setMediaSource(buildSource(r, selHeight, selLang))
+                    player.setMediaSource(buildSource(r, selHeight, selLang), startArg)
                     updateFormatOptions()
                 }
                 player.playbackParameters = player.playbackParameters.withSpeed(userSpeed)
                 player.playWhenReady = true
                 player.prepare()
                 _load.value = LoadState.Ready
-                HistoryStore.add(HistoryItem(u, r.title, r.thumb, System.currentTimeMillis(), opts))
+                HistoryStore.add(HistoryItem(u, r.title, r.thumb, System.currentTimeMillis(), opts, startPos, saved?.duration ?: 0L))
+                _resumedAt.value = startPos
                 PlaylistStore.update(u, r.title, r.thumb)
             } catch (e: CancellationException) {
                 throw e
@@ -249,6 +263,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun close() {
+        saveProgress()
         job?.cancel()
         player.stop()
         player.clearMediaItems()
@@ -349,6 +364,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         if (!player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)) {
             val groups = t.groups.filter { it.type == C.TRACK_TYPE_TEXT }
             if (groups.isNotEmpty() && groups.none { it.isSelected }) applyText(groups)
+        }
+        val textGroups = t.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+        val textOff = player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_TEXT)
+        _subs.value = textGroups.mapIndexed { i, g ->
+            val f = g.getTrackFormat(0)
+            Opt(i.toString(), f.label ?: langLabel(f.language ?: "und"), !textOff && g.isSelected)
         }
         if (!adaptive) return
 
@@ -455,6 +476,40 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         player.setPlaybackSpeed(if (on) 2f else userSpeed)
     }
 
+    // ---------------------------------------------------------------- resume / subtitles
+    fun saveProgress() {
+        val u = currentUrl ?: return
+        if (_load.value !is LoadState.Ready) return
+        val p = player
+        if (p.isCurrentMediaItemLive) return
+        val d = p.duration
+        if (d == C.TIME_UNSET || d <= 0) return
+        var pos = p.currentPosition
+        if (pos > d * 0.95) pos = 0
+        HistoryStore.setProgress(u, pos, d)
+        PlaylistStore.setProgress(u, pos, d)
+    }
+
+    fun startOver() {
+        player.seekTo(0)
+        _resumedAt.value = 0L
+    }
+
+    fun selectSub(id: String) {
+        val b = player.trackSelectionParameters.buildUpon()
+        if (id == "off") {
+            b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).clearOverridesOfType(C.TRACK_TYPE_TEXT)
+        } else {
+            val groups = player.currentTracks.groups.filter { it.type == C.TRACK_TYPE_TEXT }
+            val g = groups.getOrNull(id.toIntOrNull() ?: -1) ?: return
+            b.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false)
+                .setOverrideForType(TrackSelectionOverride(g.mediaTrackGroup, 0))
+        }
+        player.trackSelectionParameters = b.build()
+        onTracks(player.currentTracks)
+        sync()
+    }
+
     // ---------------------------------------------------------------- DRM / custom headers
     private fun directFactory(o: PlayOptions): DefaultMediaSourceFactory {
         val dsf = DefaultHttpDataSource.Factory()
@@ -503,7 +558,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         return "data:application/json;base64," + Base64.encodeToString(json.toByteArray(), Base64.NO_WRAP)
     }
 
-    fun pause() = player.pause()
+    fun pause() {
+        saveProgress()
+        player.pause()
+    }
 
     override fun onCleared() {
         player.removeListener(listener)

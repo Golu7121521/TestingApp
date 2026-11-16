@@ -12,3 +12,6 @@ If the build fails, open the failed step log and send the error text.
 
 ## Tabs
 Home (paste link) | Advanced (headers, user agent, DRM) | History | Playlist (auto plays next item)
+
+## Extras
+Resume playback, brightness/volume swipe, subtitle language menu, swipe-to-delete with undo, history search, shuffle play, animated UI.

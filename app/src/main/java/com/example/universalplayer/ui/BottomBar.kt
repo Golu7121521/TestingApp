@@ -1,5 +1,9 @@
 package com.example.universalplayer.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,6 +24,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -31,7 +37,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
     Playlist("Playlist", Icons.Rounded.VideoLibrary)
 }
 
-/** Slim (64dp) bottom navigation bar, similar in size to the Play Store one. */
+/** Slim (64dp) bottom navigation bar with animated selection pill. */
 @Composable
 fun AppBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
     Surface(color = MaterialTheme.colorScheme.surfaceContainer) {
@@ -39,6 +45,16 @@ fun AppBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
             Row(Modifier.fillMaxWidth().height(64.dp)) {
                 Tab.entries.forEach { t ->
                     val sel = t == selected
+                    val pillColor by animateColorAsState(
+                        if (sel) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        tween(220), label = "pill"
+                    )
+                    val pillWidth by animateDpAsState(if (sel) 56.dp else 32.dp, tween(220), label = "pillw")
+                    val scale by animateFloatAsState(if (sel) 1.12f else 1f, tween(220), label = "scale")
+                    val iconColor by animateColorAsState(
+                        if (sel) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tween(220), label = "icon"
+                    )
                     Column(
                         Modifier.weight(1f).fillMaxHeight().clickable(
                             interactionSource = remember { MutableInteractionSource() },
@@ -49,19 +65,19 @@ fun AppBottomBar(selected: Tab, onSelect: (Tab) -> Unit) {
                         verticalArrangement = Arrangement.Center
                     ) {
                         Box(
-                            Modifier.width(56.dp).height(28.dp).clip(RoundedCornerShape(14.dp))
-                                .background(if (sel) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent),
+                            Modifier.width(pillWidth).height(28.dp).clip(RoundedCornerShape(14.dp)).background(pillColor),
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                t.icon, t.label, Modifier.size(22.dp),
-                                tint = if (sel) MaterialTheme.colorScheme.onSecondaryContainer
-                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                t.icon, t.label,
+                                Modifier.size(22.dp).graphicsLayer { scaleX = scale; scaleY = scale },
+                                tint = iconColor
                             )
                         }
                         Spacer(Modifier.height(2.dp))
                         Text(
                             t.label, fontSize = 11.sp,
+                            fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal,
                             color = if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }

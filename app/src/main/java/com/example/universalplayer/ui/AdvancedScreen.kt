@@ -58,6 +58,7 @@ fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
                 label = { Text("Video link") }, singleLine = true,
                 isError = error != null, supportingText = { error?.let { Text(it) } }
             )
+            SectionTitle("Request headers")
             OutlinedTextField(
                 form.cookie, { form.cookie = it }, Modifier.fillMaxWidth(),
                 label = { Text("Cookie value") }, singleLine = true
@@ -71,6 +72,7 @@ fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
                 label = { Text("Origin value") }, singleLine = true
             )
             Dropdown("User agent", USER_AGENTS.map { it.first }, form.uaIndex) { form.uaIndex = it }
+            SectionTitle("DRM")
             OutlinedTextField(
                 form.drm, { form.drm = it }, Modifier.fillMaxWidth(),
                 label = { Text("DRM license URI") }, singleLine = true,
@@ -91,6 +93,12 @@ fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
             }
         }
     }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = 8.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

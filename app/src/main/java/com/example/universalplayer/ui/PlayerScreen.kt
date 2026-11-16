@@ -7,6 +7,15 @@ import android.os.Build
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
+import android.media.AudioManager
+import android.provider.Settings
+import kotlin.math.roundToInt
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Canvas
@@ -47,7 +56,7 @@ import com.example.universalplayer.player.LoadState
 import com.example.universalplayer.player.PlayerViewModel
 import kotlinx.coroutines.delay
 
-private enum class MenuType { None, Speed, Quality, Audio }
+private enum class MenuType { None, Speed, Quality, Audio, Subs }
 
 private val speeds = listOf(0.25f, 0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f)
 private fun speedLabel(s: Float) = if (s == s.toInt().toFloat()) "${s.toInt()}x" else "${s}x"
@@ -60,6 +69,8 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
     val qualities by vm.qualities.collectAsState()
     val audios by vm.audios.collectAsState()
     val portrait by vm.portrait.collectAsState()
+    val subs by vm.subs.collectAsState()
+    val resumedAt by vm.resumedAt.collectAsState()
 
     Immersive(portrait)
 
@@ -73,9 +84,30 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
     var flashTotal by remember { mutableIntStateOf(0) }
     var flashKey by remember { mutableIntStateOf(0) }
     var scrub by remember { mutableStateOf<Float?>(null) }
+    var showResume by remember { mutableStateOf(false) }
+    var hudKind by remember { mutableIntStateOf(0) }
+    var hudValue by remember { mutableFloatStateOf(0f) }
+    var hudKey by remember { mutableIntStateOf(0) }
+    val ctx = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val activity = remember { ctx.findActivity() }
+    val am = remember { ctx.getSystemService(AudioManager::class.java) }
+    val maxVol = remember { (am?.getStreamMaxVolume(AudioManager.STREAM_MUSIC) ?: 15).coerceAtLeast(1) }
+    var volF by remember { mutableFloatStateOf((am?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0).toFloat() / maxVol) }
+    var briF by remember {
+        mutableFloatStateOf(
+            (activity?.window?.attributes?.screenBrightness ?: -1f).let {
+                if (it >= 0f) it else Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) / 255f
+            }
+        )
+    }
 
     BackHandler {
         if (locked) { controls = true; touch++ } else onBack()
+    }
+    LaunchedEffect(hudKey) { if (hudKey > 0) { delay(900); hudKind = 0 } }
+    LaunchedEffect(resumedAt) {
+        if (resumedAt > 0) { showResume = true; delay(4500); showResume = false } else showResume = false
     }
     LaunchedEffect(flashKey) {
         if (flashKey > 0) { delay(700); flashSide = 0; flashTotal = 0 }
@@ -104,6 +136,32 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
             // ---- gesture layer: tap, double-tap seek, press & hold 2x
             Box(
                 Modifier.fillMaxSize().pointerInput(locked) {
+                    // vertical swipe: left half = brightness, right half = volume
+                    var rightSide = false
+                    detectVerticalDragGestures(
+                        onDragStart = { o -> rightSide = o.x > size.width / 2 },
+                        onVerticalDrag = { change, dy ->
+                            if (!locked) {
+                                change.consume()
+                                val d = -dy / size.height * 1.3f
+                                if (rightSide) {
+                                    volF = (volF + d).coerceIn(0f, 1f)
+                                    am?.setStreamVolume(AudioManager.STREAM_MUSIC, (volF * maxVol).roundToInt(), 0)
+                                    hudKind = 2; hudValue = volF
+                                } else {
+                                    briF = (briF + d).coerceIn(0.02f, 1f)
+                                    activity?.window?.let { w ->
+                                        val lp = w.attributes
+                                        lp.screenBrightness = briF
+                                        w.attributes = lp
+                                    }
+                                    hudKind = 1; hudValue = briF
+                                }
+                                hudKey++
+                            }
+                        }
+                    )
+                }.pointerInput(locked) {
                     detectTapGestures(
                         onTap = { controls = !controls; touch++; menu = MenuType.None },
                         onDoubleTap = { off ->
@@ -117,7 +175,7 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                             }
                         },
                         onLongPress = {
-                            if (!locked && load is LoadState.Ready) { boosting = true; vm.boost(true) }
+                            if (!locked && load is LoadState.Ready) { boosting = true; vm.boost(true); haptic.performHapticFeedback(HapticFeedbackType.LongPress) }
                         },
                         onPress = {
                             tryAwaitRelease()
@@ -152,6 +210,47 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                 )
             }
 
+            // ---- brightness / volume HUD
+            AnimatedVisibility(
+                visible = hudKind != 0, enter = fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.Center)
+            ) {
+                Column(
+                    Modifier.background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(16.dp))
+                        .padding(horizontal = 22.dp, vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        if (hudKind == 1) Icons.Rounded.BrightnessMedium
+                        else if (hudValue <= 0f) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
+                        null, tint = Color.White
+                    )
+                    LinearProgressIndicator(
+                        progress = { hudValue }, modifier = Modifier.width(110.dp),
+                        color = Color.White, trackColor = Color.White.copy(alpha = 0.3f)
+                    )
+                    Text("${(hudValue * 100).roundToInt()}%", color = Color.White, fontSize = 12.sp)
+                }
+            }
+
+            // ---- "Resumed from" pill
+            AnimatedVisibility(
+                visible = showResume && !locked && load is LoadState.Ready,
+                enter = slideInVertically { it } + fadeIn(), exit = fadeOut(),
+                modifier = Modifier.align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing).padding(start = 16.dp, bottom = 96.dp)
+            ) {
+                Row(
+                    Modifier.background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(50))
+                        .padding(start = 16.dp, end = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Resumed from ${formatTime(resumedAt)}", color = Color.White, fontSize = 13.sp)
+                    TextButton(onClick = { vm.startOver(); showResume = false }) { Text("Start over") }
+                }
+            }
+
             // ---- loading / error
             when (val l = load) {
                 is LoadState.Loading -> {
@@ -164,6 +263,7 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
+                        Icon(Icons.Rounded.ErrorOutline, null, tint = Color.White, modifier = Modifier.size(40.dp))
                         Text(l.message, color = Color.White)
                         Button(onClick = { vm.retry() }) { Text("Retry") }
                     }
@@ -218,10 +318,7 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                     // bottom bar
                     val playGroup: @Composable () -> Unit = {
                         if (ui.hasPrev) CtrlIcon(Icons.Rounded.SkipPrevious, "Previous") { vm.skipPrev() }
-                        CtrlIcon(
-                            if (ui.isPlaying) Icons.Rounded.Pause else if (ui.ended) Icons.Rounded.Replay else Icons.Rounded.PlayArrow,
-                            if (ui.isPlaying) "Pause" else "Play"
-                        ) { vm.togglePlay(); touch++ }
+                        PlayPauseButton(ui.isPlaying, ui.ended) { vm.togglePlay(); touch++ }
                         if (ui.hasNext) CtrlIcon(Icons.Rounded.SkipNext, "Next") { vm.skipNext() }
                         CtrlIcon(
                             if (ui.muted) Icons.Rounded.VolumeOff else Icons.Rounded.VolumeUp,
@@ -285,11 +382,26 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                                 }
                             }
                         }
-                        if (ui.hasSubs) {
-                            CtrlIcon(
-                                if (ui.subsOn) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionOff,
-                                "Subtitles"
-                            ) { vm.toggleSubs(); touch++ }
+                        if (subs.isNotEmpty()) {
+                            MenuBox(menu == MenuType.Subs, { menu = MenuType.None }, anchor = {
+                                CtrlIcon(
+                                    if (ui.subsOn) Icons.Rounded.ClosedCaption else Icons.Rounded.ClosedCaptionOff,
+                                    "Subtitles"
+                                ) { menu = MenuType.Subs }
+                            }) {
+                                DropdownMenuItem(
+                                    text = { Text("Off") },
+                                    leadingIcon = { if (!ui.subsOn) Icon(Icons.Rounded.Check, null) },
+                                    onClick = { vm.selectSub("off"); menu = MenuType.None }
+                                )
+                                subs.forEach { o ->
+                                    DropdownMenuItem(
+                                        text = { Text(o.label) },
+                                        leadingIcon = { if (ui.subsOn && o.selected) Icon(Icons.Rounded.Check, null) },
+                                        onClick = { vm.selectSub(o.id); menu = MenuType.None }
+                                    )
+                                }
+                            }
                         }
                         CtrlIcon(Icons.Rounded.AspectRatio, "Resize mode") {
                             resize = when (resize) {
@@ -339,6 +451,18 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlayPauseButton(playing: Boolean, ended: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, modifier = Modifier.size(42.dp)) {
+        Crossfade(targetState = if (playing) 1 else if (ended) 2 else 0, label = "playpause") { st ->
+            Icon(
+                when (st) { 1 -> Icons.Rounded.Pause; 2 -> Icons.Rounded.Replay; else -> Icons.Rounded.PlayArrow },
+                if (st == 1) "Pause" else "Play", tint = Color.White, modifier = Modifier.size(26.dp)
+            )
         }
     }
 }
@@ -444,6 +568,11 @@ private fun Immersive(portrait: Boolean?) {
                 val lp = window.attributes
                 lp.layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
                 window.attributes = lp
+            }
+            window?.let { w ->
+                val lp = w.attributes
+                lp.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                w.attributes = lp
             }
             window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             act?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED

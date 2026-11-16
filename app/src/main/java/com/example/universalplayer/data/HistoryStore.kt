@@ -13,7 +13,9 @@ data class HistoryItem(
     val title: String,
     val thumb: String?,
     val time: Long,
-    val opts: PlayOptions = PlayOptions()
+    val opts: PlayOptions = PlayOptions(),
+    val position: Long = 0,
+    val duration: Long = 0
 )
 
 /** Small JSON-file backed list used for both History (newest first) and Playlist (in order added). */
@@ -33,7 +35,8 @@ class ItemStore(private val fileName: String, private val newestFirst: Boolean, 
                     HistoryItem(
                         o.getString("url"), o.optString("title"),
                         if (o.isNull("thumb")) null else o.optString("thumb"),
-                        o.optLong("time"), PlayOptions.fromJson(o.optJSONObject("opts"))
+                        o.optLong("time"), PlayOptions.fromJson(o.optJSONObject("opts")),
+                        o.optLong("pos"), o.optLong("dur")
                     )
                 }
             }
@@ -58,6 +61,13 @@ class ItemStore(private val fileName: String, private val newestFirst: Boolean, 
     }
 
     @Synchronized
+    fun setProgress(url: String, pos: Long, dur: Long) {
+        if (_items.value.none { it.url == url }) return
+        _items.value = _items.value.map { if (it.url == url) it.copy(position = pos, duration = dur) else it }
+        save()
+    }
+
+    @Synchronized
     fun remove(url: String) {
         _items.value = _items.value.filter { it.url != url }
         save()
@@ -77,7 +87,7 @@ class ItemStore(private val fileName: String, private val newestFirst: Boolean, 
                 arr.put(
                     JSONObject().put("url", it.url).put("title", it.title)
                         .put("thumb", it.thumb ?: JSONObject.NULL).put("time", it.time)
-                        .put("opts", it.opts.toJson())
+                        .put("opts", it.opts.toJson()).put("pos", it.position).put("dur", it.duration)
                 )
             }
             f.writeText(arr.toString())

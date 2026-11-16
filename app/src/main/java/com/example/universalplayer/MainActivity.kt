@@ -12,6 +12,13 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -45,36 +52,53 @@ class MainActivity : ComponentActivity() {
             UniversalPlayerTheme {
                 val form = remember { AdvancedForm() }
                 Surface(Modifier.fillMaxSize()) {
-                    when (screen) {
-                        Screen.Main -> {
-                            BackHandler(tab != Tab.Home) { tab = Tab.Home }
-                            Scaffold(
-                                bottomBar = { AppBottomBar(tab) { tab = it } },
-                                contentWindowInsets = WindowInsets(0, 0, 0, 0)
-                            ) { pad ->
-                                Box(Modifier.padding(pad)) {
-                                    when (tab) {
-                                        Tab.Home -> HomeScreen(
-                                            text = homeText,
-                                            onText = { homeText = it },
-                                            onPlay = { play(it) }
-                                        )
-                                        Tab.Advanced -> AdvancedScreen(form) { url, o -> play(url, o) }
-                                        Tab.History -> HistoryScreen { play(it.url, it.opts) }
-                                        Tab.Playlist -> PlaylistScreen { items, i ->
-                                            vm.openQueue(items, i)
-                                            screen = Screen.Player
+                    AnimatedContent(
+                        targetState = screen,
+                        transitionSpec = { fadeIn(tween(250)) togetherWith fadeOut(tween(200)) },
+                        label = "screen"
+                    ) { sc ->
+                        when (sc) {
+                            Screen.Main -> {
+                                BackHandler(tab != Tab.Home) { tab = Tab.Home }
+                                Scaffold(
+                                    bottomBar = { AppBottomBar(tab) { tab = it } },
+                                    contentWindowInsets = WindowInsets(0, 0, 0, 0)
+                                ) { pad ->
+                                    Box(Modifier.padding(pad)) {
+                                        AnimatedContent(
+                                            targetState = tab,
+                                            transitionSpec = {
+                                                val dir = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                                                (slideInHorizontally(tween(260)) { it / 8 * dir } + fadeIn(tween(260))) togetherWith
+                                                        (slideOutHorizontally(tween(200)) { -it / 8 * dir } + fadeOut(tween(160)))
+                                            },
+                                            label = "tab"
+                                        ) { t ->
+                                            when (t) {
+                                                Tab.Home -> HomeScreen(
+                                                    text = homeText,
+                                                    onText = { homeText = it },
+                                                    onPlay = { play(it) },
+                                                    onPlayItem = { play(it.url, it.opts) }
+                                                )
+                                                Tab.Advanced -> AdvancedScreen(form) { url, o -> play(url, o) }
+                                                Tab.History -> HistoryScreen { play(it.url, it.opts) }
+                                                Tab.Playlist -> PlaylistScreen { items, i ->
+                                                    vm.openQueue(items, i)
+                                                    screen = Screen.Player
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
+                            Screen.Player -> PlayerScreen(
+                                vm = vm,
+                                inPip = inPip,
+                                onBack = { vm.close(); screen = Screen.Main },
+                                onEnterPip = { enterPip() }
+                            )
                         }
-                        Screen.Player -> PlayerScreen(
-                            vm = vm,
-                            inPip = inPip,
-                            onBack = { vm.close(); screen = Screen.Main },
-                            onEnterPip = { enterPip() }
-                        )
                     }
                 }
             }
