@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DeleteSweep
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -25,7 +24,7 @@ import com.example.universalplayer.data.HistoryStore
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HistoryScreen(onBack: () -> Unit, onPlay: (String) -> Unit) {
+fun HistoryScreen(onPlay: (String) -> Unit) {
     val items by HistoryStore.items.collectAsState()
     var confirm by remember { mutableStateOf(false) }
 
@@ -33,9 +32,6 @@ fun HistoryScreen(onBack: () -> Unit, onPlay: (String) -> Unit) {
         topBar = {
             TopAppBar(
                 title = { Text("History") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") }
-                },
                 actions = {
                     if (items.isNotEmpty()) {
                         IconButton(onClick = { confirm = true }) { Icon(Icons.Rounded.DeleteSweep, "Clear all") }

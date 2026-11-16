@@ -15,33 +15,38 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.example.universalplayer.player.PlayerViewModel
+import com.example.universalplayer.ui.AdvancedScreen
+import com.example.universalplayer.ui.AppBottomBar
 import com.example.universalplayer.ui.HistoryScreen
 import com.example.universalplayer.ui.HomeScreen
+import com.example.universalplayer.ui.MainTab
 import com.example.universalplayer.ui.PlayerScreen
+import com.example.universalplayer.ui.PlaylistScreen
 import com.example.universalplayer.ui.UniversalPlayerTheme
-
-enum class Screen { Home, History, Player }
+import com.example.universalplayer.data.PlaylistStore
 
 data class Paste(val url: String, val id: Long)
 
 class MainActivity : ComponentActivity() {
     private val vm: PlayerViewModel by viewModels()
-    private var screen by mutableStateOf(Screen.Home)
-    private var returnTo = Screen.Home
+    private var tab by mutableStateOf(MainTab.HOME)
+    private var playing by mutableStateOf(false)
     private var inPip by mutableStateOf(false)
     private var paste by mutableStateOf<Paste?>(null)
     private var lastClip: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.dark(Color.TRANSPARENT)
+            statusBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT),
+            navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
         handleIntent(intent)
@@ -49,22 +54,31 @@ class MainActivity : ComponentActivity() {
         setContent {
             UniversalPlayerTheme {
                 Surface(Modifier.fillMaxSize()) {
-                    when (screen) {
-                        Screen.Home -> HomeScreen(
-                            paste = paste,
-                            onPlay = { play(it) },
-                            onHistory = { screen = Screen.History }
-                        )
-                        Screen.History -> {
-                            BackHandler { screen = Screen.Home }
-                            HistoryScreen(onBack = { screen = Screen.Home }, onPlay = { play(it) })
-                        }
-                        Screen.Player -> PlayerScreen(
+                    if (playing) {
+                        PlayerScreen(
                             vm = vm,
                             inPip = inPip,
-                            onBack = { vm.close(); screen = returnTo },
+                            onBack = { vm.close(); playing = false },
                             onEnterPip = { enterPip() }
                         )
+                    } else {
+                        BackHandler(enabled = tab != MainTab.HOME) { tab = MainTab.HOME }
+                        Scaffold(
+                            bottomBar = { AppBottomBar(selected = tab, onSelect = { tab = it }) }
+                        ) { pad ->
+                            Surface(Modifier.padding(pad).fillMaxSize()) {
+                                when (tab) {
+                                    MainTab.HOME -> HomeScreen(
+                                        paste = paste,
+                                        onPlay = { play(it) },
+                                        onAddToPlaylist = { PlaylistStore.add(it) }
+                                    )
+                                    MainTab.ADVANCED -> AdvancedScreen(onPlay = { play(it) })
+                                    MainTab.HISTORY -> HistoryScreen(onPlay = { play(it) })
+                                    MainTab.PLAYLIST -> PlaylistScreen(onPlay = { play(it) })
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -72,9 +86,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun play(url: String) {
-        if (screen != Screen.Player) returnTo = screen
         vm.open(url)
-        screen = Screen.Player
+        playing = true
     }
 
     private fun handleIntent(i: Intent?) {
@@ -96,7 +109,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun readClipboard() {
-        if (screen != Screen.Home) return
+        if (playing || tab != MainTab.HOME) return
         val cm = getSystemService(ClipboardManager::class.java) ?: return
         val clip = cm.primaryClip?.takeIf { it.itemCount > 0 } ?: return
         val text = clip.getItemAt(0)?.coerceToText(this)?.toString()
@@ -118,7 +131,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
-        if (screen == Screen.Player && vm.ui.value.isPlaying) enterPip()
+        if (playing && vm.ui.value.isPlaying) enterPip()
     }
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: Configuration) {

@@ -6,8 +6,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentPaste
-import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -21,7 +21,7 @@ import com.example.universalplayer.normalizeUrl
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(paste: Paste?, onPlay: (String) -> Unit, onHistory: () -> Unit) {
+fun HomeScreen(paste: Paste?, onPlay: (String) -> Unit, onAddToPlaylist: (String) -> Unit) {
     var text by rememberSaveable { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
@@ -36,10 +36,7 @@ fun HomeScreen(paste: Paste?, onPlay: (String) -> Unit, onHistory: () -> Unit) {
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text("Universal Player") },
-                actions = {
-                    IconButton(onClick = onHistory) { Icon(Icons.Rounded.History, "History") }
-                }
+                title = { Text("Universal Player") }
             )
         }
     ) { pad ->
@@ -79,6 +76,18 @@ fun HomeScreen(paste: Paste?, onPlay: (String) -> Unit, onHistory: () -> Unit) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Play")
+            }
+            OutlinedButton(
+                onClick = {
+                    val u = normalizeUrl(text)
+                    if (u == null) error = "Enter a valid video link" else onAddToPlaylist(u)
+                },
+                enabled = text.isNotBlank(),
+                modifier = Modifier.fillMaxWidth().height(52.dp)
+            ) {
+                Icon(Icons.Rounded.PlaylistAdd, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Add to playlist")
             }
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {

@@ -1,7 +1,9 @@
 package com.example.universalplayer
 
 import android.app.Application
+import com.example.universalplayer.data.AdvancedStore
 import com.example.universalplayer.data.HistoryStore
+import com.example.universalplayer.data.PlaylistStore
 import com.yausername.youtubedl_android.YoutubeDL
 import kotlinx.coroutines.CompletableDeferred
 import kotlin.concurrent.thread
@@ -10,6 +12,8 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         HistoryStore.init(this)
+        PlaylistStore.init(this)
+        AdvancedStore.init(this)
         AppInit.start(this)
     }
 }

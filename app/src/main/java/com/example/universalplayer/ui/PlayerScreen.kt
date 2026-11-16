@@ -14,6 +14,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,8 +61,9 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
     val title by vm.title.collectAsState()
     val qualities by vm.qualities.collectAsState()
     val audios by vm.audios.collectAsState()
+    val portrait by vm.portrait.collectAsState()
 
-    Immersive()
+    Immersive(portrait)
 
     var locked by remember { mutableStateOf(false) }
     var controls by remember { mutableStateOf(true) }
@@ -233,7 +236,11 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                                 color = Color.White, fontSize = 12.sp
                             )
                         }
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        // portrait: the control row is too wide for the screen, so let it scroll
+                        Row(
+                            if (portrait == true) Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()) else Modifier,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             CtrlIcon(
                                 if (ui.isPlaying) Icons.Rounded.Pause else if (ui.ended) Icons.Rounded.Replay else Icons.Rounded.PlayArrow,
                                 if (ui.isPlaying) "Pause" else "Play"
@@ -259,7 +266,7 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                                 }
                             }
 
-                            Spacer(Modifier.weight(1f))
+                            if (portrait != true) Spacer(Modifier.weight(1f))
 
                             // speed
                             MenuBox(menu == MenuType.Speed, { menu = MenuType.None }, anchor = {
@@ -412,12 +419,21 @@ private fun ThinSeekBar(
     }
 }
 
-/** Hides system bars, draws under the display cutout and forces landscape while the player is shown. */
+/** Hides system bars, draws under the display cutout and matches the screen orientation to the video. */
 @Composable
-private fun Immersive() {
+private fun Immersive(portrait: Boolean?) {
     val view = LocalView.current
+    val act = view.context.findActivity()
+    // Portrait videos (reels, Shorts) play upright; landscape videos play sideways.
+    // Until the video size is known, keep the current orientation.
+    LaunchedEffect(portrait) {
+        act?.requestedOrientation = when (portrait) {
+            true -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT
+            false -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+            null -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
     DisposableEffect(Unit) {
-        val act = view.context.findActivity()
         val window = act?.window
         val ctrl = window?.let { WindowCompat.getInsetsController(it, view) }
         ctrl?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
@@ -428,7 +444,6 @@ private fun Immersive() {
             window.attributes = lp
         }
         window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        act?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             ctrl?.show(WindowInsetsCompat.Type.systemBars())
             if (window != null && Build.VERSION.SDK_INT >= 28) {

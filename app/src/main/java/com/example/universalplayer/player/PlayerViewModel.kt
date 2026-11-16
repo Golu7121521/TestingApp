@@ -14,6 +14,7 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.VideoSize
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.ExoPlayer
@@ -21,6 +22,8 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.SingleSampleMediaSource
+import com.example.universalplayer.data.AdvancedSettings
+import com.example.universalplayer.data.AdvancedStore
 import com.example.universalplayer.data.HistoryItem
 import com.example.universalplayer.data.HistoryStore
 import com.example.universalplayer.langLabel
@@ -80,8 +83,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val qualities: StateFlow<List<Opt>> = _qualities.asStateFlow()
     private val _audios = MutableStateFlow<List<Opt>>(emptyList())
     val audios: StateFlow<List<Opt>> = _audios.asStateFlow()
+    /** true = portrait video, false = landscape, null = not known yet. */
+    private val _portrait = MutableStateFlow<Boolean?>(null)
+    val portrait: StateFlow<Boolean?> = _portrait.asStateFlow()
 
     private var resolved: Resolved? = null
+    private var opts = AdvancedSettings()
     private var currentUrl: String? = null
     private var adaptive = false
     private var selHeight = 0
@@ -96,6 +103,15 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         override fun onTracksChanged(tracks: Tracks) {
             onTracks(tracks)
             sync()
+        }
+
+        override fun onVideoSizeChanged(videoSize: VideoSize) {
+            _portrait.value = if (videoSize.width > 0 && videoSize.height > 0) {
+                val rotated = videoSize.unappliedRotationDegrees == 90 || videoSize.unappliedRotationDegrees == 270
+                val w = if (rotated) videoSize.height else videoSize.width
+                val h = if (rotated) videoSize.width else videoSize.height
+                h > w
+            } else null
         }
 
         override fun onPlayerError(error: PlaybackException) {
@@ -151,24 +167,23 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun startLoad(u: String) {
         job?.cancel()
         currentUrl = u
+        opts = AdvancedStore.settings.value
         _load.value = LoadState.Loading
         player.stop()
         player.clearMediaItems()
         _qualities.value = emptyList()
         _audios.value = emptyList()
         _title.value = ""
+        _portrait.value = null
         job = viewModelScope.launch {
             try {
-                val r = Resolver.resolve(u)
+                val r = Resolver.resolve(u, opts)
                 resolved = r
                 adaptive = r.direct
                 _title.value = r.title
                 if (r.direct) {
                     selHeight = 0
-                    val item = MediaItem.Builder().setUri(r.directUrl!!).apply {
-                        r.directMime?.let { setMimeType(it) }
-                    }.build()
-                    player.setMediaItem(item)
+                    player.setMediaSource(directSource(r))
                 } else {
                     val hs = heights(r)
                     selHeight = hs.firstOrNull { it <= 1080 } ?: hs.firstOrNull() ?: 0
@@ -198,6 +213,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _load.value = LoadState.Idle
         _qualities.value = emptyList()
         _audios.value = emptyList()
+        _portrait.value = null
     }
 
     private fun friendly(e: Throwable): String {
@@ -224,10 +240,27 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         else -> 0
     }
 
-    private fun src(f: Fmt): MediaSource {
-        val dsf = DefaultHttpDataSource.Factory()
+    /** HTTP factory with extra headers and the Advanced-tab User-Agent (if any). */
+    private fun httpFactory(extra: Map<String, String>): DefaultHttpDataSource.Factory {
+        val f = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setDefaultRequestProperties(f.headers)
+            .setDefaultRequestProperties(extra)
+        opts.userAgent.value?.let { f.setUserAgent(it) }
+        return f
+    }
+
+    /** Plays a direct HLS/DASH/progressive link with headers and optional DRM. */
+    private fun directSource(r: Resolved): MediaSource {
+        val item = MediaItem.Builder().setUri(r.directUrl!!).apply {
+            r.directMime?.let { setMimeType(it) }
+            opts.drmConfig()?.let { setDrmConfiguration(it) }
+        }.build()
+        val dsf = httpFactory(opts.headers)
+        return DefaultMediaSourceFactory(dsf).setDrmHttpDataSourceFactory(dsf).createMediaSource(item)
+    }
+
+    private fun src(f: Fmt): MediaSource {
+        val dsf = httpFactory(f.headers + opts.headers)
         val item = MediaItem.Builder().setUri(f.url).apply {
             if (f.protocol.contains("m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8)
         }.build()
@@ -237,7 +270,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun subSource(s: SubTrack): MediaSource {
         val cfg = MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.url))
             .setMimeType(s.mime).setLanguage(s.lang).setLabel(s.label).setSelectionFlags(0).build()
-        return SingleSampleMediaSource.Factory(DefaultHttpDataSource.Factory().setAllowCrossProtocolRedirects(true))
+        return SingleSampleMediaSource.Factory(httpFactory(opts.headers))
             .setTreatLoadErrorsAsEndOfStream(true)
             .createMediaSource(cfg, C.TIME_UNSET)
     }

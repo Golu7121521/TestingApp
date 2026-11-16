@@ -3,6 +3,7 @@ package com.example.universalplayer.player
 import android.net.Uri
 import androidx.media3.common.MimeTypes
 import com.example.universalplayer.AppInit
+import com.example.universalplayer.data.AdvancedSettings
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
 import kotlinx.coroutines.Dispatchers
@@ -62,8 +63,12 @@ object Resolver {
         return m
     }
 
-    suspend fun resolve(url: String): Resolved = withContext(Dispatchers.IO) {
-        directKind(url)?.let { kind ->
+    /**
+     * With a DRM license URI set, yt-dlp is skipped and the link is played directly
+     * as DASH (unless it is clearly HLS), because yt-dlp cannot handle DRM streams.
+     */
+    suspend fun resolve(url: String, opts: AdvancedSettings): Resolved = withContext(Dispatchers.IO) {
+        (directKind(url) ?: if (opts.drmConfig() != null) "dash" else null)?.let { kind ->
             return@withContext Resolved(
                 title = Uri.parse(url).lastPathSegment ?: url,
                 thumb = null, isLive = false, formats = emptyList(), subs = emptyList(),
@@ -85,6 +90,8 @@ object Resolver {
             addOption("--no-warnings")
             addOption("--playlist-items", "1")
             addOption("--socket-timeout", "20")
+            // Cookie / Referer / Origin / User-Agent from the Advanced tab
+            opts.headers.forEach { (k, v) -> addOption("--add-headers", "$k:$v") }
         }
         val out = YoutubeDL.getInstance().execute(req).out ?: ""
         val line = out.lineSequence().map { it.trim() }.lastOrNull { it.startsWith("{") }
