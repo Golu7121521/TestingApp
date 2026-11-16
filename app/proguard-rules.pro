@@ -1,1 +1,2 @@
-# Media3 and Room use consumer rules supplied by their dependencies.
+-keep class androidx.media3.** { *; }
+-dontwarn androidx.media3.**

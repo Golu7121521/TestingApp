@@ -1,53 +1,56 @@
 # Universal Video Player
 
-A Kotlin + Jetpack Compose Android starter application using Media3 ExoPlayer, Room, Material 3, and an ARM64-only GitHub Actions release pipeline.
+Android video player (Kotlin, Jetpack Compose, Material 3, Media3 ExoPlayer, Room, DataStore) that you can
+build **entirely from your phone** with GitHub Actions. The workflow publishes an ARM64 APK to GitHub Releases
+and does **not** use workflow artifact storage.
 
-## What works in this first build
+> **Honest status:** this project was generated without access to Android build tools, so it has **not been
+> compiled or run yet**. The first Actions run is its first real compile. If it fails, open the failed run, copy
+> the red error lines and send them back to get a fix. Nothing in this README claims a feature was tested.
 
-- Direct HTTP/HTTPS media URL validation and playback through Media3.
-- Media3 HLS, DASH, SmoothStreaming and progressive playback modules.
-- MP4, M4V, WebM, MP3 and Matroska MIME hints when recognizable from the URL.
-- Home, Advance, History and Playlist destinations.
-- Cookie, Referer, Origin and selected User-Agent values applied to Media3 HTTP requests for sources you are authorized to access.
-- Room-backed playback history and playlist creation/deletion.
-- Clipboard paste with an explicit confirmation dialog.
-- Basic player controls, seek, replay and play/pause.
-- Light/dark in-app color scheme toggle.
-- ARM64 ABI filter and GitHub Release publishing workflow.
+## 1. Put the project on GitHub (phone only)
+1. Create a free account at github.com and open **New repository** (name it e.g. `UniversalVideoPlayer`, Public or Private).
+2. In the repo, tap **Add file → Upload files** and upload the contents of the ZIP. Unzip it on your phone first
+   (Files app), then upload the **folders and files**, keeping the structure. The folder `.github/workflows/`
+   must end up containing `release.yml`. Hidden-folder tip: if your uploader skips `.github`, create the file via
+   **Add file → Create new file**, type `.github/workflows/release.yml`, and paste the workflow text.
+3. Tap **Commit changes**.
 
-## Important limitations
+## 2. Run the build from a mobile browser
+1. Open the repo → **Actions** tab (use "Desktop site" in your browser if the tab is hidden).
+2. Choose **Build and Release ARM64 APK** → **Run workflow**, enter a version such as `1.0.0`, run it.
+3. Wait roughly 8–15 minutes. Alternatively push a tag like `v1.0.0` to trigger it.
 
-This is a functional first release foundation, not a claim of universal website compatibility. A URL must resolve to media that Android/Media3 can access. Many social/video websites expose web pages rather than direct media URLs, and may require official SDKs or supported platform integrations. Private, encrypted, subscription-only, geo-restricted or DRM-protected content is not bypassed. This build does not implement DRM license configuration, external subtitle import, PiP actions, thumbnail extraction, complete track/quality menus, background audio service, playlist item management, or full settings/DataStore screens. These should be added as separately tested increments rather than represented as working controls.
+## 3. Download the APK
+Open the repo → **Releases** → latest release → tap `UniversalVideoPlayer-arm64-vX.X.X.apk`. Allow
+"Install unknown apps" for your browser when Android asks. `SHA256SUMS.txt` is attached to verify the file.
 
-MKV playback depends on codecs in the file and decoders available on the device. Media3 can demux supported Matroska streams, but cannot add missing device codecs.
+## 4. Persistent signing key (recommended)
+Without secrets, every build uses a **temporary key**, so a new build cannot update an older install (uninstall first).
+For a permanent key, generate a keystore once (any machine or an online tool you trust, or a one-off Actions
+step), then add these repo secrets under **Settings → Secrets and variables → Actions**:
+`RELEASE_KEYSTORE_BASE64` (base64 of the .jks/.p12), `RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS`,
+`RELEASE_KEY_PASSWORD`. Never commit a keystore (`.gitignore` blocks `*.jks`/`*.keystore`).
 
-## Build from a phone using GitHub
+## 5. About ARM64
+ABI filters are set to `arm64-v8a`. The current dependencies (Media3 software-free build, Compose, Room, Coil) ship
+no native libraries, so the APK has none; the workflow checks this and fails the build if any x86/32-bit native
+library ever appears. Devices running 32-bit-only ARM cannot be targeted by an "ARM64-only" release.
 
-1. Create a new empty GitHub repository.
-2. Upload the contents of this ZIP to the repository root (not the ZIP file itself). GitHub mobile browser supports **Add file → Upload files**; for a large number of files, use the repository web editor or GitHub's mobile app file upload flow.
-3. Open **Settings → Actions → General** and ensure Actions are enabled.
-4. Open **Actions → Build and Release ARM64 APK → Run workflow**.
-5. The workflow builds `app-release-unsigned.apk`, checks the APK and native ABI directories, creates a SHA-256 checksum, and publishes both files to a GitHub Release.
-6. Open **Releases** in the repository and download `UniversalVideoPlayer-arm64-v1.0.0.apk`.
+## 6. Gradle wrapper note
+`gradle-wrapper.jar` is a binary that could not be generated here, so the workflow uses
+`gradle/actions/setup-gradle` with Gradle 8.7 instead of `./gradlew`. `gradle-wrapper.properties` is included.
 
-The workflow uses the repository's automatically provided `GITHUB_TOKEN`; no personal access token is required. It deliberately does not use `upload-artifact`.
+## Supported sources
+- Direct files: MP4, M4V, MKV, WebM, MOV, 3GP, TS, MP3, M4A, AAC, OGG, Opus, FLAC, WAV (device decoders permitting)
+- Streaming: HLS (`.m3u8`), MPEG-DASH (`.mpd`), SmoothStreaming (`.ism`); unknown extensions are probed by Content-Type
+- Headers (Cookie, Referer, Origin, User-Agent) and DRM (Widevine / PlayReady / ClearKey) on the Advance tab
 
-## Versioning
-
-Edit `versionName` and `versionCode` in `app/build.gradle.kts`, and update the workflow `VERSION` value or push a matching `v*` tag. The workflow dispatch input can override the release version.
-
-## Release signing
-
-By default the workflow creates an installable APK signed with the runner's generated Android debug key. This is suitable for initial evaluation, but the key changes between fresh runners, so a later build may require uninstalling the previous app before installing the new one. For repeatable production updates, create a private release keystore and add GitHub Actions repository secrets: `ANDROID_KEYSTORE_BASE64` (base64-encoded keystore), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`. The workflow decodes it into the runner's temporary directory and Gradle signs with it. Never commit signing material; keep a secure backup of the same keystore.
-
-## Build locally (optional)
-
-Android Studio is not required for the cloud workflow. If building elsewhere, use JDK 17 and Android SDK Platform 36. The included `gradlew` bootstrap script downloads Gradle 8.13 when invoked.
-
-## Privacy
-
-Request header fields are held in UI memory only and are not written to Room history. Avoid entering secrets into a shared device. The current starter does not persist cookies or DRM credentials.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+## Known limitations
+- YouTube, Instagram, TikTok, Netflix, Vimeo and similar page links are intentionally rejected with an explanation.
+  No DRM, login or paywall is bypassed.
+- DRM only works if the device supports the scheme and you have a valid license URL.
+- Background playback and Picture-in-Picture controls beyond play/pause are not implemented; there is no buffering-size setting.
+- Playlist reordering uses up/down buttons rather than drag and drop.
+- Minimum Android is 7.0 (API 24), a deliberate raise from 23 for reliable vector launcher icons.
+- compileSdk/targetSdk are 34 to match the pinned Android Gradle Plugin 8.5.2.
