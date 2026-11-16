@@ -1,29 +1,11 @@
-# Git Action Build
+# Universal Player
 
-Personal Android app to manage GitHub repositories, edit files, push changes and
-watch GitHub Actions builds (with a notification when a build passes or fails).
+Paste almost any video link and play it. Built with Kotlin, Jetpack Compose (Material 3), Media3 ExoPlayer and yt-dlp (youtubedl-android).
 
-## Structure
+## Build with GitHub Actions (no PC needed)
+1. Create a new GitHub repo and upload ALL files of this project (keep the `.github` folder).
+2. Repo -> Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions" -> Save.
+3. Repo -> Actions -> "Build and Release (arm64)" -> Run workflow -> enter a tag (e.g. v1.0).
+4. After ~5-10 min the APK `UniversalPlayer-arm64-v8a.apk` appears under Releases. No artifacts are used.
 
-| File | What it holds |
-|---|---|
-| `MainActivity.kt` | App start, token, permissions, GitHub API calls, shared UI helpers |
-| `RepoScreen.kt` | Repository list, clone |
-| `FileBrowserScreen.kt` | Folders, file rows (swipe to rename/delete), import, search |
-| `EditorScreen.kt` | Sora editor: find/replace, save, push |
-| `BuildScreen.kt` | Terminal: push steps, build watch, build log, APK download |
-| `TextColorLanguage.kt` | Colors keywords, strings, numbers, comments, functions and types |
-| `FileUtils.kt` | Pure helpers: zip extraction, log cleanup, progress text, file listing |
-| `Fx.kt` | Matrix rain, swipe row, pull to refresh, download counter |
-
-## Build and test
-
-- Build: `gradle assembleDebug`
-- Unit tests: `gradle testDebugUnitTest`
-
-## Notes
-
-- Data lives in `/storage/emulated/0/GitActonBuild`.
-  `MANAGE_EXTERNAL_STORAGE` is needed on Android 11 and newer.
-  On Android 10 the legacy storage flag in the manifest keeps access working.
-- Build notifications appear while the app process is alive.
+If the build fails, open the failed step log and send the error text.
