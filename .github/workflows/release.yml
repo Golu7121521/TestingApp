@@ -12,7 +12,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write   # needed to create the GitHub Release with GITHUB_TOKEN
+  contents: write   # needed iuhto create the GitHub Release with GITHUB_TOKEN
 
 concurrency:
   group: release-${{ github.ref }}
