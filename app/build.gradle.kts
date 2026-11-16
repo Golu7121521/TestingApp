@@ -1,45 +1,37 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
 }
 
-val appVersion = (project.findProperty("appVersion") as String?) ?: "1.0.0"
-val appVersionCode = (project.findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 1
-
 android {
-    namespace = "com.universal.videoplayer"
+    namespace = "com.universal.streamplayer"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.universal.videoplayer"
+        applicationId = "com.universal.streamplayer"
         minSdk = 24
         targetSdk = 34
-        versionCode = appVersionCode
-        versionName = appVersion
-        ndk { abiFilters += "arm64-v8a" }
+        versionCode = 1
+        versionName = "1.0.0"
+
+        ndk {
+            abiFilters.add("arm64-v8a")
+        }
     }
 
-    signingConfigs {
-        create("release") {
-            val path = System.getenv("KEYSTORE_PATH")
-            if (path != null) {
-                storeFile = file(path)
-                storePassword = System.getenv("KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("KEY_ALIAS")
-                keyPassword = System.getenv("KEY_PASSWORD")
-            }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            if (System.getenv("KEYSTORE_PATH") != null) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -47,40 +39,60 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += "-opt-in=androidx.media3.common.util.UnstableApi"
     }
-    buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
-    packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+
+    buildFeatures {
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.10"
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
+    implementation(composeBom)
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.2")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    val media3 = "1.3.1"
-    implementation("androidx.media3:media3-exoplayer:$media3")
-    implementation("androidx.media3:media3-exoplayer-hls:$media3")
-    implementation("androidx.media3:media3-exoplayer-dash:$media3")
-    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3")
-    implementation("androidx.media3:media3-ui:$media3")
+    // Media3 (ExoPlayer) - Universal Format Support
+    val media3Version = "1.3.0"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-rtsp:$media3Version")
+    implementation("androidx.media3:media3-datasource-rtmp:$media3Version")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
 
-    val room = "2.6.1"
-    implementation("androidx.room:room-runtime:$room")
-    implementation("androidx.room:room-ktx:$room")
-    ksp("androidx.room:room-compiler:$room")
+    // yt-dlp extractor for YT Shorts, Instagram Reels, TikTok, etc.
+    implementation("io.github.junkfood02.youtubedl-android:library:0.17.2")
 
-    implementation("androidx.datastore:datastore-preferences:1.1.1")
-    implementation("io.coil-kt:coil-compose:2.6.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+    // Coil for video frame & thumbnail loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-video:2.6.0")
+
+    // JSON for history & playlists
+    implementation("com.google.code.gson:gson:2.10.1")
 }
