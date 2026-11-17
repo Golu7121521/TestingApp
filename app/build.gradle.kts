@@ -3,6 +3,9 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+val vc = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 1
+val vn = (project.findProperty("vn") as String?)?.removePrefix("v") ?: "1.0"
+
 android {
     namespace = "com.example.universalplayer"
     compileSdk = 34
@@ -11,17 +14,26 @@ android {
         applicationId = "com.example.universalplayer"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = vc
+        versionName = vn
         // Only arm64 APK
         ndk { abiFilters += listOf("arm64-v8a") }
+    }
+
+    signingConfigs {
+        // Fixed key: every build is signed the same way, so friends can update the app without uninstalling.
+        create("release") {
+            storeFile = file("release.keystore")
+            storePassword = "universalplayer"
+            keyAlias = "friends"
+            keyPassword = "universalplayer"
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Signed with the debug key so the APK is installable directly
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

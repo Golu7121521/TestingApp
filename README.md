@@ -1,17 +1,18 @@
-# Universal Player
+# Universal Player (personal use)
 
-Paste almost any video link and play it. Built with Kotlin, Jetpack Compose (Material 3), Media3 ExoPlayer and yt-dlp (youtubedl-android).
+Paste almost any video link and play it. Kotlin, Jetpack Compose (Material 3), Media3 ExoPlayer, yt-dlp.
 
 ## Build with GitHub Actions (no PC needed)
-1. Create a new GitHub repo and upload ALL files of this project (keep the `.github` folder).
-2. Repo -> Settings -> Actions -> General -> Workflow permissions -> "Read and write permissions" -> Save.
-3. Repo -> Actions -> "Build and Release (arm64)" -> Run workflow -> enter a tag (e.g. v1.0).
-4. After ~5-10 min the APK `UniversalPlayer-arm64-v8a.apk` appears under Releases. No artifacts are used.
+1. Upload ALL files to a **private** GitHub repo (keep `.github` and `app/release.keystore`).
+2. Settings -> Actions -> General -> Workflow permissions -> "Read and write" -> Save.
+3. Actions -> "Build and Release (arm64)" -> Run workflow -> tag (v1.0, then v1.1, v1.2 ...).
+4. The APK `UniversalPlayer-arm64-v8a.apk` appears in Releases.
 
-If the build fails, open the failed step log and send the error text.
+## Updating
+Every build is signed with the same key (`app/release.keystore`), so friends can install a new
+version over the old one without losing history or playlists. Use a new tag for each build.
+Do not delete or replace the keystore, otherwise updates will fail to install.
 
-## Tabs
-Home (paste link) | Advanced (headers, user agent, DRM) | History | Playlist (auto plays next item)
-
-## Extras
-Resume playback, brightness/volume swipe, subtitle language menu, swipe-to-delete with undo, history search, shuffle play, animated UI.
+## Sharing with friends
+Send the APK. They must allow "Install unknown apps" for the app they open it from.
+Works on arm64 phones (almost all phones from the last years), Android 8.0+.
