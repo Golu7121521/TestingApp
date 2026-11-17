@@ -3,6 +3,7 @@ package com.example.universalplayer.player
 import android.net.Uri
 import androidx.media3.common.MimeTypes
 import com.example.universalplayer.AppInit
+import com.example.universalplayer.data.CookieVault
 import com.example.universalplayer.data.PlayOptions
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -87,7 +88,13 @@ object Resolver {
             addOption("--playlist-items", "1")
             addOption("--socket-timeout", "20")
             o.headers().forEach { (k, v) ->
-                if (k == "User-Agent") addOption("--user-agent", v) else addOption("--add-header", "$k:$v")
+                if (k == "User-Agent") addOption("--user-agent", v)
+                else if (k != "Cookie") addOption("--add-header", "$k:$v")
+            }
+            // typed cookie (Advanced tab) or the one saved by "Site login"
+            val ck = o.cookie.ifBlank { CookieVault.forUrl(url).orEmpty() }
+            if (ck.isNotBlank()) {
+                CookieVault.writeFile(url, ck)?.let { addOption("--cookies", it.absolutePath) }
             }
         }
         val out = YoutubeDL.getInstance().execute(req).out ?: ""

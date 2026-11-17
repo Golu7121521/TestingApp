@@ -7,9 +7,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.example.universalplayer.data.CookieVault
 import com.example.universalplayer.data.DRM_SCHEMES
+import com.example.universalplayer.data.LOGIN_SITES
+import com.example.universalplayer.data.LoginSite
 import com.example.universalplayer.data.PlayOptions
 import com.example.universalplayer.data.USER_AGENTS
 import com.example.universalplayer.normalizeUrl
@@ -36,7 +40,7 @@ class AdvancedForm {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
+fun AdvancedScreen(form: AdvancedForm, onLogin: (LoginSite) -> Unit, onPlay: (String, PlayOptions) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
 
     Scaffold(
@@ -90,6 +94,24 @@ fun AdvancedScreen(form: AdvancedForm, onPlay: (String, PlayOptions) -> Unit) {
                 Icon(Icons.Rounded.PlayArrow, null)
                 Spacer(Modifier.width(8.dp))
                 Text("Play")
+            }
+
+            SectionTitle("Site login (age-restricted / private videos)")
+            val signed by CookieVault.domains.collectAsState()
+            LOGIN_SITES.forEach { site ->
+                val isIn = site.domain in signed
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(site.name, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (isIn) "Signed in" else "Not signed in",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (isIn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (isIn) TextButton(onClick = { CookieVault.remove(site.domain) }) { Text("Sign out") }
+                    OutlinedButton(onClick = { onLogin(site) }) { Text(if (isIn) "Re-login" else "Sign in") }
+                }
             }
         }
     }

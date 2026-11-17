@@ -35,13 +35,14 @@ import com.example.universalplayer.data.PlayOptions
 import com.example.universalplayer.player.PlayerViewModel
 import com.example.universalplayer.ui.*
 
-enum class Screen { Main, Player }
+enum class Screen { Main, Player, Login }
 
 class MainActivity : ComponentActivity() {
     private val vm: PlayerViewModel by viewModels()
     private var screen by mutableStateOf(Screen.Main)
     private var tab by mutableStateOf(Tab.Home)
     private var homeText by mutableStateOf("")
+    private var loginSite by mutableStateOf<com.example.universalplayer.data.LoginSite?>(null)
     private var lastClip: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -83,7 +84,7 @@ class MainActivity : ComponentActivity() {
                                                     onPlay = { play(it) },
                                                     onPlayItem = { play(it.url, it.opts) }
                                                 )
-                                                Tab.Advanced -> AdvancedScreen(form) { url, o -> play(url, o) }
+                                                Tab.Advanced -> AdvancedScreen(form, onLogin = { loginSite = it; screen = Screen.Login }) { url, o -> play(url, o) }
                                                 Tab.History -> HistoryScreen { play(it.url, it.opts) }
                                                 Tab.Playlist -> PlaylistScreen { items, i ->
                                                     vm.openQueue(items, i)
@@ -94,6 +95,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                 }
                             }
+                            Screen.Login -> loginSite?.let { LoginScreen(it) { screen = Screen.Main } }
                             Screen.Player -> PlayerScreen(
                                 vm = vm,
                                 inPip = inPip,

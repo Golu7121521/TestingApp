@@ -11,6 +11,7 @@ class App : Application() {
     override fun onCreate() {
         super.onCreate()
         HistoryStore.init(this)
+        com.example.universalplayer.data.CookieVault.init(this)
         PlaylistStore.init(this)
         AppInit.start(this)
     }

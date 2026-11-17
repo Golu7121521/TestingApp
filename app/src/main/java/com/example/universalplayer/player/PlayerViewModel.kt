@@ -286,7 +286,10 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private fun friendly(e: Throwable): String {
         val msg = e.message ?: e.javaClass.simpleName
         val line = msg.lineSequence().firstOrNull { it.contains("ERROR", true) } ?: msg.lineSequence().first()
-        return line.removePrefix("ERROR:").trim().take(220).ifBlank { "Could not load this link" }
+        val base = line.removePrefix("ERROR:").trim().take(220).ifBlank { "Could not load this link" }
+        val needsLogin = listOf("login", "log in", "age", "cookies", "private", "empty media response", "restricted")
+            .any { msg.contains(it, ignoreCase = true) }
+        return if (needsLogin) "$base\n\nTip: open Advanced tab > Site login and sign in (age-restricted / private videos)." else base
     }
 
     // ---------------------------------------------------------------- format mode
