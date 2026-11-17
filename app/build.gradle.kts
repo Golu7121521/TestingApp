@@ -4,6 +4,7 @@ plugins {
 }
 
 val vc = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 1
+val minify = (project.findProperty("minify") as String?) == "true"
 val vn = (project.findProperty("vn") as String?)?.removePrefix("v") ?: "1.0"
 
 android {
@@ -32,7 +33,10 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // Smaller APK when built with -Pminify=true (see workflow input). Off by default = safest.
+            isMinifyEnabled = minify
+            isShrinkResources = minify
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -77,7 +81,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-exoplayer-hls:$media3")
     implementation("androidx.media3:media3-exoplayer-dash:$media3")
-    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3")
     implementation("androidx.media3:media3-datasource:$media3")
     implementation("androidx.media3:media3-ui:$media3")
 

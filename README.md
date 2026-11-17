@@ -16,3 +16,8 @@ Do not delete or replace the keystore, otherwise updates will fail to install.
 ## Sharing with friends
 Send the APK. They must allow "Install unknown apps" for the app they open it from.
 Works on arm64 phones (almost all phones from the last years), Android 8.0+.
+
+## APK size
+The APK is ~30 MB because it contains Python + yt-dlp (needed to open 1000+ sites).
+To try a smaller build: Run workflow -> tick "Shrink APK" and use a NEW tag. Install and test it
+(play a YouTube link, open History/Playlist) before sharing. If it crashes, run again without the tick.
