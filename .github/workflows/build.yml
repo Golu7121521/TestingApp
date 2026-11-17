@@ -35,7 +35,18 @@ jobs:
           cache-disabled: true
 
       - name: Build release APK
-        run: gradle assembleRelease --no-daemon --stacktrace -Pvc=${{ github.run_number }} -Pminify=${{ github.event.inputs.minify || 'false' }} -Pvn=${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set +e
+          for i in 1 2 3; do
+            gradle assembleRelease --no-daemon --stacktrace -Pvc=${{ github.run_number }} -Pminify=${{ github.event.inputs.minify || 'false' }} -Pvn=${{ github.event.inputs.tag || github.ref_name }} 2>&1 | tee build.log
+            if [ ${PIPESTATUS[0]} -eq 0 ]; then exit 0; fi
+            if grep -qE "Too Many Requests|Could not (resolve|GET)|timed out|Connection reset" build.log; then
+              echo "Network problem on attempt $i, retrying in 60s..."; sleep 60
+            else
+              exit 1
+            fi
+          done
+          exit 1
 
       - name: Rename APK
         run: cp app/build/outputs/apk/release/app-release.apk UniversalPlayer-arm64-v8a.apk
