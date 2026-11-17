@@ -1,59 +1,38 @@
-name: Build and Release (arm64)
+name: Build and Release APK
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v1.0)"
-        required: true
-        default: "v1.0"
-      minify:
-        description: "Shrink APK (smaller size, test it before sharing)"
-        type: boolean
-        default: false
   push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: write
+    branches: [ "main", "master" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v5
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build arm64 Release APK
+        run: ./gradlew assembleRelease
+
+      - name: Upload to GitHub Releases
+        uses: softprops/action-gh-release@v1
         with:
-          gradle-version: 8.7
-          cache-disabled: true
-
-      - name: Build release APK
-        run: |
-          set +e
-          for i in 1 2 3; do
-            gradle assembleRelease --no-daemon --stacktrace -Pvc=${{ github.run_number }} -Pminify=${{ github.event.inputs.minify || 'false' }} -Pvn=${{ github.event.inputs.tag || github.ref_name }} 2>&1 | tee build.log
-            if [ ${PIPESTATUS[0]} -eq 0 ]; then exit 0; fi
-            if grep -qE "Too Many Requests|Could not (resolve|GET)|timed out|Connection reset" build.log; then
-              echo "Network problem on attempt $i, retrying in 60s..."; sleep 60
-            else
-              exit 1
-            fi
-          done
-          exit 1
-
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk UniversalPlayer-arm64-v8a.apk
-
-      - name: Publish to Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Universal Player ${{ github.event.inputs.tag || github.ref_name }}
-          files: UniversalPlayer-arm64-v8a.apk
+          files: app/build/outputs/apk/release/GameRecorder-arm64-v8a.apk
+          tag_name: v1.0.${{ github.run_number }}
+          name: "Game Screen Recorder v1.0.${{ github.run_number }}"
+          body: "Automated arm64-v8a release built via GitHub Actions. Optimized for 1080p 60FPS smooth gaming recording without lag."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
