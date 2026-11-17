@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.tween
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
     private var lastClip: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleIntent(intent)
@@ -135,6 +137,7 @@ class MainActivity : ComponentActivity() {
         val cm = getSystemService(ClipboardManager::class.java) ?: return
         val clip = cm.primaryClip?.takeIf { it.itemCount > 0 } ?: return
         val url = extractUrl(clip.getItemAt(0)?.coerceToText(this)?.toString()) ?: return
+        if (!isSupportedLink(url)) return
         if (url == lastClip) return
         lastClip = url
         homeText = url

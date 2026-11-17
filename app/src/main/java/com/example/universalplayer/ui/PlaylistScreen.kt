@@ -46,8 +46,7 @@ fun PlaylistScreen(onPlay: (List<HistoryItem>, Int) -> Unit) {
 @Composable
 private fun PlaylistsHome(lists: List<Playlist>, onOpen: (String) -> Unit) {
     var showCreate by remember { mutableStateOf(false) }
-    val snack = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    var target by remember { mutableStateOf<Playlist?>(null) }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Playlist") }) },
@@ -57,7 +56,6 @@ private fun PlaylistsHome(lists: List<Playlist>, onOpen: (String) -> Unit) {
                 text = { Text("New playlist") }
             )
         },
-        snackbarHost = { SnackbarHost(snack) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { pad ->
         if (lists.isEmpty()) {
@@ -70,38 +68,37 @@ private fun PlaylistsHome(lists: List<Playlist>, onOpen: (String) -> Unit) {
         } else {
             LazyColumn(Modifier.padding(pad).fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
                 items(lists, key = { it.id }) { pl ->
-                    SwipeRow(
-                        onDelete = {
-                            PlaylistStore.delete(pl.id)
-                            scope.launch {
-                                val r = snack.showSnackbar("Playlist deleted", "Undo", duration = SnackbarDuration.Short)
-                                if (r == SnackbarResult.ActionPerformed) PlaylistStore.restore(pl)
-                            }
-                        },
-                        modifier = Modifier.animateItemPlacement()
+                    Row(
+                        Modifier.fillMaxWidth().animateItemPlacement()
+                            .longPressable({ onOpen(pl.id) }, { target = pl })
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(
-                            Modifier.fillMaxWidth().clickable { onOpen(pl.id) }
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Thumb(pl.items.firstOrNull()?.thumb, Modifier.width(96.dp), fit = true)
-                            Spacer(Modifier.width(14.dp))
-                            Column(Modifier.weight(1f)) {
-                                Text(pl.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "${pl.items.size} videos", style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Thumb(pl.items.firstOrNull()?.thumb, Modifier.width(96.dp), fit = true)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(pl.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "${pl.items.size} videos", style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
+                        Icon(Icons.Rounded.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
     }
     if (showCreate) CreatePlaylistDialog { showCreate = false }
+    target?.let { t ->
+        ItemMenuHost(
+            name = t.name,
+            removeText = "\"${t.name}\" and its ${t.items.size} videos will be removed.",
+            onDismiss = { target = null },
+            onRename = { PlaylistStore.rename(t.id, it) },
+            onRemove = { PlaylistStore.delete(t.id) }
+        )
+    }
 }
 
 // ------------------------------------------------------------------ one playlist
@@ -114,8 +111,7 @@ private fun PlaylistDetail(pl: Playlist, onBack: () -> Unit, onPlay: (List<Histo
     }
     var menu by remember { mutableStateOf(false) }
     var dialog by remember { mutableStateOf(0) } // 1 rename, 2 add link, 3 import, 4 delete
-    val snack = remember { SnackbarHostState() }
-    val scope = rememberCoroutineScope()
+    var target by remember { mutableStateOf<HistoryItem?>(null) }
 
     Scaffold(
         topBar = {
@@ -144,7 +140,6 @@ private fun PlaylistDetail(pl: Playlist, onBack: () -> Unit, onPlay: (List<Histo
                 onClick = { dialog = 2 }, icon = { Icon(Icons.Rounded.Add, null) }, text = { Text("Add link") }
             )
         },
-        snackbarHost = { SnackbarHost(snack) },
         contentWindowInsets = WindowInsets(0, 0, 0, 0)
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize()) {
@@ -169,37 +164,37 @@ private fun PlaylistDetail(pl: Playlist, onBack: () -> Unit, onPlay: (List<Histo
             } else {
                 LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 88.dp)) {
                     itemsIndexed(shown, key = { _, item -> item.url }) { i, h ->
-                        SwipeRow(
-                            onDelete = {
-                                PlaylistStore.removeItem(pl.id, h.url)
-                                scope.launch {
-                                    val r = snack.showSnackbar("Removed", "Undo", duration = SnackbarDuration.Short)
-                                    if (r == SnackbarResult.ActionPerformed) PlaylistStore.addItem(pl.id, h)
-                                }
-                            },
-                            modifier = Modifier.animateItemPlacement()
+                        Row(
+                            Modifier.fillMaxWidth().animateItemPlacement()
+                                .longPressable({ onPlay(shown, i) }, { target = h })
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                Modifier.fillMaxWidth().clickable { onPlay(shown, i) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Thumb(h.thumb, Modifier.width(96.dp), h.progress(), fit = true)
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(h.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
-                                    Text(
-                                        h.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                            Thumb(h.thumb, Modifier.width(96.dp), h.progress(), fit = true)
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(h.title, maxLines = 2, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
+                                Text(
+                                    h.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     }
                 }
             }
         }
+    }
+
+    target?.let { t ->
+        ItemMenuHost(
+            name = t.title,
+            removeText = "This video will be removed from \"${pl.name}\".",
+            onDismiss = { target = null },
+            onRename = { PlaylistStore.renameItem(pl.id, t.url, it) },
+            onRemove = { PlaylistStore.removeItem(pl.id, t.url) }
+        )
     }
 
     when (dialog) {
@@ -224,32 +219,6 @@ private fun PlaylistDetail(pl: Playlist, onBack: () -> Unit, onPlay: (List<Histo
 }
 
 // ------------------------------------------------------------------ dialogs
-@Composable
-private fun TextDialog(
-    title: String, label: String, initial: String, confirm: String,
-    onDismiss: () -> Unit,
-    validate: (String) -> Boolean = { it.isNotBlank() },
-    error: String = "Enter a value",
-    onConfirm: (String) -> Unit
-) {
-    var text by remember { mutableStateOf(initial) }
-    var err by remember { mutableStateOf(false) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                text, { text = it; err = false }, singleLine = true, label = { Text(label) },
-                isError = err, supportingText = { if (err) Text(error) }
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { if (validate(text)) onConfirm(text) else err = true }) { Text(confirm) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
-}
-
 @Composable
 private fun CreatePlaylistDialog(onDismiss: () -> Unit) {
     var name by remember { mutableStateOf("") }

@@ -232,7 +232,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 val startPos = if (!r.isLive && saved != null && saved.position > 5_000) saved.position else 0L
                 val startArg = if (startPos > 0) startPos else C.TIME_UNSET
                 adaptive = r.direct
-                _title.value = r.title
+                _title.value = queue.getOrNull(queueIndex)?.title?.takeIf { it != u }
+                    ?: saved?.title?.takeIf { it.isNotBlank() && it != u } ?: r.title
                 if (r.direct) {
                     selHeight = 0
                     val item = MediaItem.Builder().setUri(r.directUrl!!).apply {
@@ -251,7 +252,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 player.playWhenReady = true
                 player.prepare()
                 _load.value = LoadState.Ready
-                HistoryStore.add(HistoryItem(u, r.title, r.thumb, System.currentTimeMillis(), opts, startPos, saved?.duration ?: 0L))
+                val base = queue.getOrNull(queueIndex)
+                val histTitle = saved?.title?.takeIf { it.isNotBlank() && it != u }
+                    ?: base?.title?.takeIf { it != u } ?: r.title
+                HistoryStore.add(
+                    HistoryItem(u, histTitle, r.thumb ?: saved?.thumb ?: base?.thumb, System.currentTimeMillis(), opts, startPos, saved?.duration ?: 0L)
+                )
                 _resumedAt.value = startPos
                 PlaylistStore.update(u, r.title, r.thumb)
             } catch (e: CancellationException) {

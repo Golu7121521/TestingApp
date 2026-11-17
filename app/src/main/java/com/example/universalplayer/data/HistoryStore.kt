@@ -68,6 +68,13 @@ class ItemStore(private val fileName: String, private val newestFirst: Boolean, 
     }
 
     @Synchronized
+    fun rename(url: String, title: String) {
+        if (title.isBlank()) return
+        _items.value = _items.value.map { if (it.url == url) it.copy(title = title) else it }
+        save()
+    }
+
+    @Synchronized
     fun remove(url: String) {
         _items.value = _items.value.filter { it.url != url }
         save()

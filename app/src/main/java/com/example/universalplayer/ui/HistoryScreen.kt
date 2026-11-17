@@ -38,6 +38,7 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
     val snack = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var addTarget by remember { mutableStateOf<HistoryItem?>(null) }
+    var target by remember { mutableStateOf<HistoryItem?>(null) }
 
     Scaffold(
         topBar = {
@@ -75,42 +76,32 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
             } else {
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(shown, key = { it.url }) { h ->
-                        SwipeRow(
-                            onDelete = {
-                                HistoryStore.remove(h.url)
-                                scope.launch {
-                                    val r = snack.showSnackbar("Removed from history", "Undo", duration = SnackbarDuration.Short)
-                                    if (r == SnackbarResult.ActionPerformed) HistoryStore.add(h)
-                                }
-                            },
-                            modifier = Modifier.animateItemPlacement()
+                        Row(
+                            Modifier.fillMaxWidth().animateItemPlacement()
+                                .longPressable({ onPlay(h) }, { target = h })
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                Modifier.fillMaxWidth().clickable { onPlay(h) }
-                                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Thumb(h.thumb, progress = h.progress())
-                                Spacer(Modifier.width(12.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        h.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodyLarge
-                                    )
-                                    Text(
-                                        h.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    Text(
-                                        DateUtils.getRelativeTimeSpanString(h.time).toString(),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                IconButton(onClick = { addTarget = h }) {
-                                    Icon(Icons.Rounded.PlaylistAdd, "Add to playlist")
-                                }
+                            Thumb(h.thumb, progress = h.progress())
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    h.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    h.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Text(
+                                    DateUtils.getRelativeTimeSpanString(h.time).toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            IconButton(onClick = { addTarget = h }) {
+                                Icon(Icons.Rounded.PlaylistAdd, "Add to playlist")
                             }
                         }
                     }
@@ -119,6 +110,15 @@ fun HistoryScreen(onPlay: (HistoryItem) -> Unit) {
         }
     }
 
+    target?.let { t ->
+        ItemMenuHost(
+            name = t.title,
+            removeText = "This video will be removed from history.",
+            onDismiss = { target = null },
+            onRename = { HistoryStore.rename(t.url, it) },
+            onRemove = { HistoryStore.remove(t.url) }
+        )
+    }
     addTarget?.let { AddToPlaylistDialog(it) { addTarget = null } }
     if (confirm) {
         AlertDialog(

@@ -49,6 +49,7 @@ fun HomeScreen(
     var error by remember { mutableStateOf<String?>(null) }
     val clipboard = LocalClipboardManager.current
     val recent by HistoryStore.items.collectAsState()
+    var target by remember { mutableStateOf<HistoryItem?>(null) }
 
     fun submit() {
         val u = normalizeUrl(text)
@@ -98,23 +99,42 @@ fun HomeScreen(
             }
 
             AnimatedVisibility(recent.isNotEmpty()) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("Continue watching", style = MaterialTheme.typography.titleMedium)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        items(recent.take(10), key = { it.url }) { h ->
-                            Column(Modifier.width(170.dp).clip(MaterialTheme.shapes.medium).clickable { onPlayItem(h) }) {
-                                Thumb(h.thumb, Modifier.fillMaxWidth(), h.progress())
-                                Spacer(Modifier.height(4.dp))
+                    Spacer(Modifier.height(6.dp))
+                    recent.take(5).forEach { h ->
+                        Row(
+                            Modifier.fillMaxWidth().clip(MaterialTheme.shapes.medium)
+                                .longPressable({ onPlayItem(h) }, { target = h })
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Thumb(h.thumb, Modifier.width(120.dp), h.progress())
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
                                 Text(
                                     h.title, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                                    style = MaterialTheme.typography.bodySmall
+                                    style = MaterialTheme.typography.bodyLarge
+                                )
+                                Text(
+                                    h.url, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
                 }
             }
-
+            target?.let { t ->
+                ItemMenuHost(
+                    name = t.title,
+                    removeText = "This video will be removed from history.",
+                    onDismiss = { target = null },
+                    onRename = { HistoryStore.rename(t.url, it) },
+                    onRemove = { HistoryStore.remove(t.url) }
+                )
+            }
         }
     }
 }

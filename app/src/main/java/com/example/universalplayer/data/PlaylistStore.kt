@@ -94,6 +94,12 @@ object PlaylistStore {
     @Synchronized
     fun removeItem(id: String, url: String) = mutate(id) { pl -> pl.copy(items = pl.items.filter { it.url != url }) }
 
+    @Synchronized
+    fun renameItem(id: String, url: String, title: String) {
+        if (title.isBlank()) return
+        mutate(id) { pl -> pl.copy(items = pl.items.map { if (it.url == url) it.copy(title = title) else it }) }
+    }
+
     /** Fills a title / thumbnail only when the item still has none (keeps imported channel names). */
     @Synchronized
     fun update(url: String, title: String, thumb: String?) {

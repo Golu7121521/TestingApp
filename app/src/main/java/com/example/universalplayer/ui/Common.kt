@@ -1,6 +1,16 @@
 package com.example.universalplayer.ui
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -81,5 +91,83 @@ fun SwipeRow(onDelete: () -> Unit, modifier: Modifier = Modifier, content: @Comp
         }
     ) {
         Surface(color = MaterialTheme.colorScheme.background) { content() }
+    }
+}
+
+/** Tap = click, long press = onLongClick (with haptic feedback). */
+@OptIn(ExperimentalFoundationApi::class)
+fun Modifier.longPressable(onClick: () -> Unit, onLongClick: () -> Unit): Modifier =
+    this.combinedClickable(onClick = onClick, onLongClick = onLongClick)
+
+@Composable
+fun TextDialog(
+    title: String, label: String, initial: String, confirm: String,
+    onDismiss: () -> Unit,
+    validate: (String) -> Boolean = { it.isNotBlank() },
+    error: String = "Enter a value",
+    onConfirm: (String) -> Unit
+) {
+    var text by remember { mutableStateOf(initial) }
+    var err by remember { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                text, { text = it; err = false }, singleLine = true, label = { Text(label) },
+                isError = err, supportingText = { if (err) Text(error) }
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { if (validate(text)) onConfirm(text) else err = true }) { Text(confirm) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+}
+
+/** Long-press menu: Rename / Remove (remove asks for confirmation). */
+@Composable
+fun ItemMenuHost(
+    name: String,
+    removeText: String,
+    onDismiss: () -> Unit,
+    onRename: (String) -> Unit,
+    onRemove: () -> Unit
+) {
+    var step by remember { mutableIntStateOf(0) }
+    when (step) {
+        0 -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(name, maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            text = {
+                Column {
+                    MenuRow(Icons.Rounded.Edit, "Rename") { step = 1 }
+                    MenuRow(Icons.Rounded.Delete, "Remove") { step = 2 }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        )
+        1 -> TextDialog("Rename", "Name", name, "Save", onDismiss) { onRename(it.trim()); onDismiss() }
+        else -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text("Remove?") },
+            text = { Text(removeText) },
+            confirmButton = { TextButton(onClick = { onRemove(); onDismiss() }) { Text("Remove") } },
+            dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun MenuRow(icon: ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null)
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
     }
 }
