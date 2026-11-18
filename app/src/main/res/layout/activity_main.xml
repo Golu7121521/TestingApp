@@ -1,118 +1,117 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical"
+    android:background="#121212">
 
+    <!-- Top Toolbar -->
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="56dp"
+        android:background="#1E1E1E"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingHorizontal="12dp">
 
         <TextView
-            android:layout_width="match_parent"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Game Recorder"
-            android:textColor="@color/white"
-            android:textSize="26sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Hardware encoder • internal audio • low FPS drop"
-            android:textColor="@color/muted"
-            android:textSize="13sp" />
-
-        <TextView
-            style="@style/Label"
-            android:text="Resolution" />
-
-        <Spinner
-            android:id="@+id/spRes"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            style="@style/Label"
-            android:text="Frame rate" />
-
-        <Spinner
-            android:id="@+id/spFps"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            style="@style/Label"
-            android:text="Bitrate" />
-
-        <Spinner
-            android:id="@+id/spBitrate"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            style="@style/Label"
-            android:text="Video codec" />
-
-        <Spinner
-            android:id="@+id/spCodec"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <TextView
-            style="@style/Label"
-            android:text="Orientation" />
-
-        <Spinner
-            android:id="@+id/spOrient"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content" />
-
-        <Switch
-            android:id="@+id/swAudio"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:checked="true"
-            android:text="Device internal audio record karo"
-            android:textColor="@color/white" />
+            android:layout_weight="1"
+            android:text="MT Manager Lite (Dual-Pane)"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"/>
 
         <Button
-            android:id="@+id/btnStart"
-            android:layout_width="match_parent"
-            android:layout_height="60dp"
-            android:layout_marginTop="28dp"
-            android:backgroundTint="@color/accent"
-            android:text="Recording shuru karo"
-            android:textColor="@color/white"
-            android:textSize="16sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:id="@+id/tvStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center"
-            android:textColor="@color/accent"
-            android:textSize="14sp" />
-
-        <Button
-            android:id="@+id/btnOpen"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Recordings dekho" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Tip: Start dabane par ye app peeche chala jayega. Game kholo, aur rokne ke liye notification mein Stop dabao. Files: Movies/GameRecorder"
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
+            android:id="@+id/btnRootToggle"
+            android:layout_width="wrap_content"
+            android:layout_height="36dp"
+            android:text="Root: OFF"
+            android:textSize="12sp"
+            android:backgroundTint="#333333"
+            android:textColor="#FFFFFF"/>
     </LinearLayout>
-</ScrollView>
+
+    <!-- Dual Pane Container -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal">
+
+        <!-- Left Pane -->
+        <FrameLayout
+            android:id="@+id/paneLeft"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#181818"/>
+
+        <View
+            android:layout_width="2dp"
+            android:layout_height="match_parent"
+            android:background="#333333"/>
+
+        <!-- Right Pane -->
+        <FrameLayout
+            android:id="@+id/paneRight"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="#181818"/>
+
+    </LinearLayout>
+
+    <!-- Bottom Action Bar -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:background="#1E1E1E"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:weightSum="4">
+
+        <Button
+            android:id="@+id/btnCopy"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Copy"
+            android:textSize="12sp"
+            android:backgroundTint="#2D2D2D"
+            android:textColor="#FFFFFF"/>
+
+        <Button
+            android:id="@+id/btnMove"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Move"
+            android:textSize="12sp"
+            android:backgroundTint="#2D2D2D"
+            android:textColor="#FFFFFF"/>
+
+        <Button
+            android:id="@+id/btnZip"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Zip"
+            android:textSize="12sp"
+            android:backgroundTint="#2D2D2D"
+            android:textColor="#FFFFFF"/>
+
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:text="Delete"
+            android:textSize="12sp"
+            android:backgroundTint="#4A2020"
+            android:textColor="#FFFFFF"/>
+
+    </LinearLayout>
+
+</LinearLayout>
