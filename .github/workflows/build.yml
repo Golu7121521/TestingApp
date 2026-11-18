@@ -19,25 +19,25 @@ jobs:
         distribution: 'temurin'
         java-version: '17'
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew || true
-
-    - name: Build arm64 Release APK
+    - name: Setup Gradle Wrapper if missing
       run: |
-        if [ -f "gradlew" ]; then
-          ./gradlew assembleRelease
-        else
-          gradle assembleRelease
+        if [ ! -f "gradlew" ]; then
+          echo "Generating Gradle wrapper..."
+          gradle wrapper --gradle-version 8.1.0
         fi
 
-    - name: Sign APK (Debug/Unsigned or Release)
-      run: |
-        echo "APK build complete."
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build arm64 Release APK
+      run: ./gradlew assembleRelease
 
     - name: Release ARM64 APK to GitHub Releases
       uses: softprops/action-gh-release@v1
       with:
-        files: app/build/outputs/apk/release/app-arm64-v8a-release.apk,app/build/outputs/apk/release/app-release.apk
+        files: |
+          app/build/outputs/apk/release/app-arm64-v8a-release.apk
+          app/build/outputs/apk/release/app-release.apk
         tag_name: v1.0.0-${{ github.run_number }}
         name: MT Manager Lite v1.0.0 (ARM64)
         body: "Automated arm64 build for Redmi 9 Prime and Android devices."
