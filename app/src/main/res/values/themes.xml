@@ -1,9 +1,0 @@
-<resources>
-    <style name="Theme.MTManagerLite" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="colorPrimary">#1E1E1E</item>
-        <item name="colorPrimaryVariant">#121212</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
-        <item name="colorSecondary">#03DAC5</item>
-        <item name="android:windowBackground">#121212</item>
-    </style>
-</resources>
