@@ -1,5 +1,0 @@
-<resources>
-    <style name="Theme.GameScreenRecorder" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">#FF6200EE</item>
-    </style>
-</resources>

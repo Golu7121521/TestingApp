@@ -1,40 +1,46 @@
-name: Build and Release APK
+name: Build arm64 APK
 
+# Har push par apne aap build hoga aur APK seedha Releases mein jayega.
+# Artifacts use NAHI hote (aapka artifact limit khatam hai), isliye koi storage quota nahi lagta.
 on:
   push:
-    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # Release banane ke liye
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
-          packages: 'platform-tools platforms;android-34 build-tools;34.0.0'
+          gradle-version: 8.9
+          cache-disabled: true   # cache bhi storage quota use karta hai
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Build release APK (arm64-v8a only)
+        run: gradle :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Build arm64 Release APK
-        run: ./gradlew assembleRelease
+      - name: Rename APK
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
+          cp "$APK" GameRecorder-arm64-v8a.apk
+          ls -lh GameRecorder-arm64-v8a.apk
 
-      - name: Upload to GitHub Releases
-        uses: softprops/action-gh-release@v1
+      - name: Publish to Releases
+        uses: softprops/action-gh-release@v2
         with:
-          files: app/build/outputs/apk/release/GameRecorder-arm64-v8a.apk
-          tag_name: v1.0.${{ github.run_number }}
-          name: "Game Screen Recorder v1.0.${{ github.run_number }}"
-          body: "Automated arm64-v8a release built via GitHub Actions. Optimized for 1080p 60FPS smooth gaming recording without lag."
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: build-${{ github.run_number }}
+          name: Game Recorder build ${{ github.run_number }}
+          body: |
+            arm64-v8a APK (commit ${{ github.sha }})
+            Install karne ke liye `GameRecorder-arm64-v8a.apk` download karo.
+          files: GameRecorder-arm64-v8a.apk
+          make_latest: true

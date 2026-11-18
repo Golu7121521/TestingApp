@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "GameScreenRecorder"
-include ':app'
+rootProject.name = "GameRecorder"
+include(":app")

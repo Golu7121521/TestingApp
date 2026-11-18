@@ -1,46 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#121212"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="24dp">
+    android:fillViewport="true">
 
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="🎮 PRO GAME RECORDER"
-        android:textColor="#FFFFFF"
-        android:textSize="24sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="8dp" />
-
-    <TextView
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="1080p • 60 FPS • Internal Audio Only"
-        android:textColor="#AAAAAA"
-        android:textSize="14sp"
-        android:layout_marginBottom="48dp" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStart"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:text="START RECORDING"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:layout_marginBottom="16dp" />
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnStop"
-        android:layout_width="match_parent"
-        android:layout_height="60dp"
-        android:backgroundTint="#D32F2F"
-        android:text="STOP RECORDING"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:enabled="false" />
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Game Recorder"
+            android:textColor="@color/white"
+            android:textSize="26sp"
+            android:textStyle="bold" />
 
-</LinearLayout>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Hardware encoder • internal audio • low FPS drop"
+            android:textColor="@color/muted"
+            android:textSize="13sp" />
+
+        <TextView
+            style="@style/Label"
+            android:text="Resolution" />
+
+        <Spinner
+            android:id="@+id/spRes"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            style="@style/Label"
+            android:text="Frame rate" />
+
+        <Spinner
+            android:id="@+id/spFps"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            style="@style/Label"
+            android:text="Bitrate" />
+
+        <Spinner
+            android:id="@+id/spBitrate"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            style="@style/Label"
+            android:text="Video codec" />
+
+        <Spinner
+            android:id="@+id/spCodec"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <TextView
+            style="@style/Label"
+            android:text="Orientation" />
+
+        <Spinner
+            android:id="@+id/spOrient"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+
+        <Switch
+            android:id="@+id/swAudio"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:checked="true"
+            android:text="Device internal audio record karo"
+            android:textColor="@color/white" />
+
+        <Button
+            android:id="@+id/btnStart"
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="28dp"
+            android:backgroundTint="@color/accent"
+            android:text="Recording shuru karo"
+            android:textColor="@color/white"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:textColor="@color/accent"
+            android:textSize="14sp" />
+
+        <Button
+            android:id="@+id/btnOpen"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Recordings dekho" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Tip: Start dabane par ye app peeche chala jayega. Game kholo, aur rokne ke liye notification mein Stop dabao. Files: Movies/GameRecorder"
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+    </LinearLayout>
+</ScrollView>
