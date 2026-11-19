@@ -10,8 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
-        maven { url = uri("https://jitpack.io") }
+        maven("https://jitpack.io") // libsu (root shell)
     }
 }
-rootProject.name = "MTManagerClone"
+rootProject.name = "FileForge"
 include(":app")
