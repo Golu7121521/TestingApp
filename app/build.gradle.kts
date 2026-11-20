@@ -1,39 +1,42 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
-    id("org.jetbrains.kotlin.plugin.compose")
 }
 
+val vc = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 1
+val minify = (project.findProperty("minify") as String?) == "true"
+val vn = (project.findProperty("vn") as String?)?.removePrefix("v") ?: "1.0"
+
 android {
-    namespace = "com.fileforge.app"
+    namespace = "com.example.universalplayer"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.fileforge.app"
+        applicationId = "com.example.universalplayer"
         minSdk = 26
-        // targetSdk 29 + requestLegacyExternalStorage = full /sdcard access on Android 10
-        // (Redmi 9 Prime). On Android 11+ the app asks for "All files access".
-        targetSdk = 29
-        versionCode = 1
-        versionName = "1.0"
-
-        // Only 64-bit ARM (Redmi 9 Prime etc.)
-        ndk { abiFilters += "arm64-v8a" }
+        targetSdk = 34
+        versionCode = vc
+        versionName = vn
+        // Only arm64 APK
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     signingConfigs {
+        // Fixed key: every build is signed the same way, so friends can update the app without uninstalling.
         create("release") {
-            storeFile = rootProject.file("keystore/release.jks")
-            storePassword = "fileforge123"
-            keyAlias = "fileforge"
-            keyPassword = "fileforge123"
+            storeFile = file("release.keystore")
+            storePassword = "universalplayer"
+            keyAlias = "friends"
+            keyPassword = "universalplayer"
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            // Smaller APK when built with -Pminify=true (see workflow input). Off by default = safest.
+            isMinifyEnabled = minify
+            isShrinkResources = minify
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("release")
         }
     }
@@ -45,31 +48,45 @@ android {
     kotlinOptions { jvmTarget = "17" }
 
     buildFeatures { compose = true }
+    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
 
     packaging {
-        resources { excludes += "/META-INF/{AL2.0,LGPL2.1}" }
+        // Required by youtubedl-android (python/yt-dlp are shipped as native libs)
+        jniLibs { useLegacyPackaging = true }
+        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
     }
 
     lint {
-        checkReleaseBuilds = false
         abortOnError = false
+        checkReleaseBuilds = false
     }
 }
 
 dependencies {
-    implementation(platform("androidx.compose:compose-bom:2024.09.00"))
+    implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.activity:activity-compose:1.9.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
+    implementation(composeBom)
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-core")
+    implementation("androidx.compose.material:material-icons-extended")
 
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.activity:activity-compose:1.9.2")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.6")
+    val media3 = "1.3.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3")
+    implementation("androidx.media3:media3-datasource:$media3")
+    implementation("androidx.media3:media3-database:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
 
-    // Zip / unzip
-    implementation("net.lingala.zip4j:zip4j:2.11.5")
-    // Root shell
-    implementation("com.github.topjohnwu.libsu:core:6.0.0")
+    implementation("io.coil-kt:coil-compose:2.6.0")
+
+    // yt-dlp wrapper: supports 1000+ sites (YouTube, Vimeo, X, Instagram, Facebook, TikTok ...)
+    implementation("io.github.junkfood02.youtubedl-android:library:0.17.2")
 }
