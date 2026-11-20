@@ -43,6 +43,15 @@ jobs:
     - name: Build release APK and AAB
       run: ./gradlew assembleRelease bundleRelease --stacktrace
 
+    - name: Dump RootEncoder API (only if build failed)
+      if: failure()
+      run: |
+        for j in $(find ~/.gradle/caches -name 'encoder-2.8.1*.jar' -o -name 'library-2.8.1*.jar' | grep -v sources | head -4); do
+          echo "== $j"; unzip -l "$j" | grep -E 'sources/|GenericStream|ConnectChecker|RecordController' | awk '{print $4}' | head -60
+        done
+        J=$(find ~/.gradle/caches -name 'library-2.8.1*.jar' | head -1); E=$(find ~/.gradle/caches -name 'encoder-2.8.1*.jar' | head -1)
+        javap -cp "$J:$E" com.pedro.library.generic.GenericStream com.pedro.library.base.StreamBase || true
+
     - name: Upload APK and AAB
       uses: actions/upload-artifact@v4
       with:

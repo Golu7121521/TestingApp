@@ -11,20 +11,22 @@ import android.os.Build;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.ParcelFileDescriptor;
 import android.provider.MediaStore;
 import android.util.DisplayMetrics;
 import android.view.Display;
 
 import com.pedro.common.ConnectChecker;
 import com.pedro.library.generic.GenericStream;
-import com.pedro.library.util.sources.audio.AudioSource;
-import com.pedro.library.util.sources.audio.InternalAudioSource;
-import com.pedro.library.util.sources.audio.MicrophoneSource;
-import com.pedro.library.util.sources.audio.NoAudioSource;
-import com.pedro.library.util.sources.video.ScreenSource;
+import com.pedro.encoder.input.sources.audio.AudioSource;
+import com.pedro.encoder.input.sources.audio.InternalAudioSource;
+import com.pedro.encoder.input.sources.audio.MicrophoneSource;
+import com.pedro.encoder.input.sources.audio.NoAudioSource;
+import com.pedro.encoder.input.sources.video.ScreenSource;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -50,7 +52,6 @@ public class Recorder {
     private int w, h;
 
     private GenericStream stream;
-    private ParcelFileDescriptor pfd;
     private Uri uri;
     private File outFile;
     private MediaProjection.Callback cb;
@@ -123,11 +124,7 @@ public class Recorder {
         }
         if (!ready) throw new Exception("Video encoder error");
 
-        if (pfd != null) {
-            stream.startRecord(pfd.getFileDescriptor(), status -> { });
-        } else {
-            stream.startRecord(outFile.getAbsolutePath(), status -> { });
-        }
+        stream.startRecord(outFile.getAbsolutePath(), status -> { });
         recording = true;
     }
 
@@ -148,24 +145,53 @@ public class Recorder {
         stream = null;
     }
 
+    // The library records to a file path, so we always write to a private temp file
+    // and publish it to Movies/GameRec when recording stops.
+    private String fileName;
+
     private void openOutput() throws Exception {
-        String name = "Rec_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
+        fileName = "Rec_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".mp4";
+        outFile = new File(ctx.getCacheDir(), fileName);
+        if (outFile.exists()) outFile.delete();
+    }
+
+    private Uri publish() throws Exception {
         if (Build.VERSION.SDK_INT >= 29) {
             ContentResolver cr = ctx.getContentResolver();
             ContentValues v = new ContentValues();
-            v.put(MediaStore.Video.Media.DISPLAY_NAME, name);
+            v.put(MediaStore.Video.Media.DISPLAY_NAME, fileName);
             v.put(MediaStore.Video.Media.MIME_TYPE, "video/mp4");
             v.put(MediaStore.Video.Media.RELATIVE_PATH, "Movies/GameRec");
             v.put(MediaStore.Video.Media.IS_PENDING, 1);
-            uri = cr.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, v);
-            if (uri == null) throw new Exception("Could not create the video file");
-            pfd = cr.openFileDescriptor(uri, "rw");
-            if (pfd == null) throw new Exception("Could not open the video file");
-        } else {
-            File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "GameRec");
-            if (!dir.exists() && !dir.mkdirs()) throw new Exception("Could not create Movies/GameRec folder");
-            outFile = new File(dir, name);
+            Uri u = cr.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, v);
+            if (u == null) throw new Exception("Could not create the video file");
+            try (InputStream in = new FileInputStream(outFile);
+                 OutputStream out = cr.openOutputStream(u)) {
+                if (out == null) throw new Exception("Could not open the video file");
+                byte[] buf = new byte[256 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+            } catch (Exception e) {
+                cr.delete(u, null, null);
+                throw e;
+            }
+            v.clear();
+            v.put(MediaStore.Video.Media.IS_PENDING, 0);
+            cr.update(u, v, null, null);
+            return u;
         }
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "GameRec");
+        if (!dir.exists() && !dir.mkdirs()) throw new Exception("Could not create Movies/GameRec folder");
+        File dst = new File(dir, fileName);
+        try (InputStream in = new FileInputStream(outFile);
+             OutputStream out = new java.io.FileOutputStream(dst)) {
+            byte[] buf = new byte[256 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        MediaScannerConnection.scanFile(ctx, new String[]{dst.getAbsolutePath()},
+                new String[]{"video/mp4"}, null);
+        return Uri.fromFile(dst);
     }
 
     public synchronized void pause() {
@@ -190,32 +216,13 @@ public class Recorder {
 
         boolean ok = false;
         try {
-            if (pfd != null) ok = recording && pfd.getStatSize() > 0;
-            else if (outFile != null) ok = recording && outFile.length() > 0;
-        } catch (Exception ignored) { }
-        try { if (pfd != null) pfd.close(); } catch (Exception ignored) { }
-
-        try {
-            if (uri != null) {
-                ContentResolver cr = ctx.getContentResolver();
-                if (ok) {
-                    ContentValues v = new ContentValues();
-                    v.put(MediaStore.Video.Media.IS_PENDING, 0);
-                    cr.update(uri, v, null, null);
-                } else {
-                    cr.delete(uri, null, null);
-                    uri = null;
-                }
-            } else if (outFile != null) {
-                if (ok) {
-                    MediaScannerConnection.scanFile(ctx, new String[]{outFile.getAbsolutePath()},
-                            new String[]{"video/mp4"}, null);
-                } else {
-                    outFile.delete();
-                }
+            if (recording && outFile != null && outFile.length() > 0) {
+                uri = publish();
+                ok = true;
             }
         } catch (Exception ignored) { }
+        if (outFile != null) outFile.delete();
         saved = ok;
-        return uri;
+        return ok ? uri : null;
     }
 }
