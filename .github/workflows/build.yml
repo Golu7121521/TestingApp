@@ -37,6 +37,9 @@ jobs:
           echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
         fi
 
+    - name: Make gradlew executable
+      run: chmod +x gradlew
+
     - name: Build release APK and AAB
       run: ./gradlew assembleRelease bundleRelease --stacktrace
 
