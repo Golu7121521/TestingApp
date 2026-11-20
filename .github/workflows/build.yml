@@ -1,59 +1,49 @@
-name: Build and Release (arm64)
+name: Build Game Recorder (APK + AAB)
 
 on:
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Release tag (e.g. v1.0)"
-        required: true
-        default: "v1.0"
-      minify:
-        description: "Shrink APK (smaller size, test it before sharing)"
-        type: boolean
-        default: false
   push:
-    tags:
-      - "v*"
-
-permissions:
-  contents: write
+    branches: [ "main" ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
     steps:
-      - uses: actions/checkout@v4
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: 17
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
 
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.7
-          cache-disabled: true
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v4
+      with:
+        gradle-version: '8.14.3'
 
-      - name: Build release APK
-        run: |
-          set +e
-          for i in 1 2 3; do
-            gradle assembleRelease --no-daemon --stacktrace -Pvc=${{ github.run_number }} -Pminify=${{ github.event.inputs.minify || 'false' }} -Pvn=${{ github.event.inputs.tag || github.ref_name }} 2>&1 | tee build.log
-            if [ ${PIPESTATUS[0]} -eq 0 ]; then exit 0; fi
-            if grep -qE "Too Many Requests|Could not (resolve|GET)|timed out|Connection reset" build.log; then
-              echo "Network problem on attempt $i, retrying in 60s..."; sleep 60
-            else
-              exit 1
-            fi
-          done
-          exit 1
+    - name: Prepare release key (only if secrets are set)
+      run: |
+        if [ -n "$KEYSTORE_BASE64" ]; then
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+        fi
 
-      - name: Rename APK
-        run: cp app/build/outputs/apk/release/app-release.apk UniversalPlayer-arm64-v8a.apk
+    - name: Build release APK and AAB
+      run: ./gradlew assembleRelease bundleRelease --stacktrace
 
-      - name: Publish to Releases
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          name: Universal Player ${{ github.event.inputs.tag || github.ref_name }}
-          files: UniversalPlayer-arm64-v8a.apk
+    - name: Upload APK and AAB
+      uses: actions/upload-artifact@v4
+      with:
+        name: GameRecorder
+        path: |
+          app/build/outputs/apk/release/*.apk
+          app/build/outputs/bundle/release/*.aab
