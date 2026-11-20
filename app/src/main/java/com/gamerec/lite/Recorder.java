@@ -114,7 +114,7 @@ public class Recorder {
         // and falls back to the microphone when the game blocks playback capture.
         boolean ready = false;
         if (audioMode == 1 || audioMode == 2) {
-            ready = tryPrepare(new InternalAudioSource(mp));
+            ready = tryPrepare(new InternalAudioSource(mp, new MediaProjection.Callback() { }));
         }
         if (!ready && (audioMode == 2 || audioMode == 3)) {
             ready = tryPrepare(new MicrophoneSource());
