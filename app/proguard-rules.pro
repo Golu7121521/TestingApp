@@ -1,0 +1,10 @@
+# yt-dlp wrapper and its libraries use reflection / JSON mapping
+-keep class com.yausername.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-keep class org.apache.commons.** { *; }
+-keepattributes *Annotation*, Signature, InnerClasses, EnclosingMethod
+-dontwarn com.fasterxml.jackson.**
+-dontwarn org.apache.commons.**
+-dontwarn java.beans.**
+-dontwarn javax.annotation.**
+-dontwarn org.slf4j.**
