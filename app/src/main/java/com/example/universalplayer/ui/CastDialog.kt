@@ -33,7 +33,7 @@ fun CastDialog(link: String?, onDismiss: () -> Unit) {
             val router = MediaRouter.getInstance(ctx)
             val selector = MediaRouteSelector.Builder()
                 .addControlCategory(
-                    CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APP_ID)
+                    CastMediaControlIntent.categoryForCast(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
                 ).build()
             fun refresh() {
                 routes = router.routes.filter { it.matchesSelector(selector) && !it.isDefault && it.isEnabled }
