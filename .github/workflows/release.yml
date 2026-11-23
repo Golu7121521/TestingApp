@@ -15,7 +15,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -43,6 +43,10 @@ jobs:
           echo "Uploading $APK to release $TAG"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
+            gh release edit "$TAG" --draft=false --latest
           else
-            gh release create "$TAG" "$APK" --title "$TAG" --target "$GITHUB_SHA" --generate-notes
+            gh release create "$TAG" "$APK" --title "$TAG" --target "$GITHUB_SHA" --latest --generate-notes
           fi
+          echo "---- Release check ----"
+          gh release view "$TAG" --json tagName,isDraft,isPrerelease,url,assets \
+            --jq '"URL: \(.url)\nDraft: \(.isDraft)\nPrerelease: \(.isPrerelease)\nAssets: \([.assets[].name] | join(", "))"'
