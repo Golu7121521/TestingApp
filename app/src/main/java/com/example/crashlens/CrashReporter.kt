@@ -1,6 +1,6 @@
 package com.example.crashlens
 
-import android.app.ActivityNotFoundException
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.os.Build
 import android.os.NetworkOnMainThreadException
