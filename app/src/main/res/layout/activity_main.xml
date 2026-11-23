@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:gravity="center_horizontal"
+    android:padding="24dp">
+
+    <TextView
+        android:id="@+id/txtInfo"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="24dp"
+        android:text="CrashLens demo. Pehle crash button dabayein, phir last report dekhein." />
+
+    <Button
+        android:id="@+id/btnCrash"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Crash karein (demo)" />
+
+    <Button
+        android:id="@+id/btnLastReport"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Last crash report dekhein" />
+
+</LinearLayout>
