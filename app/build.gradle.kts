@@ -84,11 +84,7 @@ dependencies {
     implementation("androidx.media3:media3-datasource:$media3")
     implementation("androidx.media3:media3-database:$media3")
     implementation("androidx.media3:media3-ui:$media3")
-    implementation("androidx.media3:media3-session:$media3")
 
-    // Chromecast
-    implementation("com.google.android.gms:play-services-cast-framework:21.4.0")
-    implementation("androidx.mediarouter:mediarouter:1.7.0")
 
     implementation("io.coil-kt:coil-compose:2.6.0")
 

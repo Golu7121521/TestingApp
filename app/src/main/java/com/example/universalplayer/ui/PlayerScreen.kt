@@ -14,14 +14,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
-import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import com.example.universalplayer.data.EpgStore
@@ -86,15 +78,10 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
     val subs by vm.subs.collectAsState()
     val resumedAt by vm.resumedAt.collectAsState()
     val reconnect by vm.reconnect.collectAsState()
-    val castName by vm.castName.collectAsState()
-    val castNote by vm.castNote.collectAsState()
     val epgId by vm.epgId.collectAsState()
     val epgData by EpgStore.data.collectAsState()
-    var showCast by remember { mutableStateOf(false) }
     var showDetails by remember { mutableStateOf(false) }
     val clipboard = LocalClipboardManager.current
-    val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
     Immersive(portrait)
 
@@ -139,25 +126,7 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
         }
     }
 
-    Box(
-        Modifier.fillMaxSize().background(Color.Black)
-            .focusRequester(focus).focusable()
-            .onPreviewKeyEvent { ev ->
-                if (menu != MenuType.None || locked || ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (ev.key) {
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar, Key.MediaPlayPause -> {
-                        vm.togglePlay(); controls = true; touch++; true
-                    }
-                    Key.DirectionLeft, Key.MediaRewind -> { vm.seekBy(-10_000L); controls = true; touch++; true }
-                    Key.DirectionRight, Key.MediaFastForward -> { vm.seekBy(10_000L); controls = true; touch++; true }
-                    Key.DirectionUp -> { controls = true; touch++; true }
-                    Key.DirectionDown -> { menu = if (qualities.isNotEmpty()) MenuType.Quality else MenuType.Speed; true }
-                    Key.ChannelUp, Key.MediaNext -> { vm.skipNext(); true }
-                    Key.ChannelDown, Key.MediaPrevious -> { vm.skipPrev(); true }
-                    else -> false
-                }
-            }
-    ) {
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
         AndroidView(
             factory = { c ->
                 PlayerView(c).apply {
@@ -292,31 +261,6 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                 )
             }
 
-            // ---- Chromecast banner
-            castName?.let { name ->
-                Column(
-                    Modifier.align(Alignment.Center).background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(16.dp)).padding(20.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Icon(Icons.Rounded.CastConnected, null, tint = Color.White, modifier = Modifier.size(36.dp))
-                    Text("Casting to $name", color = Color.White)
-                    Row {
-                        TextButton(onClick = { vm.castTogglePlay() }) { Text("Play / Pause", color = Color.White) }
-                        TextButton(onClick = { vm.castStop() }) { Text("Stop casting", color = Color.White) }
-                    }
-                }
-            }
-            castNote?.let {
-                Text(
-                    it, color = Color.White, fontSize = 13.sp,
-                    modifier = Modifier.align(Alignment.BottomCenter).windowInsetsPadding(WindowInsets.safeDrawing)
-                        .padding(bottom = 90.dp).background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(12.dp))
-                        .clickable { vm.clearCastNote() }.padding(horizontal = 14.dp, vertical = 8.dp)
-                )
-            }
-            if (showCast) CastDialog(vm.currentLink()) { showCast = false }
-
             // ---- lock mode: only unlock button
             if (locked) {
                 AnimatedVisibility(
@@ -424,7 +368,6 @@ fun PlayerScreen(vm: PlayerViewModel, inPip: Boolean, onBack: () -> Unit, onEnte
                             }
                             touch++
                         }
-                        CtrlIcon(Icons.Rounded.Cast, "Cast") { showCast = true; touch++ }
                         if (Build.VERSION.SDK_INT >= 26) {
                             CtrlIcon(Icons.Rounded.PictureInPictureAlt, "Picture in picture", onClick = onEnterPip)
                         }

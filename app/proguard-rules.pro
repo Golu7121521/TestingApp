@@ -8,4 +8,3 @@
 -dontwarn java.beans.**
 -dontwarn javax.annotation.**
 -dontwarn org.slf4j.**
--keep class com.example.universalplayer.player.CastOptionsProvider { *; }

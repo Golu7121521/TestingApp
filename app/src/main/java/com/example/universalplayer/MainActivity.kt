@@ -57,10 +57,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         handleIntent(intent)
-        if (Build.VERSION.SDK_INT >= 33) {
-            registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { }
-                .launch(android.Manifest.permission.POST_NOTIFICATIONS)
-        }
 
         setContent {
             UniversalPlayerTheme {
@@ -186,13 +182,8 @@ class MainActivity : ComponentActivity() {
         inPip = isInPictureInPictureMode
     }
 
-    override fun onStart() {
-        super.onStart()
-        vm.onAppStart()
-    }
-
     override fun onStop() {
         super.onStop()
-        vm.onAppStop()
+        vm.pause()
     }
 }

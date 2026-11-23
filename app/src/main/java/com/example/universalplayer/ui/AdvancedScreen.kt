@@ -61,7 +61,6 @@ fun AdvancedScreen(form: AdvancedForm, onLogin: (LoginSite) -> Unit, onPlay: (St
     var updating by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<String?>(null) }
-    var bgAudio by remember { mutableStateOf(PlayerSettings.backgroundAudio) }
     var reconnect by remember { mutableStateOf(PlayerSettings.autoReconnect) }
     var bufLevel by remember { mutableIntStateOf(PlayerSettings.bufferLevel) }
 
@@ -187,9 +186,6 @@ fun AdvancedScreen(form: AdvancedForm, onLogin: (LoginSite) -> Unit, onPlay: (St
             }
 
             SectionTitle("Playback")
-            SettingSwitch("Play audio in background", "Keeps sound going when the screen is off, with notification controls", bgAudio) {
-                bgAudio = it; PlayerSettings.backgroundAudio = it
-            }
             SettingSwitch("Auto reconnect", "Retry automatically when the network drops", reconnect) {
                 reconnect = it; PlayerSettings.autoReconnect = it
             }

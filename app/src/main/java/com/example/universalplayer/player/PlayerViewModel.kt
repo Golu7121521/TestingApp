@@ -3,18 +3,9 @@
 package com.example.universalplayer.player
 
 import android.app.Application
-import android.content.ComponentName
-import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
-import androidx.core.content.ContextCompat
-import androidx.media3.common.MediaMetadata
 import androidx.media3.datasource.HttpDataSource
-import androidx.media3.session.MediaController
-import androidx.media3.session.SessionToken
-import com.google.android.gms.cast.MediaInfo
-import com.google.android.gms.cast.MediaLoadRequestData
-import com.google.common.util.concurrent.ListenableFuture
 import org.json.JSONArray
 import org.json.JSONObject
 import android.net.Uri
@@ -120,16 +111,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     val reconnect: StateFlow<String?> = _reconnect.asStateFlow()
     private var netCallback: ConnectivityManager.NetworkCallback? = null
 
-    // ---- background audio (media session service)
-    private var controllerFuture: ListenableFuture<MediaController>? = null
-
-    // ---- Chromecast
-    private var casting = false
-    private val _castName = MutableStateFlow<String?>(null)
-    val castName: StateFlow<String?> = _castName.asStateFlow()
-    private val _castNote = MutableStateFlow<String?>(null)
-    val castNote: StateFlow<String?> = _castNote.asStateFlow()
-
     /** true = portrait video, false = landscape, null = unknown yet */
     private val _portrait = MutableStateFlow<Boolean?>(null)
     val portrait: StateFlow<Boolean?> = _portrait.asStateFlow()
@@ -143,10 +124,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         override fun onIsPlayingChanged(isPlaying: Boolean) = sync()
         override fun onPlaybackStateChanged(playbackState: Int) {
             sync()
-            if (playbackState == Player.STATE_READY) {
-                netRetry = 0
-                _reconnect.value = null
-            }
+            if (playbackState == Player.STATE_READY) _reconnect.value = null
             if (playbackState == Player.STATE_ENDED) skipNext()
         }
 
@@ -187,15 +165,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         player.addListener(listener)
-        PlayerHub.onNext = { skipNext() }
-        PlayerHub.onPrev = { skipPrev() }
-        PlayerHub.canNext = { queueIndex in 0 until queue.size - 1 }
-        PlayerHub.canPrev = { queueIndex > 0 }
-        runCatching {
-            controllerFuture = MediaController.Builder(
-                app, SessionToken(app, ComponentName(app, PlaybackService::class.java))
-            ).buildAsync()
-        }
         runCatching {
             val cm = app.getSystemService(ConnectivityManager::class.java)
             val cb = object : ConnectivityManager.NetworkCallback() {
@@ -210,10 +179,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true).build()
         viewModelScope.launch {
             var n = 0
+            var stable = 0
             while (true) {
                 sync()
-                pollCast()
                 delay(250)
+                // reconnect counter resets only after 20 s of steady playback (prevents retry loops)
+                if (player.isPlaying) { if (++stable >= 80) { netRetry = 0; stable = 0 } } else stable = 0
                 if (++n % 40 == 0 && player.isPlaying) saveProgress()
             }
         }
@@ -315,7 +286,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 if (r.direct) {
                     selHeight = 0
                     val item = MediaItem.Builder().setUri(r.directUrl!!).apply {
-                        setMediaMetadata(MediaMetadata.Builder().setTitle(_title.value).build())
                         r.directMime?.let { setMimeType(it) }
                         if (opts.hasDrm) setDrmConfiguration(drmConfig(opts))
                     }.build()
@@ -404,10 +374,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
         } else http
         val item = MediaItem.Builder().setUri(f.url).apply {
-            setMediaMetadata(
-                MediaMetadata.Builder().setTitle(_title.value)
-                    .setArtworkUri(resolved?.thumb?.let { Uri.parse(it) }).build()
-            )
             if (f.protocol.contains("m3u8")) setMimeType(MimeTypes.APPLICATION_M3U8)
             if (cacheKey != null) setCustomCacheKey(cacheKey)
         }.build()
@@ -814,6 +780,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     // ---------------------------------------------------------------- auto reconnect
     private fun tryReconnect(e: PlaybackException): Boolean {
         if (!PlayerSettings.autoReconnect || currentUrl == null) return false
+        // only for live / direct links; site videos (YouTube etc.) use the normal retry flow
+        val r = resolved
+        if (r == null || !(r.isLive || r.direct)) return false
         if (e.errorCode == PlaybackException.ERROR_CODE_BEHIND_LIVE_WINDOW) {
             player.seekToDefaultPosition()
             player.prepare()
@@ -850,106 +819,9 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    // ---------------------------------------------------------------- background audio
-    /** App left the screen: keep audio going (notification) or pause, depending on the setting. */
-    fun onAppStop() {
-        saveProgress()
-        if (casting) return
-        if (PlayerSettings.backgroundAudio && player.playWhenReady && player.playbackState != Player.STATE_IDLE) {
-            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, true).build()
-        } else {
-            player.pause()
-        }
-    }
-
-    fun onAppStart() {
-        if (player.trackSelectionParameters.disabledTrackTypes.contains(C.TRACK_TYPE_VIDEO)) {
-            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
-                .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, false).build()
-        }
-    }
-
-    // ---------------------------------------------------------------- Chromecast
-    private fun castSource(): Triple<String, String, Boolean>? {
-        val r = resolved ?: return null
-        if (r.direct) {
-            if (opts.hasDrm || opts.headers().isNotEmpty()) {
-                _castNote.value = "Streams that need DRM or special headers cannot be cast."
-                return null
-            }
-            val mime = when (r.directMime) {
-                MimeTypes.APPLICATION_MPD -> "application/dash+xml"
-                MimeTypes.APPLICATION_M3U8 -> "application/x-mpegURL"
-                else -> "video/mp4"
-            }
-            return Triple(r.directUrl.orEmpty(), mime, r.isLive)
-        }
-        val f = r.formats.filter { it.vcodec != "none" && it.acodec != "none" && it.protocol.startsWith("http") }
-            .maxByOrNull { if (it.height > 0) it.height else 0 }
-            ?: r.formats.firstOrNull { it.protocol.contains("m3u8") }
-        if (f == null) {
-            _castNote.value = "This link has no format that a Chromecast can play."
-            return null
-        }
-        val mime = if (f.protocol.contains("m3u8")) "application/x-mpegURL" else "video/mp4"
-        return Triple(f.url, mime, r.isLive)
-    }
-
-    private fun pollCast() {
-        if (!CastHelper.isReady) return
-        val sess = CastHelper.session()
-        if (sess != null && !casting) {
-            casting = true
-            _castName.value = runCatching { sess.castDevice?.friendlyName }.getOrNull() ?: "Chromecast"
-            _castNote.value = null
-            val src = castSource()
-            val client = sess.remoteMediaClient
-            if (src == null || client == null || src.first.isBlank()) {
-                CastHelper.endSession()
-                return
-            }
-            runCatching {
-                val md = com.google.android.gms.cast.MediaMetadata(com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE)
-                md.putString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE, _title.value)
-                val info = MediaInfo.Builder(src.first)
-                    .setStreamType(if (src.third) MediaInfo.STREAM_TYPE_LIVE else MediaInfo.STREAM_TYPE_BUFFERED)
-                    .setContentType(src.second)
-                    .setMetadata(md)
-                    .build()
-                val req = MediaLoadRequestData.Builder()
-                    .setMediaInfo(info)
-                    .setAutoplay(true)
-                    .setCurrentTime(if (src.third) 0L else player.currentPosition)
-                    .build()
-                client.load(req)
-            }
-            player.pause()
-        } else if (sess == null && casting) {
-            casting = false
-            _castName.value = null
-            player.play()
-        }
-    }
-
-    fun castTogglePlay() {
-        runCatching { CastHelper.session()?.remoteMediaClient?.togglePlayback() }
-    }
-
-    fun castStop() {
-        CastHelper.endSession()
-    }
-
-    /** The link as the player sees it (used for "open in another app"). */
-    fun currentLink(): String? = resolved?.directUrl ?: currentUrl
-
     private val _epgId = MutableStateFlow("")
     /** tvg-id of the channel that is playing (for the channel guide). */
     val epgId: StateFlow<String> = _epgId.asStateFlow()
-
-    fun clearCastNote() {
-        _castNote.value = null
-    }
 
     fun pause() {
         saveProgress()
@@ -962,10 +834,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         runCatching {
             netCallback?.let { getApplication<Application>().getSystemService(ConnectivityManager::class.java)?.unregisterNetworkCallback(it) }
         }
-        controllerFuture?.let { runCatching { MediaController.releaseFuture(it) } }
-        val appCtx = getApplication<Application>()
-        appCtx.stopService(Intent(appCtx, PlaybackService::class.java))
-        if (casting) CastHelper.endSession()
         PlayerHub.release()
     }
 

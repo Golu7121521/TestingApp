@@ -130,7 +130,7 @@ private fun PlaylistDetail(
 ) {
     val favs by FavoriteStore.urls.collectAsState()
     var group by rememberSaveable { mutableStateOf("") } // "" = all, "*" = favorites
-    var grid by rememberSaveable { mutableStateOf(false) }
+    var grid by remember { mutableStateOf(com.example.universalplayer.player.PlayerSettings.playlistGrid) }
     val groups = remember(pl.items) { pl.items.map { it.group }.filter { it.isNotBlank() }.distinct() }
     if (group.isNotEmpty() && group != "*" && group !in groups) group = ""
     val shown = remember(pl.items, query, group, favs) {
@@ -159,7 +159,7 @@ private fun PlaylistDetail(
                 title = { Text(pl.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Back") } },
                 actions = {
-                    IconButton(onClick = { grid = !grid }) {
+                    IconButton(onClick = { grid = !grid; com.example.universalplayer.player.PlayerSettings.playlistGrid = grid }) {
                         Icon(if (grid) Icons.Rounded.ViewList else Icons.Rounded.GridView, "Grid / list")
                     }
                     if (pl.items.isNotEmpty()) {
