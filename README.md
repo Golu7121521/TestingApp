@@ -1,111 +1,145 @@
-# CrashLens
+<div align="center">
+  <img width="210" height="auto" src="./.resources/images/ic_launcher.png" alt="Current Activity Logo" border="0">
 
-Ye project do kaam karta hai:
+  # Current Activity
 
-1. **Crash Reporter (`CrashReporter.kt`)**: Ek chhota sa module hai jo aapke app mein crash hone par report file save karta hai. Report mein ye hota hai:
-   - Exception ka naam aur message
-   - Hindi/English mein simple reason (jaise "null value use hui")
-   - "Aapke code mein" wali line, yaani aapke apne code ki woh exact line jahan crash hua
-   - Device, Android version, thread aur poora stack trace
+  **🔍 App Activity Inspector: Real-Time Foreground Status Monitor**
 
-2. **Demo App**: Ye app khud crash karke dikhata hai ki report kaise aati hai. Aap ise test karke samajh sakte hain.
+  An essential tool for **Android Developers** and **Reverse Engineers**  
+  Instantly displays the *package name* and *class name* of the application currently in the foreground.  
+  Quickly inspect any active app on your device for development or debugging.
 
-> Note: Doosre apps (jaise Play Store wale apps) ka crash ye app nahi padh sakta. Apne hi app mein ye module lagana padta hai.
+  [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+  [![Android](https://img.shields.io/badge/Platform-Android%207%2B-green.svg)](https://www.android.com/)
+  [![GitHub release](https://img.shields.io/github/v/release/codehasan/Current-Activity?include_prereleases)](https://github.com/codehasan/Current-Activity/releases/latest)
 
----
+  [<img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt='Get it on Google Play' height="80">](https://play.google.com/store/apps/details?id=io.github.ratul.topactivity)
+  [<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" height="80" alt="Get it at IzzyOnDroid">](https://apt.izzysoft.de/packages/io.github.ratul.topactivity)
+  [<img src="./.resources/get-it-on-github.png" alt='Get it on GitHub' height="80">](https://github.com/codehasan/Current-Activity/releases/latest)
+<!--  [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt='Get it on F-Droid' height="80">](https://f-droid.org/packages/io.github.ratul.topactivity) -->
 
-## Project structure
+</div>
 
-```
-CrashLens/
-├── .github/workflows/build-release.yml   <- GitHub Actions (arm64 APK -> Release)
-├── settings.gradle.kts
-├── build.gradle.kts
-├── gradle.properties
-├── README.md
-└── app/
-    ├── build.gradle.kts
-    └── src/main/
-        ├── AndroidManifest.xml
-        ├── java/com/example/crashlens/
-        │   ├── CrashApp.kt             <- Application class (yahan handler lagta hai)
-        │   ├── CrashReporter.kt        <- MAIN MODULE: apne app mein copy karein
-        │   ├── MainActivity.kt
-        │   └── CrashReportActivity.kt  <- Report dikhane wali screen
-        └── res/
-            ├── layout/activity_main.xml
-            ├── layout/activity_crash_report.xml
-            └── values/strings.xml
-```
+## ⚠️ Important Note
 
----
+> **Note:** Google prohibits the usage of **QUERY_ALL_PACKAGES** permission and **AccessibilityService** without a strong explanation. For that reason, the Play Store version of **Current Activity** won't have either of these features. While the app will still function, performance will vary. 
+> 
+> **💡 Recommendation:** It is strongly recommended to use the latest **Global** version from [**Releases**](https://github.com/codehasan/Current-Activity/releases/latest) rather than from **Play Store**.
 
-## Step 1: GitHub par upload karna
+## ✨ Key Features
 
-1. GitHub par ek naya repository banayein (jaise `CrashLens`).
-2. Zip ko phone par unzip karke saari files repo mein upload karein.
-   - Mobile browser se `.github` folder upload karna mushkil ho sakta hai. Isliye GitHub ka web editor use karein: **Add file -> Create new file**, aur file name ki jagah `.github/workflows/build-release.yml` likhein. Slash (`/`) se folders apne aap ban jaate hain. Phir `build-release.yml` ka content paste karein.
-3. Repo mein **Settings -> Actions -> General -> Workflow permissions** mein **Read and write permissions** select karein aur save karein.
-4. Code `main` branch par ho. Workflow ko `Actions` tab se **Run workflow** karke bhi chala sakte hain.
+- **📱 Real-Time Tracking:** View the **package name** and the **class name** of the app currently visible to the user (i.e., the top app).
+- **🛠️ Development & Debugging:** Quickly verify which components are launched, aid in deep-link development, and confirm third-party app interaction.
+- **🔧 Reverse Engineering:** Identify key components and packages in external applications for analysis.
 
-## Step 2: APK kaise milega
+## ⚙️ How It Works
 
-- Build complete hone ke baad **Releases** section mein `CrashLens-arm64-v8a.apk` milega.
-- Ye sirf **arm64-v8a** ke liye bana hai, jo aaj ke lagbhag sabhi Android phones mein hota hai.
-- Artifacts ka use nahi hota, isliye aapka artifacts limit wala issue nahi aayega.
-- Phone par APK install karne ke liye browser se download karke install karein. "Unknown apps" ki permission dena padega.
+The monitoring is made possible with two main services: **PackageMonitoringService** and **AccessibilityMonitoringService**.
 
-## Step 3: Apne app mein Crash Reporter kaise lagayein
+1. **PackageMonitoringService** actively checks for app state changes in the last 10 seconds, doing this every 500ms. Each time a state change is detected and confirmed to be in foreground, the popup window is updated to inform the user.
 
-1. `CrashReporter.kt` ko apne project mein copy karein. Pehli line ka `package` apne package name se badal dein.
-2. Apne Application class mein ye line add karein (agar Application class nahi hai to ek banayein):
+2. **AccessibilityMonitoringService** complements **PackageMonitoringService** by actively observing window state changes. If a change is detected and confirmed not to be a System class (e.g., `android.view.View`), it immediately updates the popup window.
 
-```kotlin
-class MyApp : Application() {
-    override fun onCreate() {
-        super.onCreate()
-        CrashReporter.install(this)   // <-- bas ye ek line
-    }
-}
-```
+## 📸 Screenshots
 
-3. `AndroidManifest.xml` mein `<application android:name=".MyApp" ...>` set karein.
-4. Crash report dekhne ke liye `CrashReportActivity.kt` aur uska layout bhi copy karein, ya bas `CrashReporter.listReports(this).firstOrNull()?.readText()` se report text lekar kahin bhi dikha dein.
+<div align="center">
+  <img src="./.resources/images/screenshot_1.jpg" width="160" height="356" alt="Screenshot 1">
+  <img src="./.resources/images/screenshot_2.jpg" width="160" height="356" alt="Screenshot 2">
+  <img src="./.resources/images/screenshot_3.jpg" width="160" height="356" alt="Screenshot 3">
+  <img src="./.resources/images/screenshot_4.jpg" width="160" height="356" alt="Screenshot 4">
+  <img src="./.resources/images/screenshot_5.jpg" width="160" height="356" alt="Screenshot 5">
+</div>
 
-Ab jab bhi app crash hoga, report `filesDir/crash_reports/` mein save ho jayegi. Agli baar app kholne par report dekh sakte hain.
+## 🤝 Contributing
 
-## Step 4: Report kaise padhein
+Contributions are what makes the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
 
-Report ke sabse upar **SUMMARY** hota hai:
+If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
+Don't forget to give this project a star! Thanks again!
 
-- **Reason**: crash ka simple matlab
-- **Aapke code mein**: `MainActivity.onCreate(MainActivity.kt:42)` jaisi line. Yahi aapka bug hai. Us file ki us line ko dekhiye.
+1. Fork the project
+2. Create your feature branch. (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes. (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch. (`git push origin feature/AmazingFeature`)
+5. Open a pull request.
 
-Phir **STACK TRACE** aata hai, jo detail mein batata hai ki kaunsa function kisne call kiya.
+## 💡 FAQs
 
-Report ko **Copy** ya **Share** karke AI ko bhi bhej sakte hain, jisse fix jaldi mil jaata hai.
+### Unable to enable Accessibility Service for Current Activity?
+<details>
+<summary>Click to expand for the answer</summary>
+<br />
+
+1. Make sure you are using the global version, and not the version from Play Store.
+* **Solution:** Download global version from [Releases](https://github.com/codehasan/Current-Activity/releases/latest)
+2. In Chinese roms, sideloaded third party apps are initially restricted from using Accessibility Service.
+* **Solution:** Watch this video in [YouTube](https://youtube.com/shorts/3mw_3TIF0y4)
+
+**Still having issues?** Please [open an issue here](https://github.com/codehasan/Current-Activity/issues) and include a screen recording or screenshot of the problem.
+</details>
 
 ---
 
-## Common crash ke reasons
+### Unable to install Current Activity?
+<details>
+<summary>Click to expand for the answer</summary>
+<br />
 
-| Exception | Matlab |
-|---|---|
-| NullPointerException | Null value par kaam kiya gaya |
-| ClassCastException | Galat type mein cast kiya |
-| IndexOutOfBoundsException | List/array ki size se bahar index |
-| IllegalStateException | Object galat state mein tha (jaise destroy hone ke baad use) |
-| NetworkOnMainThreadException | UI thread par network call |
-| ActivityNotFoundException | Intent handle karne wali app nahi mili |
-| SecurityException | Permission nahi mili |
-| OutOfMemoryError | Memory khatam (bade bitmap, leaks) |
+1. If you can't install from Play Store, download and install from GitHub.
+* **Solution:** Download global version from [Releases](https://github.com/codehasan/Current-Activity/releases/latest)
+2. If installation is [blocked by Play Protect](./.resources/images/blocked_by_play_protect.jpg),
+    1. Open Play Store
+    2. Click on your account icon or menu icon and find Play Protect
+    3. Open settings in Play Protect and disable all the options
 
-## Limitations
+**Still having issues?** Please [open an issue here](https://github.com/codehasan/Current-Activity/issues) and include a screen recording or screenshot of the problem.
+</details>
 
-- Ye sirf **Java/Kotlin exceptions** pakdta hai. Native (C/C++) crash aur ANR (app freeze) nahi pakdta.
-- Crash ke baad process band hota hai, isliye report save karne ka kaam ek hi baar hota hai.
-- Release build mein `isMinifyEnabled = false` rakha gaya hai, taaki stack trace saaf rahe.
+---
 
-## Release build ke baare mein
+### Accessibility Service auto disabled or not working?
+<details>
+<summary>Click to expand for the answer</summary>
+<br />
 
-Is project mein release build **debug key se sign** hoti hai taaki APK bina keystore ke install ho jaaye. Play Store par upload ke liye apna keystore banana padega.
+Some Chinese phones like Xiaomi are known to disable Accessibility Services automatically.
+  1. Check to see if there is an option called `Use Autostart` in Current Activity (Added in v2.0.0)
+  2. Click on `Enable`
+  3. Find **Current Activity** and enable
+  4. If you don't see this option, please update to the latest global version from [Releases](https://github.com/codehasan/Current-Activity/releases/latest)
+
+Watch these videos for more help,
+* Newer versions of Xiaomi - [YouTube](https://youtube.com/shorts/0zE2uj5-Dcg)
+* Older versions of Xiaomi - [YouTube](https://youtube.com/shorts/DeBkBQnUH9A)
+
+**Still having issues?** Please [open an issue here](https://github.com/codehasan/Current-Activity/issues) and include a screen recording or screenshot of the problem.
+</details>
+
+---
+
+### Popup window not shown on Settings?
+<details>
+<summary>Click to expand for the answer</summary>
+<br />
+
+1. You need to enable developer options in Settings. If you don't know how to do it, search on Google.
+2. Open developer options, scroll down untill you see "Allow screen overlays on settings".
+3. Enable that option. Then close Current Activity and reopen to apply the changes.
+
+Watch this video for more help - [YouTube](https://youtube.com/shorts/0zE2uj5-Dcg)
+</details>
+
+## 🙏 Credits
+
+- [**Wen**](https://github.com/109021017) for [core resources](https://github.com/109021017/android-TopActivity)
+- [**Muhtaseem Al Mahmud**](https://github.com/KingMahmud) for project optimization
+
+## 📄 License
+
+<div align="center">
+
+  [![License](https://www.gnu.org/graphics/gplv3-with-text-136x68.png)](LICENSE)
+
+  Current Activity is licensed under [**GNU General Public License v3.0**](https://www.gnu.org/licenses/gpl-3.0.html) or later.
+
+</div>

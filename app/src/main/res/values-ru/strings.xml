@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Мы используем службу специальных возможностей для отслеживания событий изменения состояния окна. Все данные обрабатываются в автономном режиме, журналы не ведутся.</string>
+    <string name="check_for_update">Проверить обновления</string>
+    <string name="checking_for_update">Проверка обновлений</string>
+    <string name="update_available">Доступно обновление</string>
+    <string name="new_version_available">Доступна новая версия %1$s. Хотите скачать её?\n\nПользователи F-Droid могут дождаться обновления в F-Droid, которое обычно появляется в течение нескольких часов в репозитории IzzyOnDroid и через несколько дней в репозитории F-Droid.org.</string>
+    <string name="download">Загрузить</string>
+    <string name="already_using_latest">У вас уже установлена последняя версия</string>
+    <string name="update_check_failed">Не удалось проверить обновления</string>
+    <string name="unknown">Неизвестно</string>
+    <string name="package_label">Пакет</string>
+    <string name="class_label">Класс</string>
+    <string name="cancel">Отмена</string>
+    <string name="use_accessibility_service">Использовать службу спец. возможностей</string>
+    <string name="use_accessibility_service_desc">Значительно улучшает мониторинг пакетов</string>
+    <string name="enable">Включить</string>
+    <string name="settings">Настройки</string>
+    <string name="system_overlay_title">Наложение поверх других окон</string>
+    <string name="system_overlay_description">Пожалуйста, разрешите \'%1$s\' отображаться поверх других приложений</string>
+    <string name="accessibility_permission_title">Спец. возможности</string>
+    <string name="accessibility_permission_description">Пожалуйста, включите службу спец. Возможностей для \'%1$s\'</string>
+    <string name="usage_access_title">Доступ к данным об использовании</string>
+    <string name="usage_access_description">Пожалуйста, разрешите доступ к данным об использовании для \'%1$s\'</string>
+    <string name="copied">Скопировано</string>
+    <string name="package_copied">Пакет скопирован</string>
+    <string name="class_copied">Класс скопирован</string>
+    <string name="stop">Стоп</string>
+    <string name="notification_channel_name">Информация об активности</string>
+    <string name="notification_channel_description">Показывает информацию о текущей активности</string>
+    <string name="auto_update_check">Проверка автообновления</string>
+    <string name="auto_update_desc">Чтобы вы могли пользоваться новейшими функциями и исправлениями ошибок, это приложение может проверять наличие новых версий на GitHub. Никаких скрытых автоматических установок без вашего ведома не будет.\n\nЭти обновления не будут проходить дополнительную проверку, которая осуществляется, например, в IzzyOnDroid или F-Droid.\n\nВы можете включить или отключить эту функцию позже.</string>
+    <string name="use_system_font">Системный шрифт</string>
+    <string name="restart_required">Требуется перезапуск</string>
+    <string name="restart">Перезапустить</string>
+    <string name="later">Позже</string>
+    <string name="group_miscellaneous">Разное</string>
+    <string name="service_mode">Режим сервиса</string>
+    <string name="scan_speed">Скорость сканирования активности</string>
+    <string name="history_size">Размер истории активностей</string>
+    <string name="window_size">Размер всплывающего окна</string>
+    <string name="enable_autostart">Включить автозапуск</string>
+    <string name="enable_autostart_desc">Запретить системе останавливать сервис</string>
+    <string name="auto_update_desc_short">Проверять обновления на GitHub при запуске</string>
+    <string name="use_system_font_desc">Использовать шрифт устройства вместо пользовательского</string>
+    <string name="activity_history">История активностей</string>
+</resources>

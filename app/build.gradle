@@ -1,0 +1,92 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+
+android {
+    namespace "io.github.ratul.topactivity"
+
+    compileSdk {
+        version = release(36)
+    }
+
+    defaultConfig {
+        applicationId "io.github.ratul.topactivity"
+        minSdk {
+            version = release(24)
+        }
+        targetSdk {
+            version = release(36)
+        }
+        versionCode 25
+        versionName "2.2.0"
+
+        // Only build native code for arm64 devices (keeps the APK limited to arm64-v8a)
+        ndk {
+            abiFilters 'arm64-v8a'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.debug
+        }
+    }
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(JvmTarget.JVM_11)
+        }
+    }
+
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs (for IzzyOnDroid/F-Droid)
+        includeInApk = false
+        // Enables dependency metadata when building Android App Bundles (for Google Play)
+        // Allows Google to scan dependencies for policy compliance
+        includeInBundle = true
+    }
+
+    flavorDimensions 'version'
+    productFlavors {
+        global {
+            dimension 'version'
+        }
+        playStore {
+            dimension 'version'
+        }
+    }
+
+    android.applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def flavor = variant.flavorName
+            def apkName = "curent-activity_${flavor}_v${variant.versionName}.apk"
+            output.outputFileName = apkName
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.google.android.material:material:1.13.0'
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'androidx.fragment:fragment-ktx:1.8.9'
+    implementation 'androidx.preference:preference-ktx:1.2.1'
+    implementation 'com.android.volley:volley:1.2.1'
+}
+
+configurations.all {
+    resolutionStrategy {
+        force('org.jetbrains.kotlin:kotlin-stdlib-jdk8:2.2.0')
+    }
+}
