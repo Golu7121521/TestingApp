@@ -21,7 +21,6 @@
             android:summary="@string/use_accessibility_service_desc"
             android:title="@string/use_accessibility_service"
             app:iconSpaceReserved="false"
-            app:isPreferenceVisible="@bool/global_version"
             app:widgetLayout="@layout/layout_material_switch" />
 
         <androidx.preference.Preference
@@ -70,25 +69,6 @@
             android:title="@string/use_system_font"
             app:iconSpaceReserved="false"
             app:widgetLayout="@layout/layout_material_switch" />
-
-    </androidx.preference.PreferenceCategory>
-
-    <androidx.preference.PreferenceCategory
-        android:title="@string/group_miscellaneous"
-        app:iconSpaceReserved="false">
-
-        <androidx.preference.SwitchPreferenceCompat
-            android:defaultValue="false"
-            android:key="auto_update"
-            android:summary="@string/auto_update_desc_short"
-            android:title="@string/auto_update_check"
-            app:iconSpaceReserved="false"
-            app:widgetLayout="@layout/layout_material_switch" />
-
-        <androidx.preference.Preference
-            android:key="check_update"
-            android:title="@string/check_for_update"
-            app:iconSpaceReserved="false" />
 
     </androidx.preference.PreferenceCategory>
 

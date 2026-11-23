@@ -1,16 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- APP NAMES SHOULDN'T BE TRANSLATED -->
-    <string name="app_name" translatable="false">Current Activity</string>
-    <string name="github" translatable="false">GitHub</string>
+    <string name="app_name" translatable="false">Activity Peek</string>
     <string name="accessibility_service_description">We use accessibility service to monitor window state change events. All data is processed offline and no log is kept.</string>
-    <string name="check_for_update">Check for update</string>
-    <string name="checking_for_update">Checking for update</string>
-    <string name="update_available">Update Available</string>
-    <string name="new_version_available">A new version %1$s is available. Do you want to download it?\n\nF-Droid users can wait for the update from F-Droid, which usually arrives within a few hours with the IzzyOnDroid repo, and a few days with F-Droid.org\'s repo.</string>
-    <string name="download">Download</string>
-    <string name="already_using_latest">Already on the latest version</string>
-    <string name="update_check_failed">Failed to check for update</string>
     <string name="unknown">Unknown</string>
     <string name="package_label">Package</string>
     <string name="class_label">Class</string>
@@ -31,23 +23,20 @@
     <string name="stop">Stop</string>
     <string name="notification_channel_name">Activity Info</string>
     <string name="notification_channel_description">Shows current activity info</string>
-    <string name="auto_update_check">Auto update check</string>
-    <string name="auto_update_desc">To ensure you have the latest features and bug fixes, this app can check at GitHub for new versions. There won\'t be any automated installs, behind your back.\n\nThese updates would not go through the additional screening performed at e.g. IzzyOnDroid or F-Droid.\n\nYou can still turn it on/off later.</string>
     <string name="use_system_font">Use system font</string>
     <string name="restart_required">Restart Required</string>
     <string name="restart">Restart</string>
     <string name="later">Later</string>
-    <string name="group_miscellaneous">Miscellaneous</string>
     <string name="service_mode">Service mode</string>
     <string name="scan_speed">Activity scan speed</string>
     <string name="history_size">Activity history size</string>
     <string name="window_size">Popup window size</string>
     <string name="enable_autostart">Enable Autostart</string>
     <string name="enable_autostart_desc">Prevent the system from killing the service</string>
-    <string name="auto_update_desc_short">Check GitHub for updates on startup</string>
     <string name="use_system_font_desc">Use device default font instead of custom font</string>
     <string name="activity_history">Activity History</string>
     <string name="group_monitoring">Monitoring</string>
     <string name="group_display">Display</string>
     <string name="app_tagline">Real-time foreground activity monitor</string>
+    <string name="start">Start</string>
 </resources>

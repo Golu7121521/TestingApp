@@ -29,8 +29,8 @@ jobs:
       - name: Make gradlew executable
         run: chmod +x gradlew
 
-      - name: Build global release APK (arm64-v8a only)
-        run: ./gradlew :app:assembleGlobalRelease --no-daemon
+      - name: Build release APK (arm64-v8a only)
+        run: ./gradlew :app:assembleRelease --no-daemon
 
       - name: Publish APK to GitHub Release
         env:
@@ -39,7 +39,7 @@ jobs:
         run: |
           VERSION=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' app/build.gradle)
           TAG="v${VERSION}"
-          APK=$(ls app/build/outputs/apk/global/release/*.apk | head -n 1)
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n 1)
           echo "Uploading $APK to release $TAG"
           if gh release view "$TAG" > /dev/null 2>&1; then
             gh release upload "$TAG" "$APK" --clobber
