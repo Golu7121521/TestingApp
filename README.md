@@ -1,10 +1,17 @@
-# VIBE MUSIC — Offline Hi-Fi Android Music Player
+# SaavnTune (Personal Android Music App)
 
-A complete, production-ready offline Android music player built with **Kotlin**, **Jetpack Compose**, **Material 3**, **Media3 ExoPlayer**, **Room Database**, **DataStore**, and **Clean Architecture + MVVM**.
+An Android music streaming and downloading app built with **Kotlin**, **Jetpack Compose**, and **Media3 ExoPlayer**, powered directly by the JioSaavn API with built-in 320kbps audio stream decryption.
 
-## Build ARM64 APK on GitHub Actions (No PC/Laptop Needed)
+## Features
+- **Online Streaming**: Search any song, artist, or album and stream directly in high quality.
+- **Offline Downloads**: Download songs straight to your phone's `Music/SaavnTune` folder and play them offline from the **Downloads** tab.
+- **Background Playback**: Powered by Media3 `MediaSessionService` with lock-screen and notification controls.
+- **ARM64 Optimized**: Configured to build only `arm64-v8a` for a lightweight APK.
+- **Zero-Artifact GitHub Releases**: GitHub Actions compiles the release APK and publishes it directly under **Releases** (bypassing GitHub Actions artifact storage limits).
 
-1. Extract `VibeMusic-Android-Project.zip` on your phone.
-2. Upload all extracted project files (including `.github/workflows/build-arm64-release.yml`) to the `main` branch of your GitHub repository.
-3. Open the **Actions** tab in GitHub to watch **Build & Release VIBE MUSIC (ARM64 APK)** complete.
-4. Download **`VibeMusic-arm64-v8a-release.apk`** from the **Releases** section and install it on your Android device.
+## How to Build APK via GitHub Actions (No PC Required)
+1. Extract this ZIP file on your phone (using ZArchiver or your file manager).
+2. Create a new repository on [GitHub](https://github.com/new) (Public or Private).
+3. Upload all extracted files and folders (make sure the `.github/workflows/build-apk.yml` file is included!) to the repository.
+4. Go to the **Actions** tab in your repository and trigger **Build ARM64 APK & Publish Release** (or push any commit).
+5. Once the workflow finishes, open the **Releases** section of your repository and download `SaavnTune-arm64-v8a.apk`.

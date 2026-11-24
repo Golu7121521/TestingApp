@@ -1,2 +1,2 @@
--keep class androidx.media3.** { *; }
--keep class com.vibemusic.app.database.** { *; }
+# Keep data models for Gson
+-keep class com.personal.saavntune.data.model.** { *; }
