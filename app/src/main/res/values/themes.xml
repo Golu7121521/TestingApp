@@ -1,6 +1,0 @@
-<resources>
-    <style name="Theme.SaavnTune" parent="android:Theme.Material.NoActionBar">
-        <item name="android:statusBarColor">#FF0D1117</item>
-        <item name="android:navigationBarColor">#FF0D1117</item>
-    </style>
-</resources>

@@ -1,17 +1,20 @@
-# SaavnTune (Personal Android Music App)
+# Saavn Player (personal use)
 
-An Android music streaming and downloading app built with **Kotlin**, **Jetpack Compose**, and **Media3 ExoPlayer**, powered directly by the JioSaavn API with built-in 320kbps audio stream decryption.
+Android music player that streams songs from JioSaavn's unofficial web API and lets you download them.
 
 ## Features
-- **Online Streaming**: Search any song, artist, or album and stream directly in high quality.
-- **Offline Downloads**: Download songs straight to your phone's `Music/SaavnTune` folder and play them offline from the **Downloads** tab.
-- **Background Playback**: Powered by Media3 `MediaSessionService` with lock-screen and notification controls.
-- **ARM64 Optimized**: Configured to build only `arm64-v8a` for a lightweight APK.
-- **Zero-Artifact GitHub Releases**: GitHub Actions compiles the release APK and publishes it directly under **Releases** (bypassing GitHub Actions artifact storage limits).
+- Search songs and artists (all UI text in English)
+- Stream online with background playback and media notification
+- Download songs to the app's music folder and play them offline
+- Only an arm64-v8a APK is built
 
-## How to Build APK via GitHub Actions (No PC Required)
-1. Extract this ZIP file on your phone (using ZArchiver or your file manager).
-2. Create a new repository on [GitHub](https://github.com/new) (Public or Private).
-3. Upload all extracted files and folders (make sure the `.github/workflows/build-apk.yml` file is included!) to the repository.
-4. Go to the **Actions** tab in your repository and trigger **Build ARM64 APK & Publish Release** (or push any commit).
-5. Once the workflow finishes, open the **Releases** section of your repository and download `SaavnTune-arm64-v8a.apk`.
+## Build with GitHub Actions (no PC needed)
+1. Create a new GitHub repository and upload all files from this project, keeping the folder structure (including `.github`).
+2. Open the repo, go to the **Actions** tab, select **Build arm64 APK**, and click **Run workflow**.
+3. When the run finishes, open **Releases** and download `app-arm64-v8a-release.apk` from the newest release.
+4. Install it on your phone (allow "Install unknown apps" for your browser or file manager).
+
+## Notes
+- The APK is signed with the debug key. Because that key can differ between CI runs, if installing a new build fails with a signature conflict, uninstall the old version first.
+- The JioSaavn endpoints are unofficial and may change or stop working. Check the terms of service and your local copyright laws before downloading content.
+- Downloads go to the app's private music folder (Android/data/com.personal.saavnplayer/files/Music).
