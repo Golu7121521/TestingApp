@@ -1,2 +1,2 @@
 -keep class androidx.media3.** { *; }
--keep class com.vibemusic.app.data.local.entity.** { *; }
+-keep class com.vibemusic.app.database.** { *; }
