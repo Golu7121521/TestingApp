@@ -1,2 +1,2 @@
-# Keep model classes and ViewBinding
--keep class com.business.musicapp.** { *; }
+# Keep rules for ScreenRecorder
+-keep class com.example.screenrecorder.** { *; }

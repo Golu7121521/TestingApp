@@ -4,12 +4,12 @@ plugins {
 }
 
 android {
-    namespace = "com.business.musicapp"
+    namespace = "com.example.screenrecorder"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.business.musicapp"
-        minSdk = 24
+        applicationId = "com.example.screenrecorder"
+        minSdk = 26
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
@@ -26,11 +26,11 @@ android {
 
     signingConfigs {
         create("release") {
-            val keystoreFile = file("keystore/release.jks")
+            val keystoreFile = file("release.keystore")
             if (keystoreFile.exists()) {
                 storeFile = keystoreFile
                 storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android123"
-                keyAlias = System.getenv("KEY_ALIAS") ?: "business_music_key"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "screenrecorder"
                 keyPassword = System.getenv("KEY_PASSWORD") ?: "android123"
             }
         }
@@ -38,19 +38,20 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
+            signingConfig = if (file("release.keystore").exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            val keystoreFile = file("keystore/release.jks")
-            if (keystoreFile.exists()) {
-                signingConfig = signingConfigs.getByName("release")
-            }
         }
         debug {
-            applicationIdSuffix = ".debug"
+            isMinifyEnabled = false
         }
     }
 
@@ -73,6 +74,5 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.recyclerview:recyclerview:1.3.2")
-    implementation("androidx.cardview:cardview:1.0.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.3")
 }

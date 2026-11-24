@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "BusinessMusicApp"
+rootProject.name = "ScreenRecorder"
 include(":app")
