@@ -2,7 +2,6 @@ package com.vibemusic.app.service
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.os.Bundle
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -40,11 +39,11 @@ class VibePlaybackService : MediaLibraryService() {
             .build()
 
         player = ExoPlayer.Builder(this)
-            .setAudioAttributes(audioAttributes, true) // Automatic Audio Focus handling
-            .setHandleAudioBecomingNoisy(true) // Pause when headphones unplugged
+            .setAudioAttributes(audioAttributes, true)
+            .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
-                pauseAtEndOfMediaItems = false // Gapless playback support
+                pauseAtEndOfMediaItems = false
                 addListener(object : Player.Listener {
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
                         val app = application as? VibeMusicApp
@@ -106,7 +105,6 @@ class VibePlaybackService : MediaLibraryService() {
             return Futures.immediateFuture(resolved)
         }
 
-        // Android Auto / External Media Browser Tree
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,

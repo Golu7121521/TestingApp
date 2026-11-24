@@ -85,7 +85,6 @@ fun HomeScreen(
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(bottom = 140.dp)
     ) {
-        // Top Header with VIBE MUSIC Branding & Greeting
         item {
             Box(
                 modifier = Modifier
@@ -198,7 +197,6 @@ fun HomeScreen(
             }
         }
 
-        // Permission or Empty State Handling
         if (!hasPermission) {
             item {
                 Surface(
@@ -282,7 +280,6 @@ fun HomeScreen(
             }
         }
 
-        // Recently Played Horizontal Section
         if (recentlyPlayed.isNotEmpty()) {
             item {
                 HomeSectionHeader("Recently Played")
@@ -302,7 +299,6 @@ fun HomeScreen(
             }
         }
 
-        // Recently Added Horizontal Section
         if (recentlyAdded.isNotEmpty()) {
             item {
                 HomeSectionHeader("Recently Added")
@@ -322,7 +318,6 @@ fun HomeScreen(
             }
         }
 
-        // Most Played Horizontal Section
         if (mostPlayed.isNotEmpty()) {
             item {
                 HomeSectionHeader("Most Played")
@@ -342,7 +337,6 @@ fun HomeScreen(
             }
         }
 
-        // Your Playlists Horizontal Section
         if (playlists.isNotEmpty()) {
             item {
                 HomeSectionHeader("Your Playlists")
@@ -362,7 +356,6 @@ fun HomeScreen(
             }
         }
 
-        // Albums Horizontal Section
         if (albums.isNotEmpty()) {
             item {
                 HomeSectionHeader("Albums")
@@ -382,7 +375,6 @@ fun HomeScreen(
             }
         }
 
-        // Artists Horizontal Section
         if (artists.isNotEmpty()) {
             item {
                 HomeSectionHeader("Artists")
@@ -438,7 +430,6 @@ fun HomeScreen(
             }
         }
 
-        // All Songs Section
         if (songs.isNotEmpty()) {
             item {
                 HomeSectionHeader("All Songs (${songs.size})")

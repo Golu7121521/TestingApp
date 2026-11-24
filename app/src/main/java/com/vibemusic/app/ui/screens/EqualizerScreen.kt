@@ -86,7 +86,6 @@ fun EqualizerScreen(
             return
         }
 
-        // Preset Selector
         if (eqState.isEqSupported && eqState.presets.isNotEmpty()) {
             Text(
                 text = "Presets",
@@ -110,7 +109,6 @@ fun EqualizerScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Hardware Band Sliders (5-band or 10-band depending on device hardware)
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(18.dp),
@@ -161,7 +159,6 @@ fun EqualizerScreen(
             }
         }
 
-        // Bass Boost (only shown when supported by device hardware)
         if (eqState.isBassBoostSupported) {
             Spacer(modifier = Modifier.height(16.dp))
             Surface(
@@ -191,7 +188,6 @@ fun EqualizerScreen(
             }
         }
 
-        // Virtualizer (only shown when supported by device hardware)
         if (eqState.isVirtualizerSupported) {
             Spacer(modifier = Modifier.height(16.dp))
             Surface(

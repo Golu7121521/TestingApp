@@ -116,7 +116,6 @@ fun NowPlayingScreen(
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
 
-    // Keep Screen On while Now Playing is visible if enabled
     DisposableEffect(prefs.keepScreenOn) {
         val window = (context as? Activity)?.window
         if (prefs.keepScreenOn) {
@@ -127,7 +126,6 @@ fun NowPlayingScreen(
         }
     }
 
-    // Extract dynamic dominant gradient color from album artwork
     LaunchedEffect(liveSong?.albumArtUri, defaultPrimary) {
         val artUri = liveSong?.albumArtUri
         if (artUri == null) {
@@ -158,7 +156,6 @@ fun NowPlayingScreen(
         }
     }
 
-    // Subtle rotation animation when playing and enabled
     val infiniteTransition = rememberInfiniteTransition(label = "artRotation")
     val rotationAngle by infiniteTransition.animateFloat(
         initialValue = 0f,
@@ -215,7 +212,6 @@ fun NowPlayingScreen(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Top Bar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -250,7 +246,6 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Large Album Artwork OR Lyrics View
             if (showLyrics && lyrics.isNotEmpty()) {
                 Surface(
                     modifier = Modifier
@@ -328,7 +323,6 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(20.dp))
 
-            // Track Info & Favorite Button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -362,7 +356,6 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Progress Slider & Timestamps
             Slider(
                 value = currentProgress,
                 onValueChange = {
@@ -399,7 +392,6 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Main Transport Controls
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
@@ -470,7 +462,6 @@ fun NowPlayingScreen(
 
             Spacer(modifier = Modifier.height(14.dp))
 
-            // Secondary Action Strip (Lyrics, Equalizer, Speed, Sleep Timer, Queue)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -511,7 +502,6 @@ fun NowPlayingScreen(
         }
     }
 
-    // Queue Management Bottom Sheet
     if (showQueueSheet) {
         ModalBottomSheet(onDismissRequest = { showQueueSheet = false }) {
             Column(
@@ -575,7 +565,6 @@ fun NowPlayingScreen(
         }
     }
 
-    // Playback Speed Dialog
     if (showSpeedDialog) {
         val speeds = listOf(0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
         AlertDialog(
@@ -607,7 +596,6 @@ fun NowPlayingScreen(
         )
     }
 
-    // Sleep Timer Dialog
     if (showSleepDialog) {
         val options = listOf(0, 15, 30, 45, 60, 90)
         AlertDialog(

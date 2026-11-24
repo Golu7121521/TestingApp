@@ -115,7 +115,6 @@ fun SettingsScreen(
             style = MaterialTheme.typography.headlineMedium
         )
 
-        // 1. APPEARANCE
         SettingsSectionCard("Appearance") {
             Text("Theme Mode", style = MaterialTheme.typography.labelMedium)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -174,7 +173,6 @@ fun SettingsScreen(
             )
         }
 
-        // 2. PLAYBACK
         SettingsSectionCard("Playback") {
             SettingsSwitchRow(
                 title = "Gapless Playback",
@@ -208,7 +206,6 @@ fun SettingsScreen(
             }
         }
 
-        // 3. AUDIO & EQUALIZER
         SettingsSectionCard("Audio") {
             Row(
                 modifier = Modifier
@@ -230,7 +227,6 @@ fun SettingsScreen(
             }
         }
 
-        // 4. LIBRARY & EXCLUSIONS
         SettingsSectionCard("Library") {
             Row(
                 modifier = Modifier
@@ -308,7 +304,6 @@ fun SettingsScreen(
             }
         }
 
-        // 5. BACKUP & RESTORE
         SettingsSectionCard("Backup & Restore") {
             Row(
                 modifier = Modifier
@@ -335,7 +330,6 @@ fun SettingsScreen(
             }
         }
 
-        // 6. OTHER
         SettingsSectionCard("Other") {
             Row(
                 modifier = Modifier
@@ -423,10 +417,8 @@ fun SettingsScreen(
             title = { Text("VIBE MUSIC") },
             text = {
                 Text(
-                    "Version ${BuildConfig.VERSION_NAME}
-" +
-                        "Built with Kotlin, Jetpack Compose, Material 3, Media3 ExoPlayer, and Room.
-" +
+                    "Version ${BuildConfig.VERSION_NAME}\n" +
+                        "Built with Kotlin, Jetpack Compose, Material 3, Media3 ExoPlayer, and Room.\n" +
                         "Good Music, Good Mood."
                 )
             },

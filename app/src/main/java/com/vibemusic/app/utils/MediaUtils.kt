@@ -1,6 +1,5 @@
 package com.vibemusic.app.utils
 
-import android.app.Activity
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
@@ -94,7 +93,7 @@ object MediaUtils {
                 RingtoneManager.TYPE_RINGTONE,
                 song.uri
             )
-            Toast.makeText(context, ""${song.title}" set as Ringtone", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "\"${song.title}\" set as Ringtone", Toast.LENGTH_SHORT).show()
         } catch (e: Exception) {
             Toast.makeText(context, "Cannot set ringtone on this device: ${e.message}", Toast.LENGTH_SHORT).show()
         }

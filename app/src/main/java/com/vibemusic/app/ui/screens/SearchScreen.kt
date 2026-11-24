@@ -177,7 +177,7 @@ fun SearchScreen(
 
             if (totalResults == 0) {
                 Text(
-                    text = "No results found for "$trimmed"",
+                    text = "No results found for \"$trimmed\"",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 24.dp)

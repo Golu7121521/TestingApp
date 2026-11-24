@@ -90,7 +90,6 @@ fun LibraryScreen(
     var activeFolder by remember { mutableStateOf<FolderItem?>(null) }
     var activeGenre by remember { mutableStateOf<Pair<String, List<Song>>?>(null) }
 
-    // Detail Sub-Screen View when an Album, Artist, Folder, or Genre is selected
     val detailTitle = activeAlbum?.name
         ?: activeArtist?.name
         ?: activeFolder?.name
@@ -138,7 +137,6 @@ fun LibraryScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
-        // Header Row
         Row(
             modifier = Modifier
                 .fillMaxWidth()

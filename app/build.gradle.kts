@@ -109,5 +109,5 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.androidx.palette.ktx)
     implementation(libs.guava.android)
-    implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines-android)
 }

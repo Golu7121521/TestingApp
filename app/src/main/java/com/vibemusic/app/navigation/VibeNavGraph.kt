@@ -219,7 +219,6 @@ fun VibeMainScaffold(
             }
         }
 
-        // Full-Screen Now Playing Overlay
         AnimatedVisibility(
             visible = showNowPlaying,
             enter = slideInVertically(initialOffsetY = { it }),
@@ -238,7 +237,6 @@ fun VibeMainScaffold(
         }
     }
 
-    // Song Options Bottom Sheet
     selectedSongForOptions?.let { song ->
         SongOptionsBottomSheet(
             song = song,
@@ -271,7 +269,6 @@ fun VibeMainScaffold(
         )
     }
 
-    // Add to Playlist Dialog
     selectedSongForPlaylist?.let { song ->
         AddToPlaylistDialog(
             playlists = playlists,
@@ -286,7 +283,6 @@ fun VibeMainScaffold(
         )
     }
 
-    // Song Metadata Info Dialog
     selectedSongForInfo?.let { song ->
         SongInfoDialog(
             song = song,
@@ -294,12 +290,11 @@ fun VibeMainScaffold(
         )
     }
 
-    // Legacy Delete Confirmation Dialog (Android < 11)
     pendingDeleteSong?.let { song ->
         AlertDialog(
             onDismissRequest = { pendingDeleteSong = null },
             title = { Text("Delete Audio File") },
-            text = { Text("Permanently delete "${song.title}" from your device?") },
+            text = { Text("Permanently delete \"${song.title}\" from your device?") },
             confirmButton = {
                 TextButton(
                     onClick = {

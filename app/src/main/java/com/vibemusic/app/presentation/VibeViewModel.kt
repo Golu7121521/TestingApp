@@ -174,7 +174,6 @@ class VibeViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch { repository.removeExclusion(pathOrId) }
     }
 
-    // Equalizer Controls
     fun toggleEqualizer(enabled: Boolean) {
         viewModelScope.launch {
             prefsRepo.setEqEnabled(enabled)
@@ -232,7 +231,6 @@ class VibeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    // Settings Updates
     fun setThemeMode(mode: ThemeModeOption) {
         viewModelScope.launch { prefsRepo.setThemeMode(mode) }
     }
