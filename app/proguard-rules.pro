@@ -1,2 +1,2 @@
-# Keep rules for ScreenRecorder
--keep class com.example.screenrecorder.** { *; }
+-keep class androidx.media3.** { *; }
+-keep class com.vibemusic.app.data.local.entity.** { *; }
