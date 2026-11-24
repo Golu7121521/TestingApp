@@ -120,7 +120,7 @@ class MusicViewModel(application: Application) : AndroidViewModel(application) {
                     _uiState.value = _uiState.value.copy(
                         onlineSongs = list,
                         isLoading = false,
-                        errorMessage = if (list.isEmpty()) "No songs found for "$q"" else null
+                        errorMessage = if (list.isEmpty()) "No songs found for \"$q\"" else null
                     )
                 },
                 onFailure = { err ->
