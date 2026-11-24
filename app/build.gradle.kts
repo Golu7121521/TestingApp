@@ -3,41 +3,58 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-val vc = (project.findProperty("vc") as String?)?.toIntOrNull() ?: 1
-val minify = (project.findProperty("minify") as String?) == "true"
-val vn = (project.findProperty("vn") as String?)?.removePrefix("v") ?: "1.0"
-
 android {
-    namespace = "com.example.universalplayer"
+    namespace = "com.business.musicapp"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.universalplayer"
-        minSdk = 26
+        applicationId = "com.business.musicapp"
+        minSdk = 24
         targetSdk = 34
-        versionCode = vc
-        versionName = vn
-        // Only arm64 APK
-        ndk { abiFilters += listOf("arm64-v8a") }
+        versionCode = 1
+        versionName = "1.0"
+
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a")
+            isUniversalApk = false
+        }
     }
 
     signingConfigs {
-        // Fixed key: every build is signed the same way, so friends can update the app without uninstalling.
         create("release") {
-            storeFile = file("release.keystore")
-            storePassword = "universalplayer"
-            keyAlias = "friends"
-            keyPassword = "universalplayer"
+            val keystoreFile = file("keystore/release.jks")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "android123"
+                keyAlias = System.getenv("KEY_ALIAS") ?: "business_music_key"
+                keyPassword = System.getenv("KEY_PASSWORD") ?: "android123"
+            }
         }
     }
 
     buildTypes {
         release {
-            // Smaller APK when built with -Pminify=true (see workflow input). Off by default = safest.
-            isMinifyEnabled = minify
-            isShrinkResources = minify
-            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+            val keystoreFile = file("keystore/release.jks")
+            if (keystoreFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        debug {
+            applicationIdSuffix = ".debug"
         }
     }
 
@@ -45,49 +62,21 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions { jvmTarget = "17" }
 
-    buildFeatures { compose = true }
-    composeOptions { kotlinCompilerExtensionVersion = "1.5.14" }
-
-    packaging {
-        // Required by youtubedl-android (python/yt-dlp are shipped as native libs)
-        jniLibs { useLegacyPackaging = true }
-        resources.excludes += "/META-INF/{AL2.0,LGPL2.1}"
+    kotlinOptions {
+        jvmTarget = "17"
     }
 
-    lint {
-        abortOnError = false
-        checkReleaseBuilds = false
+    buildFeatures {
+        viewBinding = true
     }
 }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.core:core-splashscreen:1.0.1")
-    implementation("androidx.activity:activity-compose:1.9.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.3")
-    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.3")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
-    implementation(composeBom)
-    implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.foundation:foundation")
-    implementation("androidx.compose.material3:material3")
-    implementation("androidx.compose.material:material-icons-extended")
-
-    val media3 = "1.3.1"
-    implementation("androidx.media3:media3-exoplayer:$media3")
-    implementation("androidx.media3:media3-exoplayer-hls:$media3")
-    implementation("androidx.media3:media3-exoplayer-dash:$media3")
-    implementation("androidx.media3:media3-datasource:$media3")
-    implementation("androidx.media3:media3-database:$media3")
-    implementation("androidx.media3:media3-ui:$media3")
-
-
-    implementation("io.coil-kt:coil-compose:2.6.0")
-
-    // yt-dlp wrapper: supports 1000+ sites (YouTube, Vimeo, X, Instagram, Facebook, TikTok ...)
-    implementation("io.github.junkfood02.youtubedl-android:library:0.17.2")
+    implementation("androidx.appcompat:appcompat:1.7.0")
+    implementation("com.google.android.material:material:1.12.0")
+    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+    implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("androidx.cardview:cardview:1.0.0")
 }

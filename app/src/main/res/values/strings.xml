@@ -1,3 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Universal Player</string>
+    <string name="app_name">Business Music</string>
+    <string name="business_title">Business Music Studio</string>
 </resources>
