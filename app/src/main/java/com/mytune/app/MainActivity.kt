@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
         val container = (application as MyTuneApp).container
         container.player.connect()
         setContent {
-            val theme by container.settings.theme.collectAsState(initial = "dark")
+            val theme by container.settings.theme.collectAsState(initial = "system")
             MyTuneTheme(theme) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     NotificationPermission()

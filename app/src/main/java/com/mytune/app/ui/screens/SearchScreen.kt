@@ -38,6 +38,7 @@ import com.mytune.app.di.AppContainer
 import com.mytune.app.domain.*
 import com.mytune.app.ui.UiState
 import com.mytune.app.ui.components.*
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -53,8 +54,12 @@ class SearchViewModel(private val repo: MusicRepository, private val library: co
     val query = MutableStateFlow("")
     val results = MutableStateFlow<UiState<SearchResults>?>(null)
     val history = library.history.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val trendingSongs = MutableStateFlow<List<Song>>(emptyList())
+    val trendingPlaylists = MutableStateFlow<List<MediaCollection>>(emptyList())
 
     init {
+        viewModelScope.launch { repo.searchSongs("trending", 15).getOrNull()?.let { trendingSongs.value = it } }
+        viewModelScope.launch { repo.searchPlaylists("top charts", 15).getOrNull()?.let { trendingPlaylists.value = it } }
         viewModelScope.launch {
             // 400 ms debounce, as requested; collectLatest cancels stale searches.
             query.debounce(400).distinctUntilChanged().collectLatest { q ->
@@ -89,16 +94,45 @@ class SearchViewModel(private val repo: MusicRepository, private val library: co
     fun clearHistory() { viewModelScope.launch { library.clearHistory() } }
 }
 
+private val TRENDING_SEARCHES = listOf("Arijit Singh", "Punjabi hits", "Love songs", "Diljit Dosanjh", "Lofi chill", "Bollywood party", "Sidhu Moose Wala", "Devotional")
+
+private data class Browse(val title: String, val query: String, val color: Color)
+
+private val BROWSE = listOf(
+    Browse("Top Charts", "top charts", Color(0xFF15803D)),
+    Browse("New Releases", "new releases", Color(0xFF0F766E)),
+    Browse("Podcasts", "podcast", Color(0xFFB45309)),
+    Browse("Radio", "radio", Color(0xFF1D4ED8)),
+    Browse("Hindi", "hindi hits", Color(0xFFBE123C)),
+    Browse("English", "english hits", Color(0xFF475569)),
+    Browse("Punjabi", "punjabi hits", Color(0xFF9A3412)),
+    Browse("Tamil", "tamil hits", Color(0xFF0E7490)),
+    Browse("Telugu", "telugu hits", Color(0xFF4D7C0F)),
+    Browse("Romance", "romantic songs", Color(0xFFBE185D)),
+    Browse("Party", "party songs", Color(0xFFC2410C)),
+    Browse("Chill", "chill songs", Color(0xFF0369A1)),
+    Browse("Workout", "workout songs", Color(0xFF166534)),
+    Browse("Devotional", "devotional songs", Color(0xFFA16207)),
+)
+
 @Composable
 fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
     val vm: SearchViewModel = viewModel(factory = viewModelFactory { initializer { SearchViewModel(c.repository, c.library) } })
     val query by vm.query.collectAsState()
     val results by vm.results.collectAsState()
     val history by vm.history.collectAsState()
+    val trendingSongs by vm.trendingSongs.collectAsState()
+    val trendingPlaylists by vm.trendingPlaylists.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf(R.string.tab_songs, R.string.tab_albums, R.string.tab_playlists, R.string.tab_artists)
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Text(
+            stringResource(R.string.nav_search),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp),
+        )
         OutlinedTextField(
             value = query,
             onValueChange = { vm.query.value = it },
@@ -116,16 +150,18 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
 
         when (val r = results) {
             null -> {
-                // No query yet: show local search history
-                if (history.isNotEmpty()) {
-                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(stringResource(R.string.search_history), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                        TextButton(onClick = { vm.clearHistory() }) { Text(stringResource(R.string.clear)) }
-                    }
-                    LazyColumn {
-                        items(history.size) { i ->
+                // No query yet: history, trending and browse categories (JioSaavn style)
+                LazyColumn(Modifier.fillMaxSize()) {
+                    if (history.isNotEmpty()) {
+                        item {
+                            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(stringResource(R.string.search_history), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                                TextButton(onClick = { vm.clearHistory() }) { Text(stringResource(R.string.clear)) }
+                            }
+                        }
+                        items(history.take(5).size) { i ->
                             Row(
-                                Modifier.fillMaxWidth().clickable { vm.query.value = history[i] }.padding(horizontal = 16.dp, vertical = 12.dp),
+                                Modifier.fillMaxWidth().clickable { vm.query.value = history[i] }.padding(horizontal = 16.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -134,6 +170,58 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                             }
                         }
                     }
+                    item {
+                        Column {
+                            SectionHeader("Trending Searches")
+                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(TRENDING_SEARCHES.size) { i ->
+                                    AssistChip(onClick = { vm.query.value = TRENDING_SEARCHES[i] }, label = { Text(TRENDING_SEARCHES[i]) }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.TrendingUp, null, Modifier.size(18.dp)) })
+                                }
+                            }
+                        }
+                    }
+                    if (trendingSongs.isNotEmpty()) {
+                        item {
+                            Column {
+                                SectionHeader("Trending Songs")
+                                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    itemsIndexed(trendingSongs) { i, song -> MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(trendingSongs, i) } }
+                                }
+                            }
+                        }
+                    }
+                    if (trendingPlaylists.isNotEmpty()) {
+                        item {
+                            Column {
+                                SectionHeader("Charts & Channels")
+                                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    items(trendingPlaylists.size) { i ->
+                                        val p = trendingPlaylists[i]
+                                        MediaCard(p.title, p.subtitle, p.artworkUrl) { onOpen(p.type, p.id) }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { SectionHeader("Browse All") }
+                    items(BROWSE.chunked(2).size) { row ->
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            BROWSE.chunked(2)[row].forEach { b ->
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .height(72.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Brush.linearGradient(listOf(b.color, b.color.copy(alpha = 0.6f))))
+                                        .clickable { vm.query.value = b.query }
+                                        .padding(12.dp),
+                                ) {
+                                    Text(b.title, color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
+                        }
+                    }
+                    item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                 }
             }
             is UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -151,6 +239,7 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                             2 -> collectionItems(data.playlists, onOpen)
                             else -> collectionItems(data.artists, onOpen)
                         }
+                        item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                     }
                 }
             }

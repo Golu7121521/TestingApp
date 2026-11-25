@@ -51,7 +51,35 @@ class DetailViewModel(
     private val _state = MutableStateFlow<UiState<MediaCollection>>(UiState.Loading)
     val state = _state.asStateFlow()
 
+    /** "More like this": songs similar to the first track, plus artists related to it. */
+    val relatedSongs = MutableStateFlow<List<Song>>(emptyList())
+    val relatedArtists = MutableStateFlow<List<MediaCollection>>(emptyList())
+
     init { load() }
+
+    private fun loadRelated(col: MediaCollection) {
+        val first = col.songs.firstOrNull() ?: return
+        viewModelScope.launch {
+            val inList = col.songs.map { it.id }.toSet()
+            repo.suggestions(first.id, 25).getOrNull()?.let { l -> relatedSongs.value = l.filter { it.id !in inList } }
+        }
+        val name = first.artist.split(",").firstOrNull()?.trim().orEmpty()
+        if (name.isNotBlank()) viewModelScope.launch {
+            repo.searchArtists(name, 12).getOrNull()?.let { l -> relatedArtists.value = l.filter { it.id != col.id } }
+        }
+    }
+
+    /** Adds the whole collection to the local library as a playlist (or removes it again). */
+    fun toggleLibrary(col: MediaCollection, saved: com.mytune.app.data.db.PlaylistInfo?) {
+        viewModelScope.launch {
+            if (saved != null) {
+                library.deletePlaylist(saved.id)
+            } else {
+                val pid = library.createPlaylist(col.title)
+                col.songs.forEach { library.addToPlaylist(pid, it) }
+            }
+        }
+    }
 
     fun load() {
         viewModelScope.launch {
@@ -69,6 +97,7 @@ class DetailViewModel(
                     else -> repo.artist(id)
                 }
                 _state.value = result.fold({ UiState.Success(it) }, { UiState.Error(it.message) })
+                result.getOrNull()?.let { loadRelated(it) }
             }
         }
     }
@@ -80,84 +109,107 @@ class DetailViewModel(
 }
 
 @Composable
-fun DetailScreen(c: AppContainer, type: String, id: String, onBack: () -> Unit) {
+fun DetailScreen(c: AppContainer, type: String, id: String, onBack: () -> Unit, onOpen: (String, String) -> Unit) {
     val vm: DetailViewModel = viewModel(
         key = "detail_${type}_$id",
         factory = viewModelFactory { initializer { DetailViewModel(type, id, c.repository, c.library) } },
     )
     val state by vm.state.collectAsState()
+    val related by vm.relatedSongs.collectAsState()
+    val relatedArtists by vm.relatedArtists.collectAsState()
+    val myPlaylists by c.library.playlists.collectAsState(initial = emptyList<com.mytune.app.data.db.PlaylistInfo>())
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val title = (state as? UiState.Success)?.data?.title.orEmpty()
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        topBar = {
-            // Collapsing toolbar: the large title shrinks as the list scrolls.
-            LargeTopAppBar(
-                title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) } },
-                scrollBehavior = scrollBehavior,
-            )
-        },
-    ) { pad ->
+    Box(Modifier.fillMaxSize()) {
         when (val s = state) {
-            is UiState.Loading -> Box(Modifier.fillMaxSize().padding(pad), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            is UiState.Error -> Box(Modifier.fillMaxSize().padding(pad)) { ErrorView(onRetry = { vm.load() }) }
+            is UiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            is UiState.Error -> Box(Modifier.fillMaxSize().statusBarsPadding().padding(top = 48.dp)) { ErrorView(onRetry = { vm.load() }) }
             is UiState.Success -> {
                 val col = s.data
+                val saved = myPlaylists.firstOrNull { it.name == col.title }
                 val removeAction: ((Song) -> Unit)? =
                     if (col.type == CollectionType.USER) ({ song: Song -> vm.removeFromPlaylist(song.id) }) else null
                 SongActionsHost(c) { actions ->
-                    LazyColumn(Modifier.fillMaxSize().padding(pad)) {
+                    LazyColumn(Modifier.fillMaxSize()) {
                         item {
-                            Column(Modifier.fillMaxWidth().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Column(
+                                Modifier.fillMaxWidth().statusBarsPadding().padding(start = 32.dp, end = 32.dp, top = 56.dp, bottom = 8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                // 1. Thumbnail
                                 Artwork(
                                     col.artworkUrl,
-                                    Modifier.size(220.dp),
+                                    Modifier.fillMaxWidth().aspectRatio(1f),
                                     if (col.type == CollectionType.ARTIST) CircleShape else RoundedCornerShape(16.dp),
                                 )
+                                // 2. Name
+                                Spacer(Modifier.height(16.dp))
+                                Text(col.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 if (col.subtitle.isNotBlank()) {
-                                    Spacer(Modifier.height(8.dp))
+                                    Spacer(Modifier.height(4.dp))
                                     Text(col.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
-                                Spacer(Modifier.height(12.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    Button(onClick = { c.player.play(col.songs, 0) }, enabled = col.songs.isNotEmpty()) {
-                                        Icon(Icons.Default.PlayArrow, null)
-                                        Text(stringResource(R.string.play))
+                                Spacer(Modifier.height(16.dp))
+                                // 3. Actions: add to library, download, shuffle, play
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    if (col.type != CollectionType.USER) {
+                                        FilledTonalButton(onClick = {
+                                            vm.toggleLibrary(col, saved)
+                                            Toast.makeText(ctx, if (saved != null) "Removed from library" else "Added to library", Toast.LENGTH_SHORT).show()
+                                        }, enabled = col.songs.isNotEmpty()) {
+                                            Icon(if (saved != null) Icons.Default.Check else Icons.Default.Add, null, Modifier.size(18.dp))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text(if (saved != null) "In Library" else "Add to Library")
+                                        }
                                     }
-                                    OutlinedButton(
-                                        onClick = { c.player.play(col.songs, col.songs.indices.random(), shuffle = true) },
-                                        enabled = col.songs.isNotEmpty(),
-                                    ) {
-                                        Icon(Icons.Default.Shuffle, null)
-                                        Text(stringResource(R.string.shuffle))
-                                    }
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                OutlinedButton(
-                                    onClick = {
+                                    IconButton(onClick = {
                                         scope.launch { col.songs.forEach { c.downloads.enqueue(it, c.settings.downloadQualityNow) } }
                                         Toast.makeText(ctx, ctx.getString(R.string.download_started), Toast.LENGTH_SHORT).show()
-                                    },
-                                    enabled = col.songs.isNotEmpty(),
-                                ) {
-                                    Icon(Icons.Default.Download, null)
-                                    Text(stringResource(R.string.download_all))
+                                    }, enabled = col.songs.isNotEmpty()) { Icon(Icons.Default.Download, stringResource(R.string.download_all)) }
+                                    IconButton(
+                                        onClick = { c.player.play(col.songs, col.songs.indices.random(), shuffle = true) },
+                                        enabled = col.songs.isNotEmpty(),
+                                    ) { Icon(Icons.Default.Shuffle, stringResource(R.string.shuffle)) }
+                                    FilledIconButton(
+                                        onClick = { c.player.play(col.songs, 0) },
+                                        enabled = col.songs.isNotEmpty(),
+                                        modifier = Modifier.size(56.dp),
+                                    ) { Icon(Icons.Default.PlayArrow, stringResource(R.string.play), Modifier.size(32.dp)) }
                                 }
                             }
                         }
                         if (col.songs.isEmpty()) item { EmptyText(R.string.empty_list) }
-                        songItems(
-                            col.songs, actions, c,
-                            onRemove = removeAction,
-                        )
+                        songItems(col.songs, actions, c, onRemove = removeAction)
+
+                        // 4. Related artists
+                        if (relatedArtists.isNotEmpty()) {
+                            item {
+                                Column {
+                                    SectionHeader("Related Artists")
+                                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        items(relatedArtists.size) { i ->
+                                            val a = relatedArtists[i]
+                                            MediaCard(a.title, a.subtitle, a.artworkUrl, circle = true) { onOpen(a.type, a.id) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        // 5. More songs like this (also what keeps playing after the list ends)
+                        if (related.isNotEmpty()) {
+                            item { SectionHeader("More Like This") }
+                            songItems(related, actions, c)
+                        }
+                        item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                     }
                 }
             }
         }
+        // Back button floating over the thumbnail
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.statusBarsPadding().padding(8.dp).background(MaterialTheme.colorScheme.surface.copy(alpha = 0.6f), CircleShape),
+        ) { Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.back)) }
     }
 }

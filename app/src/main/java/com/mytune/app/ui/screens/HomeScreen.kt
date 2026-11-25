@@ -33,6 +33,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import coil.compose.AsyncImage
+import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.scale
 import com.mytune.app.R
 import com.mytune.app.di.AppContainer
 import com.mytune.app.domain.*
@@ -63,7 +66,7 @@ class HomeViewModel(private val repo: MusicRepository) : ViewModel() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
+fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -> Unit) {
     val vm: HomeViewModel = viewModel(factory = viewModelFactory { initializer { HomeViewModel(c.repository) } })
     val state by vm.state.collectAsState()
     val refreshing by vm.refreshing.collectAsState()
@@ -76,16 +79,24 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
     ) {
         LazyColumn(Modifier.fillMaxSize()) {
             item {
-                Text(
-                    stringResource(R.string.app_name),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp),
-                )
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // App icon (launcher foreground on the launcher background colour)
+                    Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(colorResource(R.color.ic_launcher_background))) {
+                        Image(painterResource(R.drawable.ic_launcher_foreground), null, Modifier.fillMaxSize().scale(1.6f))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    IconButton(onClick = onSearch) { Icon(Icons.Default.Search, stringResource(R.string.nav_search)) }
+                }
             }
             when (val s = state) {
                 is UiState.Loading -> {
-                    items(3) {
+                    items(4) {
                         Column {
                             Spacer(Modifier.height(24.dp))
                             ShimmerRow()
@@ -94,48 +105,41 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                 }
                 is UiState.Error -> item { ErrorView(onRetry = { vm.load() }) }
                 is UiState.Success -> {
-                    val data = s.data
-                    if (data.trending.isNotEmpty()) {
-                        item { SectionTitle(R.string.trending) }
-                        item {
-                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                itemsIndexed(data.trending) { i, song ->
-                                    MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(data.trending, i) }
+                    s.data.sections.forEachIndexed { index, section ->
+                        item(key = "sec_${index}_${section.title}") {
+                            Column {
+                                SectionHeader(section.title)
+                                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    if (section.songs.isNotEmpty()) {
+                                        itemsIndexed(section.songs) { i, song ->
+                                            MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(section.songs, i) }
+                                        }
+                                    } else {
+                                        items(section.collections.size) { i ->
+                                            val item = section.collections[i]
+                                            MediaCard(item.title, item.subtitle, item.artworkUrl, circle = section.circle) { onOpen(item.type, item.id) }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (data.newReleases.isNotEmpty()) {
-                        item { SectionTitle(R.string.new_releases) }
-                        item { CollectionRowList(data.newReleases, onOpen) }
-                    }
-                    if (recents.isNotEmpty()) {
-                        item { SectionTitle(R.string.recently_played) }
-                        item {
-                            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                itemsIndexed(recents) { i, song ->
-                                    MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(recents, i) }
+                        // Personal row right after the first two sections
+                        if (index == 1 && recents.isNotEmpty()) {
+                            item(key = "recents") {
+                                Column {
+                                    SectionHeader(stringResource(R.string.recently_played))
+                                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        itemsIndexed(recents) { i, song ->
+                                            MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(recents, i) }
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
-                    if (data.playlists.isNotEmpty()) {
-                        item { SectionTitle(R.string.top_playlists) }
-                        item { CollectionRowList(data.playlists, onOpen) }
                     }
                 }
             }
-            item { Spacer(Modifier.height(16.dp)) }
-        }
-    }
-}
-
-@Composable
-private fun CollectionRowList(items: List<MediaCollection>, onOpen: (String, String) -> Unit) {
-    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(items.size) { i ->
-            val item = items[i]
-            MediaCard(item.title, item.subtitle, item.artworkUrl) { onOpen(item.type, item.id) }
+            item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
         }
     }
 }

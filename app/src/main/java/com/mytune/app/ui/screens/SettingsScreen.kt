@@ -51,32 +51,15 @@ import kotlinx.coroutines.withContext
 fun SettingsScreen(c: AppContainer) {
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
-    val stream by c.settings.streamQuality.collectAsState(initial = 320)
-    val download by c.settings.downloadQuality.collectAsState(initial = 320)
-    val theme by c.settings.theme.collectAsState(initial = "dark")
-    val qualities = listOf(96, 160, 320)
+    val theme by c.settings.theme.collectAsState(initial = "system")
 
-    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
+    Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = LocalBottomInset.current + 16.dp)) {
         Text(
             stringResource(R.string.nav_settings),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(16.dp),
         )
-
-        SectionTitle(R.string.streaming_quality)
-        ChipRow {
-            qualities.forEach { q ->
-                FilterChip(selected = stream == q, onClick = { scope.launch { c.settings.setStreamQuality(q) } }, label = { Text(stringResource(R.string.kbps_fmt, q)) })
-            }
-        }
-
-        SectionTitle(R.string.download_quality)
-        ChipRow {
-            qualities.forEach { q ->
-                FilterChip(selected = download == q, onClick = { scope.launch { c.settings.setDownloadQuality(q) } }, label = { Text(stringResource(R.string.kbps_fmt, q)) })
-            }
-        }
 
         SectionTitle(R.string.download_location)
         Text(
@@ -87,7 +70,7 @@ fun SettingsScreen(c: AppContainer) {
 
         SectionTitle(R.string.theme)
         ChipRow {
-            listOf("dark" to R.string.theme_dark, "light" to R.string.theme_light, "system" to R.string.theme_system).forEach { (key, label) ->
+            listOf("system" to R.string.theme_system, "dark" to R.string.theme_dark, "light" to R.string.theme_light).forEach { (key, label) ->
                 FilterChip(selected = theme == key, onClick = { scope.launch { c.settings.setTheme(key) } }, label = { Text(stringResource(label)) })
             }
         }

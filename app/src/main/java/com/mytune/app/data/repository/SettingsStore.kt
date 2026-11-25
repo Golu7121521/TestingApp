@@ -25,8 +25,8 @@ class SettingsStore(context: Context, scope: CoroutineScope) {
 
     val streamQuality: Flow<Int> = ds.data.map { it[STREAM] ?: 320 }
     val downloadQuality: Flow<Int> = ds.data.map { it[DOWNLOAD] ?: 320 }
-    /** "dark" (default), "light" or "system". */
-    val theme: Flow<String> = ds.data.map { it[THEME] ?: "dark" }
+    /** "system" (default), "dark" or "light". */
+    val theme: Flow<String> = ds.data.map { it[THEME] ?: "system" }
 
     // Cached copies so non-suspending code (the stream resolver, workers) can read the latest value.
     @Volatile var streamQualityNow: Int = 320

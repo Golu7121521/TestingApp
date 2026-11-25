@@ -88,11 +88,35 @@ class PlayerController(
     private var errorFlag = false
     private var sleepJob: Job? = null
 
+    /** Set by AppContainer: returns songs similar to a song id. Used for endless autoplay. */
+    var suggestionProvider: (suspend (String) -> List<Song>)? = null
+    private val autoplayDone = mutableSetOf<String>()
+    private var autoplayJob: Job? = null
+
+    /** When the queue is about to run out, append similar songs so music keeps playing. */
+    private fun maybeAutoplay() {
+        val c = controller ?: return
+        val provider = suggestionProvider ?: return
+        val count = c.mediaItemCount
+        if (count == 0 || c.currentMediaItemIndex < count - 2) return
+        val last = c.getMediaItemAt(count - 1).mediaId
+        if (!autoplayDone.add(last)) return
+        autoplayJob?.cancel()
+        autoplayJob = scope.launch {
+            val more = provider(last)
+            val ctl = controller ?: return@launch
+            val existing = (0 until ctl.mediaItemCount).map { ctl.getMediaItemAt(it).mediaId }.toSet()
+            val fresh = more.filter { it.id !in existing }
+            if (fresh.isNotEmpty()) ctl.addMediaItems(fresh.map { it.toMediaItem() })
+        }
+    }
+
     private val listener = object : Player.Listener {
         override fun onEvents(player: Player, events: Player.Events) = refresh(player)
 
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             errorFlag = false
+            maybeAutoplay()
             mediaItem?.let {
                 val song = it.toSong()
                 scope.launch(Dispatchers.IO) { library.addRecent(song) }
@@ -183,8 +207,11 @@ class PlayerController(
             c.setMediaItems(songs.map { it.toMediaItem() }, startIndex.coerceIn(0, songs.lastIndex), 0L)
             c.prepare()
             c.play()
+            maybeAutoplay()
         }
     }
+
+    fun setSpeed(speed: Float) = withController { it.setPlaybackSpeed(speed) }
 
     fun playNext(song: Song) = withController { c ->
         if (c.mediaItemCount == 0) play(listOf(song)) else c.addMediaItem(c.currentMediaItemIndex + 1, song.toMediaItem())

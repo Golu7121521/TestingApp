@@ -54,6 +54,12 @@ import com.mytune.app.ui.screens.DownloadsScreen
 import com.mytune.app.ui.screens.HomeScreen
 import com.mytune.app.ui.screens.LibraryScreen
 import com.mytune.app.ui.screens.PlayerScreen
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import com.mytune.app.ui.screens.SearchScreen
 import com.mytune.app.ui.screens.SettingsScreen
 
@@ -63,7 +69,6 @@ object Routes {
     const val LIBRARY = "library"
     const val SETTINGS = "settings"
     const val DOWNLOADS = "downloads"
-    const val PLAYER = "player"
     const val DETAIL = "detail/{type}/{id}"
     fun detail(type: String, id: String) = "detail/$type/${Uri.encode(id)}"
 }
@@ -83,89 +88,132 @@ fun AppRoot(c: AppContainer) {
     )
     val showNav = route in items.map { it.route }
     val open: (String, String) -> Unit = { type, id -> nav.navigate(Routes.detail(type, id)) }
+    val goTab: (String) -> Unit = { r ->
+        nav.navigate(r) {
+            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
-    Scaffold(
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (route != Routes.PLAYER) {
-                Column(Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))) {
-                    // Floating mini player sits directly above the tab bar
-                    if (player.hasMedia) {
-                        MiniPlayer(player, onOpen = { nav.navigate(Routes.PLAYER) }, onToggle = { c.player.togglePlay() }, onNext = { c.player.next() })
-                    }
-                    if (showNav) {
-                        Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)))
-                        // iOS-style tab bar: icon + label, accent colour for the selected tab
-                        Row(
-                            Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp).padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            items.forEach { item ->
-                                val sel = route == item.route
-                                val tint = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                Column(
-                                    Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clickable(
-                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                                            indication = null,
-                                        ) {
-                                            nav.navigate(item.route) {
-                                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                                launchSingleTop = true
-                                                restoreState = true
-                                            }
-                                        },
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.Center,
-                                ) {
-                                    Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-                                    Spacer(Modifier.height(2.dp))
-                                    Text(
-                                        stringResource(item.label),
-                                        fontSize = 11.sp,
-                                        color = tint,
-                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
-                                        maxLines = 1,
-                                    )
-                                }
-                            }
-                        }
-                    } else {
-                        Spacer(Modifier.navigationBarsPadding())
-                    }
+    val scope = rememberCoroutineScope()
+    // 0f = player collapsed (mini player), 1f = full screen. Follows the finger while dragging.
+    val expand = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    var bottomBarPx by remember { mutableIntStateOf(0) }
+    val bottomInset = with(density) { bottomBarPx.toDp() }
+
+    LaunchedEffect(player.hasMedia) { if (!player.hasMedia) expand.snapTo(0f) }
+    BackHandler(enabled = expand.value > 0f) { scope.launch { expand.animateTo(0f, tween(300)) } }
+
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val heightPx = with(density) { maxHeight.toPx() }
+        val dragState = rememberDraggableState { dy ->
+            scope.launch { expand.snapTo((expand.value - dy / heightPx).coerceIn(0f, 1f)) }
+        }
+        fun settle(velocity: Float) {
+            val to = when {
+                velocity < -900f -> 1f
+                velocity > 900f -> 0f
+                expand.value > 0.5f -> 1f
+                else -> 0f
+            }
+            scope.launch { expand.animateTo(to, spring(dampingRatio = 0.85f, stiffness = 380f)) }
+        }
+        val dragModifier = Modifier.draggable(dragState, Orientation.Vertical, onDragStopped = { settle(it) })
+
+        CompositionLocalProvider(LocalBottomInset provides bottomInset) {
+            // Screens draw edge to edge, behind the transparent bottom bar.
+            NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
+                composable(Routes.HOME) { HomeScreen(c, open, onSearch = { goTab(Routes.SEARCH) }) }
+                composable(Routes.SEARCH) { SearchScreen(c, open) }
+                composable(Routes.LIBRARY) { LibraryScreen(c, open, onDownloads = { nav.navigate(Routes.DOWNLOADS) }) }
+                composable(Routes.SETTINGS) { SettingsScreen(c) }
+                composable(Routes.DOWNLOADS) { DownloadsScreen(c, onBack = { nav.popBackStack() }) }
+                composable(
+                    Routes.DETAIL,
+                    arguments = listOf(
+                        navArgument("type") { type = NavType.StringType },
+                        navArgument("id") { type = NavType.StringType },
+                    ),
+                ) { entry ->
+                    DetailScreen(
+                        c,
+                        type = entry.arguments?.getString("type").orEmpty(),
+                        id = entry.arguments?.getString("id").orEmpty(),
+                        onBack = { nav.popBackStack() },
+                        onOpen = open,
+                    )
                 }
             }
-        },
-    ) { pad ->
-        NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.padding(pad)) {
-            composable(Routes.HOME) { HomeScreen(c, open) }
-            composable(Routes.SEARCH) { SearchScreen(c, open) }
-            composable(Routes.LIBRARY) { LibraryScreen(c, open, onDownloads = { nav.navigate(Routes.DOWNLOADS) }) }
-            composable(Routes.SETTINGS) { SettingsScreen(c) }
-            composable(Routes.DOWNLOADS) { DownloadsScreen(c, onBack = { nav.popBackStack() }) }
-            composable(
-                Routes.DETAIL,
-                arguments = listOf(
-                    navArgument("type") { type = NavType.StringType },
-                    navArgument("id") { type = NavType.StringType },
-                ),
-            ) { entry ->
-                DetailScreen(
-                    c,
-                    type = entry.arguments?.getString("type").orEmpty(),
-                    id = entry.arguments?.getString("id").orEmpty(),
-                    onBack = { nav.popBackStack() },
+        }
+
+        // Mini player + bottom navigation, floating over the content
+        Column(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomBarPx = it.height }) {
+            if (player.hasMedia) {
+                MiniPlayer(
+                    player,
+                    onOpen = { scope.launch { expand.animateTo(1f, tween(320)) } },
+                    onToggle = { c.player.togglePlay() },
+                    onNext = { c.player.next() },
+                    modifier = dragModifier,
                 )
             }
-            composable(
-                Routes.PLAYER,
-                enterTransition = { slideInVertically(tween(300)) { it } },
-                exitTransition = { slideOutVertically(tween(300)) { it } },
-                popEnterTransition = { slideInVertically(tween(300)) { it } },
-                popExitTransition = { slideOutVertically(tween(300)) { it } },
-            ) { PlayerScreen(c, onBack = { nav.popBackStack() }) }
+            if (showNav) {
+                // Fully transparent at the top, fading to dark at the bottom
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(0f to Color.Transparent, 0.55f to Color(0x99000000), 1f to Color(0xF2000000)))
+                        .navigationBarsPadding()
+                        .height(64.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    items.forEach { item ->
+                        val sel = route == item.route
+                        Column(
+                            Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .clickable(
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                    indication = null,
+                                ) { goTab(item.route) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            val tint = if (sel) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.7f)
+                            Icon(item.icon, null, tint = tint, modifier = Modifier.size(26.dp))
+                            Text(stringResource(item.label), color = tint, fontSize = 11.sp, fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Normal)
+                        }
+                    }
+                }
+            } else {
+                Spacer(Modifier.navigationBarsPadding())
+            }
+        }
+
+        // Full-screen player: slides with the finger and shrinks/fades into the mini player.
+        if (expand.value > 0f && player.hasMedia) {
+            Box(Modifier.fillMaxSize().then(dragModifier)) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            val e = expand.value
+                            translationY = (1f - e) * size.height
+                            val sc = 0.94f + 0.06f * e
+                            scaleX = sc
+                            scaleY = sc
+                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
+                            alpha = (e / 0.55f).coerceIn(0f, 1f)
+                            shape = RoundedCornerShape(topStart = 28.dp * (1f - e), topEnd = 28.dp * (1f - e))
+                            clip = true
+                        },
+                ) {
+                    PlayerScreen(c, onBack = { scope.launch { expand.animateTo(0f, tween(300)) } })
+                }
+            }
         }
     }
 }

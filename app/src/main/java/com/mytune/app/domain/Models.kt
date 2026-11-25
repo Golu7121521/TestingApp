@@ -21,11 +21,15 @@ data class MediaCollection(
     val songs: List<Song> = emptyList(),
 )
 
-data class HomeData(
-    val trending: List<Song>,
-    val newReleases: List<MediaCollection>,
-    val playlists: List<MediaCollection>,
+/** One horizontal row on the home screen: either songs or collections (albums / playlists / artists / podcasts). */
+data class HomeSection(
+    val title: String,
+    val songs: List<Song> = emptyList(),
+    val collections: List<MediaCollection> = emptyList(),
+    val circle: Boolean = false,
 )
+
+data class HomeData(val sections: List<HomeSection>)
 
 object CollectionType {
     const val ALBUM = "album"

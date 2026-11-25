@@ -86,7 +86,7 @@ fun ShimmerRow() {
 }
 
 @Composable
-fun Artwork(url: String, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(12.dp)) {
+fun Artwork(url: String, modifier: Modifier = Modifier, shape: Shape = RoundedCornerShape(8.dp)) {
     AsyncImage(
         model = url.ifBlank { null },
         contentDescription = null,
@@ -118,15 +118,16 @@ fun EmptyText(res: Int) {
 fun SectionTitle(res: Int) {
     Text(
         stringResource(res),
-        style = MaterialTheme.typography.headlineSmall,
-        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 12.dp),
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 10.dp),
     )
 }
 
 @Composable
 fun MediaCard(title: String, subtitle: String, artworkUrl: String, circle: Boolean = false, onClick: () -> Unit) {
-    Column(Modifier.width(150.dp).clickable(onClick = onClick)) {
-        Artwork(artworkUrl, Modifier.size(150.dp), if (circle) CircleShape else RoundedCornerShape(16.dp))
+    Column(Modifier.width(140.dp).clickable(onClick = onClick)) {
+        Artwork(artworkUrl, Modifier.size(140.dp), if (circle) CircleShape else RoundedCornerShape(12.dp))
         Spacer(Modifier.height(6.dp))
         Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
         Text(subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -140,7 +141,7 @@ fun CollectionRow(item: MediaCollection, onClick: () -> Unit) {
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(item.artworkUrl, Modifier.size(60.dp), if (item.type == CollectionType.ARTIST) CircleShape else RoundedCornerShape(12.dp))
+        Artwork(item.artworkUrl, Modifier.size(56.dp), if (item.type == CollectionType.ARTIST) CircleShape else RoundedCornerShape(8.dp))
         Column(Modifier.padding(start = 12.dp)) {
             Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (item.subtitle.isNotBlank()) {
@@ -166,7 +167,7 @@ fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (()
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(song.artworkUrl, Modifier.size(56.dp), RoundedCornerShape(10.dp))
+        Artwork(song.artworkUrl, Modifier.size(52.dp))
         Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
             Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyLarge)
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -311,16 +312,31 @@ fun PlaylistPickerDialog(c: AppContainer, song: Song, onDismiss: () -> Unit) {
     )
 }
 
+/** Height (bottom navigation + mini player) that scrolling screens should leave free at the end of their lists. */
+val LocalBottomInset = compositionLocalOf { 0.dp }
+
+/** Section title taking a plain string (used by the dynamic home / search sections). */
 @Composable
-fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit, onNext: () -> Unit) {
+fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    Text(
+        text,
+        style = MaterialTheme.typography.titleLarge,
+        fontWeight = FontWeight.Bold,
+        modifier = modifier.padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 10.dp),
+    )
+}
+
+@Composable
+fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit, onNext: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shape = RoundedCornerShape(16.dp),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp).clip(RoundedCornerShape(16.dp)).clickable(onClick = onOpen),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        tonalElevation = 2.dp,
+        modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth().clickable(onClick = onOpen),
     ) {
         Column {
-            Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(state.artworkUrl, Modifier.size(44.dp), RoundedCornerShape(8.dp))
+            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Artwork(state.artworkUrl, Modifier.size(44.dp))
                 Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
                     Text(state.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
                     Text(state.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

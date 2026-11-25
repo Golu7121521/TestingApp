@@ -70,7 +70,7 @@ fun DownloadsScreen(c: AppContainer, onBack: () -> Unit) {
         },
     ) { pad ->
         SongActionsHost(c) { actions ->
-            LazyColumn(Modifier.fillMaxSize().padding(pad)) {
+            LazyColumn(Modifier.fillMaxSize().padding(pad), contentPadding = PaddingValues(bottom = LocalBottomInset.current + 16.dp)) {
                 item {
                     Text(
                         stringResource(R.string.storage_used_fmt, Formatter.formatShortFileSize(ctx, used)),

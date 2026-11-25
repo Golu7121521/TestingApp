@@ -69,7 +69,7 @@ fun LibraryScreen(c: AppContainer, onOpen: (String, String) -> Unit, onDownloads
             tabs.forEachIndexed { i, res -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(res)) }) }
         }
         SongActionsHost(c) { actions ->
-            LazyColumn(Modifier.fillMaxSize()) {
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalBottomInset.current + 16.dp)) {
                 when (tab) {
                     0 -> {
                         item {

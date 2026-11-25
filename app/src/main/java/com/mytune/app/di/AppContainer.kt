@@ -67,12 +67,16 @@ class AppContainer(private val app: Application) {
             .create(JioSaavnService::class.java)
     )
 
+    val lyrics = com.mytune.app.data.repository.LyricsRepository(okHttp)
+
     val db: AppDatabase = Room.databaseBuilder(app, AppDatabase::class.java, "mytune.db").build()
     val settings = SettingsStore(app, appScope)
     val library = LibraryRepository(db.dao())
     val downloads = DownloadRepository(app, db.dao(), this)
     val resolver = StreamResolver(repository, db.dao(), settings)
-    val player = PlayerController(app, appScope, library)
+    val player = PlayerController(app, appScope, library).also { pc ->
+        pc.suggestionProvider = { id -> repository.suggestions(id, 20).getOrDefault(emptyList()) }
+    }
 
     /** App-specific external storage: no storage permission required. */
     fun musicDir(): File {
