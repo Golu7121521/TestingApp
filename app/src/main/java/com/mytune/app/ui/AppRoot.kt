@@ -94,20 +94,40 @@ fun AppRoot(c: AppContainer) {
                         MiniPlayer(player, onOpen = { nav.navigate(Routes.PLAYER) }, onToggle = { c.player.togglePlay() }, onNext = { c.player.next() })
                     }
                     if (showNav) {
-                        NavigationBar {
+                        // Thin bar: fully transparent at the top fading to dark at the bottom
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
+                                .navigationBarsPadding()
+                                .height(48.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             items.forEach { item ->
-                                NavigationBarItem(
-                                    selected = route == item.route,
-                                    onClick = {
-                                        nav.navigate(item.route) {
-                                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                                            launchSingleTop = true
-                                            restoreState = true
-                                        }
-                                    },
-                                    icon = { Icon(item.icon, null) },
-                                    label = { Text(stringResource(item.label)) },
-                                )
+                                val sel = route == item.route
+                                Box(
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable(
+                                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                                            indication = null,
+                                        ) {
+                                            nav.navigate(item.route) {
+                                                popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        item.icon,
+                                        stringResource(item.label),
+                                        tint = if (sel) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.size(26.dp),
+                                    )
+                                }
                             }
                         }
                     } else {

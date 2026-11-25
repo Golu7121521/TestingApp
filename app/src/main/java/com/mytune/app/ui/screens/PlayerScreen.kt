@@ -69,14 +69,14 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
     LaunchedEffect(s.hasMedia) { if (!s.hasMedia) onBack() }
 
     // Background colour extracted from the artwork with Palette, animated on song change
-    var target by remember { mutableStateOf(Color(0xFF2B2A33)) }
+    var target by remember { mutableStateOf(Color(0xFF25302A)) }
     LaunchedEffect(s.artworkUrl) {
         if (s.artworkUrl.isBlank()) return@LaunchedEffect
         val req = ImageRequest.Builder(ctx).data(s.artworkUrl).allowHardware(false).build()
         val bitmap = (ctx.imageLoader.execute(req) as? SuccessResult)?.drawable?.toBitmap()
         if (bitmap != null) {
             val p = Palette.from(bitmap).generate()
-            val rgb = p.getDarkMutedColor(p.getMutedColor(p.getDominantColor(0xFF2B2A33.toInt())))
+            val rgb = p.getDarkMutedColor(p.getMutedColor(p.getDominantColor(0xFF25302A.toInt())))
             target = Color(rgb)
         }
     }

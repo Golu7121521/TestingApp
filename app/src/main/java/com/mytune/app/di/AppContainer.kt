@@ -40,6 +40,22 @@ class AppContainer(private val app: Application) {
         .addInterceptor { chain ->
             chain.proceed(chain.request().newBuilder().header("User-Agent", "MyTune/1.0").build())
         }
+        // If the API host is down / returns an error, retry the same request on the fallback hosts.
+        .addInterceptor { chain ->
+            val req = chain.request()
+            if (req.url.host !in ApiConfig.FALLBACK_HOSTS) return@addInterceptor chain.proceed(req)
+            var last: Exception? = null
+            for (host in ApiConfig.FALLBACK_HOSTS) {
+                try {
+                    val r = chain.proceed(req.newBuilder().url(req.url.newBuilder().host(host).build()).build())
+                    if (r.isSuccessful) return@addInterceptor r
+                    r.close()
+                } catch (e: java.io.IOException) {
+                    last = e
+                }
+            }
+            throw last ?: java.io.IOException("All API hosts failed")
+        }
         .build()
 
     val repository: MusicRepository = JioSaavnApi(
