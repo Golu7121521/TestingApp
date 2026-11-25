@@ -42,15 +42,34 @@ jobs:
         run: |
           echo "name=$(grep '^VERSION_NAME=' version.properties | cut -d= -f2 | tr -d '\r')" >> "$GITHUB_OUTPUT"
 
-      - name: Decode keystore
-        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ runner.temp }}/release.keystore"
+      - name: Prepare keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          KS="${{ runner.temp }}/release.keystore"
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$KS"
+            echo "SIGN_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "SIGN_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Signing secrets not set - using a temporary keystore. Updates will not install over APKs signed with a different key."
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -storepass android -keypass android \
+              -alias mytune -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=MyTune"
+            echo "SIGN_PASSWORD=android" >> "$GITHUB_ENV"
+            echo "SIGN_ALIAS=mytune" >> "$GITHUB_ENV"
+            echo "SIGN_KEY_PASSWORD=android" >> "$GITHUB_ENV"
+          fi
 
       - name: Build release APK
         env:
           KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ env.SIGN_PASSWORD }}
+          KEY_ALIAS: ${{ env.SIGN_ALIAS }}
+          KEY_PASSWORD: ${{ env.SIGN_KEY_PASSWORD }}
         run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Rename APK
