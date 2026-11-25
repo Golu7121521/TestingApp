@@ -1,20 +1,54 @@
-# Saavn Player (personal use)
+# MyTune
 
-Android music player that streams songs from JioSaavn's unofficial web API and lets you download them.
+Personal music streaming app (Kotlin, Jetpack Compose, Media3, Room) built entirely on GitHub Actions. Uses an unofficial JioSaavn API. For personal use only.
 
-## Features
-- Search songs and artists (all UI text in English)
-- Stream online with background playback and media notification
-- Download songs to the app's music folder and play them offline
-- Only an arm64-v8a APK is built
+## Build and release (GitHub Actions only)
 
-## Build with GitHub Actions (no PC needed)
-1. Create a new GitHub repository and upload all files from this project, keeping the folder structure (including `.github`).
-2. Open the repo, go to the **Actions** tab, select **Build arm64 APK**, and click **Run workflow**.
-3. When the run finishes, open **Releases** and download `app-arm64-v8a-release.apk` from the newest release.
-4. Install it on your phone (allow "Install unknown apps" for your browser or file manager).
+1. Create a new GitHub repository and push this whole folder to it.
+2. Create a keystore (skip if you already have one):
+
+   ```bash
+   keytool -genkeypair -v -keystore mytune.jks -alias mytune \
+     -keyalg RSA -keysize 2048 -validity 10000
+   ```
+
+   Remember the keystore password, the alias (`mytune` above) and the key password.
+   Do not commit the `.jks` file.
+3. Convert it to base64 (one line):
+
+   ```bash
+   base64 -w0 mytune.jks      # macOS: base64 -i mytune.jks | tr -d '\n'
+   ```
+4. In the repo go to **Settings → Secrets and variables → Actions → New repository secret** and add:
+
+   | Secret | Value |
+   |---|---|
+   | `KEYSTORE_BASE64` | output of the base64 command |
+   | `KEYSTORE_PASSWORD` | keystore password |
+   | `KEY_ALIAS` | key alias (e.g. `mytune`) |
+   | `KEY_PASSWORD` | key password |
+5. Release: either push a tag (`git tag v1.0.0 && git push origin v1.0.0`) or run the workflow manually from the **Actions** tab (Build Release APK → Run workflow).
+6. The workflow publishes `MyTune-arm64-v8a-<version>.apk` straight to **Releases**. It never uses `actions/upload-artifact`.
+
+The version is defined once in `version.properties` (`VERSION_NAME`, `VERSION_CODE`). Bump it before each release.
 
 ## Notes
-- The APK is signed with the debug key. Because that key can differ between CI runs, if installing a new build fails with a signature conflict, uninstall the old version first.
-- The JioSaavn endpoints are unofficial and may change or stop working. Check the terms of service and your local copyright laws before downloading content.
-- Downloads go to the app's private music folder (Android/data/com.personal.saavnplayer/files/Music).
+
+* **Gradle wrapper:** the wrapper jar is a binary and was not included. The workflow generates `gradlew` and the jar (`gradle wrapper --gradle-version 8.9`). To build locally run `gradle wrapper --gradle-version 8.9` once.
+* **API:** the base URL is a single constant in `data/api/ApiConfig.kt`. The default targets a saavn.dev-style host. Unofficial hosts come and go, so if requests fail, point it at a working instance (or self-host one). Home rows are built from searches because that API has no home endpoint; the queries are also in `ApiConfig`.
+* **Downloads** are stored in app-specific external storage (no storage permission) and survive app restarts. Interrupted downloads resume from the partial file.
+* Release builds are minified with R8 (rules in `app/proguard-rules.pro`).
+
+## Project layout
+
+```
+app/src/main/java/com/mytune/app/
+  data/api         Retrofit service, DTOs, JioSaavnApi, URL decryption helper
+  data/db          Room entities and DAO
+  data/repository  Library (favorites, playlists, recents) and DataStore settings
+  domain           Models and the MusicRepository interface
+  player           PlaybackService (Media3), PlayerController, StreamResolver
+  download         DownloadRepository and DownloadWorker (WorkManager)
+  di               AppContainer (manual DI)
+  ui               Compose screens, components, theme, navigation
+```
