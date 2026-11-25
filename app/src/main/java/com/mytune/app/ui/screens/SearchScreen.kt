@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
 import androidx.compose.ui.geometry.Offset
@@ -37,6 +38,7 @@ import com.mytune.app.di.AppContainer
 import com.mytune.app.domain.*
 import com.mytune.app.ui.UiState
 import com.mytune.app.ui.components.*
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -64,10 +66,10 @@ class SearchViewModel(private val repo: MusicRepository, private val library: co
     private suspend fun runSearch(q: String) {
         results.value = UiState.Loading
         kotlinx.coroutines.coroutineScope {
-            val s = kotlinx.coroutines.async { repo.searchSongs(q) }
-            val a = kotlinx.coroutines.async { repo.searchAlbums(q) }
-            val p = kotlinx.coroutines.async { repo.searchPlaylists(q) }
-            val r = kotlinx.coroutines.async { repo.searchArtists(q) }
+            val s = async { repo.searchSongs(q) }
+            val a = async { repo.searchAlbums(q) }
+            val p = async { repo.searchPlaylists(q) }
+            val r = async { repo.searchArtists(q) }
             val sr = s.await(); val ar = a.await(); val pr = p.await(); val rr = r.await()
             if (sr.isFailure && ar.isFailure && pr.isFailure && rr.isFailure) {
                 results.value = UiState.Error(sr.exceptionOrNull()?.message)
