@@ -19,10 +19,13 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
-
+      # The ubuntu runner image already ships the Android SDK (ANDROID_HOME) and sdkmanager,
+      # so android-actions/setup-android is not needed (it fails on 'tools' package lookup).
       - name: Install SDK packages
-        run: yes | sdkmanager "platforms;android-35" "build-tools;34.0.0" > /dev/null || true
+        run: |
+          set +o pipefail
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "build-tools;34.0.0" > /dev/null
 
       # Gradle install + caching. The wrapper jar is a binary, so the wrapper is generated here.
       - uses: gradle/actions/setup-gradle@v4
