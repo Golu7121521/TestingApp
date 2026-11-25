@@ -88,24 +88,22 @@ fun AppRoot(c: AppContainer) {
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
             if (route != Routes.PLAYER) {
-                Column {
-                    // Mini player sits directly above the bottom navigation
+                Column(Modifier.background(MaterialTheme.colorScheme.background.copy(alpha = 0.97f))) {
+                    // Floating mini player sits directly above the tab bar
                     if (player.hasMedia) {
                         MiniPlayer(player, onOpen = { nav.navigate(Routes.PLAYER) }, onToggle = { c.player.togglePlay() }, onNext = { c.player.next() })
                     }
                     if (showNav) {
-                        // Thin bar: fully transparent at the top fading to dark at the bottom
+                        Box(Modifier.fillMaxWidth().height(0.5.dp).background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.25f)))
+                        // iOS-style tab bar: icon + label, accent colour for the selected tab
                         Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
-                                .navigationBarsPadding()
-                                .height(48.dp),
+                            Modifier.fillMaxWidth().navigationBarsPadding().height(58.dp).padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             items.forEach { item ->
                                 val sel = route == item.route
-                                Box(
+                                val tint = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                Column(
                                     Modifier
                                         .weight(1f)
                                         .fillMaxHeight()
@@ -119,13 +117,17 @@ fun AppRoot(c: AppContainer) {
                                                 restoreState = true
                                             }
                                         },
-                                    contentAlignment = Alignment.Center,
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
                                 ) {
-                                    Icon(
-                                        item.icon,
+                                    Icon(item.icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
                                         stringResource(item.label),
-                                        tint = if (sel) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.6f),
-                                        modifier = Modifier.size(26.dp),
+                                        fontSize = 11.sp,
+                                        color = tint,
+                                        fontWeight = if (sel) FontWeight.SemiBold else FontWeight.Medium,
+                                        maxLines = 1,
                                     )
                                 }
                             }

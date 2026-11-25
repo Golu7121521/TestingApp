@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="mytune_bg">#FF111114</color>
-    <color name="ic_launcher_background">#FF14532D</color>
+    <color name="mytune_bg">#FF0B0B0E</color>
+    <color name="ic_launcher_background">#FF5A0F1B</color>
 </resources>

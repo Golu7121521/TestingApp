@@ -116,7 +116,11 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
             }
 
             Spacer(Modifier.height(8.dp))
-            Artwork(s.artworkUrl, Modifier.fillMaxWidth().aspectRatio(1f), RoundedCornerShape(24.dp))
+            Artwork(
+                s.artworkUrl,
+                Modifier.fillMaxWidth().aspectRatio(1f).shadow(24.dp, RoundedCornerShape(28.dp)),
+                RoundedCornerShape(28.dp),
+            )
             Spacer(Modifier.height(20.dp))
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -127,7 +131,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 IconButton(onClick = {
                     scope.launch { c.library.toggleFavorite(currentSong(s)) }
                 }) {
-                    Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, stringResource(R.string.favorite), tint = if (fav) Color(0xFFFF6B8B) else Color.White)
+                    Icon(if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder, stringResource(R.string.favorite), tint = if (fav) MaterialTheme.colorScheme.primary else Color.White)
                 }
             }
 
@@ -159,7 +163,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                     dragging?.let { c.player.seekTo((it * dur).toLong()) }
                     dragging = null
                 },
-                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.3f)),
+                colors = SliderDefaults.colors(thumbColor = Color.White, activeTrackColor = Color.White, inactiveTrackColor = Color.White.copy(alpha = 0.25f)),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Text(formatTime((fraction * dur).toLong()), style = MaterialTheme.typography.labelMedium)
