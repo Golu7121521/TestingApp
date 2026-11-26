@@ -113,7 +113,8 @@ fun AppRoot(c: AppContainer) {
     LaunchedEffect(player.hasMedia) { if (!player.hasMedia) expand.snapTo(0f) }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
-        val heightPx = with(density) { maxHeight.toPx() }
+        val fullHeight = maxHeight
+        val heightPx = with(density) { fullHeight.toPx() }
         val dragState = rememberDraggableState { dy ->
             scope.launch { expand.snapTo((expand.value - dy / heightPx).coerceIn(0f, 1f)) }
         }
@@ -229,7 +230,7 @@ fun AppRoot(c: AppContainer) {
                         Modifier
                             .align(Alignment.TopStart)
                             .fillMaxWidth()
-                            .requiredHeight(maxHeight)
+                            .requiredHeight(fullHeight)
                             .graphicsLayer { alpha = ((e - 0.15f) / 0.6f).coerceIn(0f, 1f) },
                     ) {
                         PlayerScreen(c, onBack = { scope.launch { expand.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 420f)) } })
