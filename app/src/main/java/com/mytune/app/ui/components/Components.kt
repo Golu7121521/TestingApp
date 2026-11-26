@@ -153,12 +153,45 @@ fun CollectionRow(item: MediaCollection, onClick: () -> Unit) {
 
 class SongActions(
     val downloaded: Set<String>,
+    val liked: Set<String>,
     val playNext: (Song) -> Unit,
     val addToQueue: (Song) -> Unit,
-    val download: (Song) -> Unit,
+    val toggleLike: (Song) -> Unit,
     val addToPlaylist: (Song) -> Unit,
+    val equalizer: () -> Unit,
+    val download: (Song) -> Unit,
+    val goToArtist: (Song) -> Unit,
     val share: (Song) -> Unit,
 )
+
+/** Called to open an album / playlist / artist page; AppRoot also collapses the full player. */
+val LocalOpenCollection = staticCompositionLocalOf<(String, String) -> Unit> { { _, _ -> } }
+
+/** The shared three-dots menu: Play next, Add to queue, Liked Songs, Add to playlist, Equalizer, Download, Go to artist. */
+@Composable
+fun ColumnScope.SongMenuItems(song: Song, actions: SongActions, onDismiss: () -> Unit, onRemove: (() -> Unit)? = null) {
+    val liked = song.id in actions.liked
+    @Composable
+    fun item(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color = Color.Unspecified, onClick: () -> Unit) {
+        DropdownMenuItem(
+            text = { Text(label) },
+            leadingIcon = { Icon(icon, null, tint = tint) },
+            onClick = { onDismiss(); onClick() },
+        )
+    }
+    item("Play next", Icons.Default.QueuePlayNext) { actions.playNext(song) }
+    item("Add to queue", Icons.Default.AddToQueue) { actions.addToQueue(song) }
+    item(
+        if (liked) "Remove from Liked Songs" else "Add to Liked Songs",
+        if (liked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+        if (liked) MaterialTheme.colorScheme.primary else Color.Unspecified,
+    ) { actions.toggleLike(song) }
+    item("Add to playlist", Icons.AutoMirrored.Filled.PlaylistAdd) { actions.addToPlaylist(song) }
+    item("Equalizer", Icons.Default.Equalizer) { actions.equalizer() }
+    item("Download", Icons.Default.Download) { actions.download(song) }
+    item("Go to artist", Icons.Default.Person) { actions.goToArtist(song) }
+    if (onRemove != null) item(stringResource(R.string.menu_remove), Icons.Default.Close) { onRemove() }
+}
 
 @Composable
 fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (() -> Unit)? = null) {
@@ -184,14 +217,7 @@ fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (()
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text(stringResource(R.string.menu_play_next)) }, onClick = { menu = false; actions.playNext(song) })
-                DropdownMenuItem(text = { Text(stringResource(R.string.menu_add_queue)) }, onClick = { menu = false; actions.addToQueue(song) })
-                DropdownMenuItem(text = { Text(stringResource(R.string.menu_download)) }, onClick = { menu = false; actions.download(song) })
-                DropdownMenuItem(text = { Text(stringResource(R.string.menu_add_playlist)) }, onClick = { menu = false; actions.addToPlaylist(song) })
-                DropdownMenuItem(text = { Text(stringResource(R.string.menu_share)) }, onClick = { menu = false; actions.share(song) })
-                if (onRemove != null) {
-                    DropdownMenuItem(text = { Text(stringResource(R.string.menu_remove)) }, onClick = { menu = false; onRemove() })
-                }
+                SongMenuItems(song, actions, onDismiss = { menu = false }, onRemove = onRemove)
             }
         }
     }
@@ -223,15 +249,44 @@ fun SongActionsHost(c: AppContainer, content: @Composable (SongActions) -> Unit)
     val done = remember(items) { items.filter { it.download.status == "DONE" }.map { it.download.songId }.toSet() }
     var picker by remember { mutableStateOf<Song?>(null) }
 
+    val favs by c.library.favorites.collectAsState(initial = emptyList())
+    val liked = remember(favs) { favs.map { it.id }.toSet() }
+    val openCollection = LocalOpenCollection.current
+
     val actions = SongActions(
         downloaded = done,
+        liked = liked,
         playNext = { c.player.playNext(it); Toast.makeText(ctx, ctx.getString(R.string.will_play_next), Toast.LENGTH_SHORT).show() },
         addToQueue = { c.player.addToQueue(it); Toast.makeText(ctx, ctx.getString(R.string.added_to_queue), Toast.LENGTH_SHORT).show() },
+        toggleLike = { song ->
+            scope.launch { c.library.toggleFavorite(song) }
+            Toast.makeText(ctx, if (song.id in liked) "Removed from Liked Songs" else "Added to Liked Songs", Toast.LENGTH_SHORT).show()
+        },
+        addToPlaylist = { picker = it },
+        equalizer = {
+            val i = Intent(android.media.audiofx.AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
+                putExtra(android.media.audiofx.AudioEffect.EXTRA_AUDIO_SESSION, com.mytune.app.player.PlaybackService.audioSessionId)
+                putExtra(android.media.audiofx.AudioEffect.EXTRA_CONTENT_TYPE, android.media.audiofx.AudioEffect.CONTENT_TYPE_MUSIC)
+                putExtra(android.media.audiofx.AudioEffect.EXTRA_PACKAGE_NAME, ctx.packageName)
+            }
+            try {
+                ctx.startActivity(i)
+            } catch (e: Exception) {
+                Toast.makeText(ctx, "No equalizer found on this device", Toast.LENGTH_SHORT).show()
+            }
+        },
         download = {
             scope.launch { c.downloads.enqueue(it, c.settings.downloadQualityNow) }
             Toast.makeText(ctx, ctx.getString(R.string.download_started), Toast.LENGTH_SHORT).show()
         },
-        addToPlaylist = { picker = it },
+        goToArtist = { song ->
+            val name = song.artist.split(",").firstOrNull()?.trim().orEmpty()
+            scope.launch {
+                val hit = if (name.isBlank()) null else c.repository.searchArtists(name, 1).getOrNull()?.firstOrNull()
+                if (hit != null) openCollection(hit.type, hit.id)
+                else Toast.makeText(ctx, "Artist not found", Toast.LENGTH_SHORT).show()
+            }
+        },
         share = { song ->
             val send = Intent(Intent.ACTION_SEND).apply {
                 type = "text/plain"
@@ -326,6 +381,29 @@ fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     )
 }
 
+/** Row + progress line of the mini player, without its own background (so the expanding panel can reuse it). */
+@Composable
+fun MiniPlayerContent(state: PlayerState, onToggle: () -> Unit, onNext: () -> Unit, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(state.artworkUrl, Modifier.size(44.dp))
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(state.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
+                Text(state.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            IconButton(onClick = onToggle) {
+                Icon(
+                    if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                    stringResource(if (state.isPlaying) R.string.pause else R.string.play),
+                )
+            }
+            IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, stringResource(R.string.next)) }
+        }
+        val progress = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(2.dp), color = MaterialTheme.colorScheme.primary, trackColor = Color.Transparent)
+    }
+}
+
 @Composable
 fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit, onNext: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
@@ -334,23 +412,6 @@ fun MiniPlayer(state: PlayerState, onOpen: () -> Unit, onToggle: () -> Unit, onN
         tonalElevation = 2.dp,
         modifier = modifier.padding(horizontal = 8.dp, vertical = 4.dp).fillMaxWidth().clickable(onClick = onOpen),
     ) {
-        Column {
-            Row(Modifier.padding(horizontal = 10.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(state.artworkUrl, Modifier.size(44.dp))
-                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                    Text(state.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-                    Text(state.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                IconButton(onClick = onToggle) {
-                    Icon(
-                        if (state.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                        stringResource(if (state.isPlaying) R.string.pause else R.string.play),
-                    )
-                }
-                IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, stringResource(R.string.next)) }
-            }
-            val progress = if (state.durationMs > 0) (state.positionMs.toFloat() / state.durationMs).coerceIn(0f, 1f) else 0f
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth().height(2.dp), color = MaterialTheme.colorScheme.primary, trackColor = Color.Transparent)
-        }
+        MiniPlayerContent(state, onToggle, onNext)
     }
 }

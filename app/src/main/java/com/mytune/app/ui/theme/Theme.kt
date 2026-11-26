@@ -7,7 +7,9 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -82,9 +84,57 @@ private val LightColors = lightColorScheme(
     surfaceContainerHighest = Color(0xFFDFE5E0),
 )
 
-/** [mode] is "system" (default), "dark" or "light". */
+/** Selectable accent colours (Settings). [color] is the base tone; the rest of the palette is derived from it. */
+data class Accent(val key: String, val name: String, val color: Color)
+
+object Accents {
+    val all = listOf(
+        Accent("green", "Green", Color(0xFF4ADE80)),
+        Accent("blue", "Blue", Color(0xFF60A5FA)),
+        Accent("purple", "Purple", Color(0xFFA78BFA)),
+        Accent("pink", "Pink", Color(0xFFF472B6)),
+        Accent("red", "Red", Color(0xFFF87171)),
+        Accent("orange", "Orange", Color(0xFFFB923C)),
+        Accent("yellow", "Yellow", Color(0xFFFACC15)),
+        Accent("teal", "Teal", Color(0xFF2DD4BF)),
+    )
+    fun byKey(key: String) = all.firstOrNull { it.key == key } ?: all.first()
+}
+
+private fun darkWith(base: Color) = DarkColors.copy(
+    primary = base,
+    onPrimary = lerp(base, Color.Black, 0.82f),
+    primaryContainer = lerp(base, Color.Black, 0.65f),
+    onPrimaryContainer = lerp(base, Color.White, 0.75f),
+    inversePrimary = lerp(base, Color.Black, 0.3f),
+    secondary = lerp(base, Color.White, 0.35f),
+    onSecondary = lerp(base, Color.Black, 0.82f),
+    secondaryContainer = lerp(base, Color(0xFF0E1210), 0.8f),
+    onSecondaryContainer = lerp(base, Color.White, 0.8f),
+    tertiary = lerp(base, Color.White, 0.2f),
+    surfaceTint = base,
+)
+
+private fun lightWith(base: Color): androidx.compose.material3.ColorScheme {
+    val p = lerp(base, Color.Black, 0.25f)
+    return LightColors.copy(
+        primary = p,
+        onPrimary = Color.White,
+        primaryContainer = lerp(base, Color.White, 0.7f),
+        onPrimaryContainer = lerp(base, Color.Black, 0.75f),
+        inversePrimary = base,
+        secondary = lerp(base, Color.Black, 0.4f),
+        onSecondary = Color.White,
+        secondaryContainer = lerp(base, Color.White, 0.8f),
+        onSecondaryContainer = lerp(base, Color.Black, 0.75f),
+        tertiary = lerp(base, Color.Black, 0.3f),
+        surfaceTint = p,
+    )
+}
+
+/** [mode] is "system" (default), "dark" or "light"; [accent] is an [Accents] key. */
 @Composable
-fun MyTuneTheme(mode: String, content: @Composable () -> Unit) {
+fun MyTuneTheme(mode: String, accent: String = "green", content: @Composable () -> Unit) {
     val dark = when (mode) {
         "light" -> false
         "dark" -> true
@@ -97,5 +147,7 @@ fun MyTuneTheme(mode: String, content: @Composable () -> Unit) {
         controller.isAppearanceLightStatusBars = !dark
         controller.isAppearanceLightNavigationBars = !dark
     }
-    MaterialTheme(colorScheme = if (dark) DarkColors else LightColors, content = content)
+    val base = Accents.byKey(accent).color
+    val scheme = remember(dark, accent) { if (dark) darkWith(base) else lightWith(base) }
+    MaterialTheme(colorScheme = scheme, content = content)
 }

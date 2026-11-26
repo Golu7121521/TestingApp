@@ -62,7 +62,6 @@ import com.mytune.app.player.PlayerState
 @Composable
 fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
     val s by c.player.state.collectAsState()
-    val qualities by c.resolver.qualities.collectAsState()
     val sleepEnd by c.player.sleepEnd.collectAsState()
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -90,6 +89,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
     val bg by animateColorAsState(target, tween(600), label = "bg")
 
     // The swipe-down gesture is handled by AppRoot (it follows the finger and collapses into the mini player).
+    SongActionsHost(c) { actions ->
     Column(
         Modifier
             .fillMaxSize()
@@ -106,21 +106,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 Box {
                     IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_share)) },
-                            leadingIcon = { Icon(Icons.Default.Share, null) },
-                            onClick = { moreMenu = false; shareSong(ctx, s) },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_add_playlist)) },
-                            leadingIcon = { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null) },
-                            onClick = { moreMenu = false; showPlaylist = true },
-                        )
-                        HorizontalDivider()
-                        Text("Playback speed", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-                        listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { sp ->
-                            DropdownMenuItem(text = { Text("${sp}x") }, onClick = { moreMenu = false; c.player.setSpeed(sp) })
-                        }
+                        SongMenuItems(currentSong(s), actions, onDismiss = { moreMenu = false })
                     }
                 }
             }
@@ -134,7 +120,10 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.7f))
+                    Text(
+                        s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.clickable { actions.goToArtist(currentSong(s)) },
+                    )
                 }
                 IconButton(onClick = { scope.launch { c.library.toggleFavorite(currentSong(s)) } }) {
                     Icon(
@@ -145,15 +134,6 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 }
             }
 
-            val q = qualities[id]
-            if (q != null) {
-                Text(
-                    if (q == 0) stringResource(R.string.offline) else stringResource(R.string.kbps_fmt, q),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White.copy(alpha = 0.7f),
-                    modifier = Modifier.align(Alignment.Start).padding(top = 2.dp),
-                )
-            }
             if (s.error) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.error_playback), color = MaterialTheme.colorScheme.error, modifier = Modifier.weight(1f))
@@ -255,6 +235,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
         }
     }
 
+    }
     if (showQueue) QueueSheet(c, s) { showQueue = false }
     if (showLyrics) LyricsSheet(c, s) { showLyrics = false }
     if (showPlaylist) PlaylistPickerDialog(c, currentSong(s)) { showPlaylist = false }
@@ -386,9 +367,6 @@ private fun QueueSheet(c: AppContainer, s: PlayerState, onDismiss: () -> Unit) {
                         Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface)
                         Text(item.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    // Reorder with up/down buttons, remove with the X
-                    IconButton(onClick = { c.player.moveQueueItem(i, i - 1) }, enabled = i > 0) { Icon(Icons.Default.KeyboardArrowUp, stringResource(R.string.move_up)) }
-                    IconButton(onClick = { c.player.moveQueueItem(i, i + 1) }, enabled = i < s.queue.lastIndex) { Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.move_down)) }
                     IconButton(onClick = { c.player.removeQueueItem(i) }) { Icon(Icons.Default.Close, stringResource(R.string.menu_remove)) }
                 }
             }

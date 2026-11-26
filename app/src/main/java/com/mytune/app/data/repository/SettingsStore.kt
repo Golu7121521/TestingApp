@@ -21,6 +21,7 @@ class SettingsStore(context: Context, scope: CoroutineScope) {
         val STREAM = intPreferencesKey("stream_quality")
         val DOWNLOAD = intPreferencesKey("download_quality")
         val THEME = stringPreferencesKey("theme")
+        val ACCENT = stringPreferencesKey("accent")
     }
 
     val streamQuality: Flow<Int> = ds.data.map { it[STREAM] ?: 320 }
@@ -41,5 +42,7 @@ class SettingsStore(context: Context, scope: CoroutineScope) {
 
     suspend fun setStreamQuality(q: Int) { ds.edit { it[STREAM] = q } }
     suspend fun setDownloadQuality(q: Int) { ds.edit { it[DOWNLOAD] = q } }
+    val accent: Flow<String> = ds.data.map { it[ACCENT] ?: "green" }
+    suspend fun setAccent(a: String) { ds.edit { it[ACCENT] = a } }
     suspend fun setTheme(t: String) { ds.edit { it[THEME] = t } }
 }

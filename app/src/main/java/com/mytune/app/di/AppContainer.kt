@@ -58,13 +58,17 @@ class AppContainer(private val app: Application) {
         }
         .build()
 
-    val repository: MusicRepository = JioSaavnApi(
+    // JioSaavn's own API first (the free wrapper API is often down/blocked), the wrapper as backup.
+    val repository: MusicRepository = com.mytune.app.data.api.FallbackRepository(
+        com.mytune.app.data.api.JioSaavnDirect(okHttp),
+        JioSaavnApi(
         Retrofit.Builder()
             .baseUrl(ApiConfig.BASE_URL)
             .client(okHttp)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
             .create(JioSaavnService::class.java)
+        ),
     )
 
     val lyrics = com.mytune.app.data.repository.LyricsRepository(okHttp)

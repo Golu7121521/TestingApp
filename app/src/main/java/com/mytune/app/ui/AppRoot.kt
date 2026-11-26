@@ -60,6 +60,8 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.lerp
 import com.mytune.app.ui.screens.SearchScreen
 import com.mytune.app.ui.screens.SettingsScreen
 
@@ -87,7 +89,6 @@ fun AppRoot(c: AppContainer) {
         NavItem(Routes.SETTINGS, R.string.nav_settings, Icons.Default.Settings),
     )
     val showNav = route in items.map { it.route }
-    val open: (String, String) -> Unit = { type, id -> nav.navigate(Routes.detail(type, id)) }
     val goTab: (String) -> Unit = { r ->
         nav.navigate(r) {
             popUpTo(nav.graph.findStartDestination().id) { saveState = true }
@@ -101,10 +102,15 @@ fun AppRoot(c: AppContainer) {
     val expand = remember { Animatable(0f) }
     val density = LocalDensity.current
     var bottomBarPx by remember { mutableIntStateOf(0) }
+    var miniPx by remember { mutableIntStateOf(0) }
     val bottomInset = with(density) { bottomBarPx.toDp() }
+    // Opening a page from the full player first collapses it, so the page is visible
+    val open: (String, String) -> Unit = { type, id ->
+        scope.launch { expand.animateTo(0f, tween(250)) }
+        nav.navigate(Routes.detail(type, id))
+    }
 
     LaunchedEffect(player.hasMedia) { if (!player.hasMedia) expand.snapTo(0f) }
-    BackHandler(enabled = expand.value > 0f) { scope.launch { expand.animateTo(0f, tween(300)) } }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val heightPx = with(density) { maxHeight.toPx() }
@@ -118,11 +124,11 @@ fun AppRoot(c: AppContainer) {
                 expand.value > 0.5f -> 1f
                 else -> 0f
             }
-            scope.launch { expand.animateTo(to, spring(dampingRatio = 0.85f, stiffness = 380f)) }
+            scope.launch { expand.animateTo(to, spring(dampingRatio = 0.9f, stiffness = 420f)) }
         }
         val dragModifier = Modifier.draggable(dragState, Orientation.Vertical, onDragStopped = { settle(it) })
 
-        CompositionLocalProvider(LocalBottomInset provides bottomInset) {
+        CompositionLocalProvider(LocalBottomInset provides bottomInset, LocalOpenCollection provides open) {
             // Screens draw edge to edge, behind the transparent bottom bar.
             NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
                 composable(Routes.HOME) { HomeScreen(c, open, onSearch = { goTab(Routes.SEARCH) }) }
@@ -156,7 +162,7 @@ fun AppRoot(c: AppContainer) {
                     onOpen = { scope.launch { expand.animateTo(1f, tween(320)) } },
                     onToggle = { c.player.togglePlay() },
                     onNext = { c.player.next() },
-                    modifier = dragModifier,
+                    modifier = dragModifier.onSizeChanged { miniPx = it.height },
                 )
             }
             if (showNav) {
@@ -193,27 +199,58 @@ fun AppRoot(c: AppContainer) {
             }
         }
 
-        // Full-screen player: slides with the finger and shrinks/fades into the mini player.
+        // Expanding player panel (like YouTube Music): a bottom sheet whose height follows the finger,
+        // growing from the mini player to full screen. The mini row cross-fades into the full player.
         if (expand.value > 0f && player.hasMedia) {
+            val e = expand.value
+            val vPad = with(density) { 4.dp.toPx() }
+            val miniSurfacePx = (miniPx - 2 * vPad).coerceAtLeast(with(density) { 56.dp.toPx() })
+            val navPx = (bottomBarPx - miniPx).coerceAtLeast(0).toFloat()
+            val panelH = miniSurfacePx + (heightPx - miniSurfacePx) * e
+            val bottomOffset = (navPx + vPad) * (1f - e)
+            val sidePad = 8.dp * (1f - e)
+            val corner = 14.dp * (1f - e)
+            val panelColor = lerp(MaterialTheme.colorScheme.surfaceContainerHigh, Color(0xFF0B0B0D), e.coerceIn(0f, 1f))
+
+            // Stationary touch layer: the drag deltas must not be measured on the moving panel.
             Box(Modifier.fillMaxSize().then(dragModifier)) {
                 Box(
                     Modifier
-                        .fillMaxSize()
-                        .graphicsLayer {
-                            val e = expand.value
-                            translationY = (1f - e) * size.height
-                            val sc = 0.94f + 0.06f * e
-                            scaleX = sc
-                            scaleY = sc
-                            transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 1f)
-                            alpha = (e / 0.55f).coerceIn(0f, 1f)
-                            shape = RoundedCornerShape(topStart = 28.dp * (1f - e), topEnd = 28.dp * (1f - e))
-                            clip = true
-                        },
+                        .align(Alignment.BottomCenter)
+                        .offset { IntOffset(0, -bottomOffset.toInt()) }
+                        .padding(horizontal = sidePad)
+                        .fillMaxWidth()
+                        .height(with(density) { panelH.toDp() })
+                        .clip(RoundedCornerShape(corner))
+                        .background(panelColor),
                 ) {
-                    PlayerScreen(c, onBack = { scope.launch { expand.animateTo(0f, tween(300)) } })
+                    // Full player: laid out at full size, revealed by the growing panel
+                    Box(
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .fillMaxWidth()
+                            .requiredHeight(maxHeight)
+                            .graphicsLayer { alpha = ((e - 0.15f) / 0.6f).coerceIn(0f, 1f) },
+                    ) {
+                        PlayerScreen(c, onBack = { scope.launch { expand.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 420f)) } })
+                    }
+                    // Mini row fades out as the panel grows
+                    MiniPlayerContent(
+                        player,
+                        onToggle = { c.player.togglePlay() },
+                        onNext = { c.player.next() },
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .graphicsLayer { alpha = (1f - e / 0.25f).coerceIn(0f, 1f) }
+                            .clickable(enabled = e < 0.1f) { scope.launch { expand.animateTo(1f, tween(320)) } },
+                    )
                 }
             }
+        }
+
+        // Registered last so it wins over the NavHost's own back handling: one back press collapses the player.
+        BackHandler(enabled = expand.value > 0f) {
+            scope.launch { expand.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 420f)) }
         }
     }
 }

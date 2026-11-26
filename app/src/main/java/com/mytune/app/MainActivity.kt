@@ -30,7 +30,8 @@ class MainActivity : ComponentActivity() {
         container.player.connect()
         setContent {
             val theme by container.settings.theme.collectAsState(initial = "system")
-            MyTuneTheme(theme) {
+            val accent by container.settings.accent.collectAsState(initial = "green")
+            MyTuneTheme(theme, accent) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                     NotificationPermission()
                     AppRoot(container)

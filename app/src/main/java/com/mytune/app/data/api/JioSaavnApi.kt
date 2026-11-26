@@ -49,34 +49,5 @@ class JioSaavnApi(private val api: JioSaavnService) : MusicRepository {
     override suspend fun suggestions(id: String, limit: Int): Result<List<Song>> =
         safe { api.suggestions(id, limit).data.orEmpty().mapNotNull { it.toSong() } }
 
-    /**
-     * The unofficial API has no "home" endpoint, so the JioSaavn-style home is assembled from many
-     * searches that run in parallel. Failed / empty rows are simply dropped.
-     */
-    override suspend fun home(): Result<HomeData> = safe {
-        coroutineScope {
-            val songRows = ApiConfig.HOME_SONG_ROWS.map { (title, q) -> title to async { searchSongs(q, 25) } }
-            val playlistRows = ApiConfig.HOME_PLAYLIST_ROWS.map { (title, q) -> title to async { searchPlaylists(q, 20) } }
-            val albumRows = ApiConfig.HOME_ALBUM_ROWS.map { (title, q) -> title to async { searchAlbums(q, 20) } }
-            val podcastRows = ApiConfig.HOME_PODCAST_ROWS.map { (title, q) -> title to async { searchPlaylists(q, 20) } }
-            val moods = ApiConfig.HOME_MOODS.map { async { searchPlaylists(it, 3) } }
-            val artists = ApiConfig.HOME_ARTISTS.map { async { searchArtists(it, 1) } }
-
-            val sections = mutableListOf<HomeSection>()
-            songRows.take(1).forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, songs = it) } }
-            playlistRows.take(1).forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, collections = it) } }
-            songRows.drop(1).take(1).forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, songs = it) } }
-            val moodList = moods.flatMap { it.await().getOrNull().orEmpty() }.distinctBy { it.id }
-            if (moodList.isNotEmpty()) sections += HomeSection("Made for Your Moods", collections = moodList)
-            albumRows.forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, collections = it) } }
-            val artistList = artists.mapNotNull { it.await().getOrNull()?.firstOrNull() }
-            if (artistList.isNotEmpty()) sections += HomeSection("Popular Artists", collections = artistList, circle = true)
-            songRows.drop(2).forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, songs = it) } }
-            playlistRows.drop(1).forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, collections = it) } }
-            podcastRows.forEach { (t, d) -> d.await().getOrNull()?.let { if (it.isNotEmpty()) sections += HomeSection(t, collections = it) } }
-
-            if (sections.isEmpty()) throw IOException("Network error")
-            HomeData(sections)
-        }
-    }
+    override suspend fun home(): Result<HomeData> = buildHome()
 }

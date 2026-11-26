@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.ui.*
 import androidx.compose.ui.draw.*
@@ -71,6 +72,7 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -
     val state by vm.state.collectAsState()
     val refreshing by vm.refreshing.collectAsState()
     val recents by c.library.recents.collectAsState(initial = emptyList())
+    var mode by rememberSaveable { mutableIntStateOf(0) } // 0 = Music, 1 = Podcasts
 
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -89,8 +91,33 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -
                         stringResource(R.string.app_name),
                         style = MaterialTheme.typography.headlineMedium,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f),
                     )
+                    Spacer(Modifier.weight(1f))
+                    // Slim Music | Podcasts switch
+                    Row(
+                        Modifier.height(28.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        listOf("Music", "Podcasts").forEachIndexed { i, label ->
+                            val sel = mode == i
+                            Box(
+                                Modifier
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(50))
+                                    .background(if (sel) MaterialTheme.colorScheme.primary else Color.Transparent)
+                                    .clickable { mode = i }
+                                    .padding(horizontal = 12.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    label,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
                     IconButton(onClick = onSearch) { Icon(Icons.Default.Search, stringResource(R.string.nav_search)) }
                 }
             }
@@ -105,7 +132,9 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -
                 }
                 is UiState.Error -> item { ErrorView(onRetry = { vm.load() }) }
                 is UiState.Success -> {
-                    s.data.sections.forEachIndexed { index, section ->
+                    val visible = s.data.sections.filter { it.podcast == (mode == 1) }
+                    if (visible.isEmpty()) item { EmptyText(R.string.empty_list) }
+                    visible.forEachIndexed { index, section ->
                         item(key = "sec_${index}_${section.title}") {
                             Column {
                                 SectionHeader(section.title)
@@ -124,7 +153,7 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -
                             }
                         }
                         // Personal row right after the first two sections
-                        if (index == 1 && recents.isNotEmpty()) {
+                        if (mode == 0 && index == 1 && recents.isNotEmpty()) {
                             item(key = "recents") {
                                 Column {
                                     SectionHeader(stringResource(R.string.recently_played))

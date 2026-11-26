@@ -19,6 +19,11 @@ import com.mytune.app.R
 
 /** Background playback + notification, lock screen and Bluetooth controls via MediaSession. */
 class PlaybackService : MediaSessionService() {
+    companion object {
+        /** Audio session of the ExoPlayer, used to open the system equalizer. */
+        @Volatile var audioSessionId: Int = 0
+    }
+
     private var session: MediaSession? = null
 
     override fun onCreate() {
@@ -42,6 +47,11 @@ class PlaybackService : MediaSessionService() {
             .setHandleAudioBecomingNoisy(true) // pause when headphones unplug
             .setWakeMode(C.WAKE_MODE_NETWORK)
             .build()
+
+        audioSessionId = player.audioSessionId
+        player.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) { PlaybackService.audioSessionId = audioSessionId }
+        })
 
         setMediaNotificationProvider(DefaultMediaNotificationProvider(this).apply {
             setSmallIcon(R.drawable.ic_notification)

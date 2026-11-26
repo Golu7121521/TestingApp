@@ -39,6 +39,14 @@ import com.mytune.app.di.AppContainer
 import com.mytune.app.domain.*
 import com.mytune.app.ui.UiState
 import com.mytune.app.ui.components.*
+import com.mytune.app.ui.theme.Accents
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Alignment
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -72,6 +80,24 @@ fun SettingsScreen(c: AppContainer) {
         ChipRow {
             listOf("system" to R.string.theme_system, "dark" to R.string.theme_dark, "light" to R.string.theme_light).forEach { (key, label) ->
                 FilterChip(selected = theme == key, onClick = { scope.launch { c.settings.setTheme(key) } }, label = { Text(stringResource(label)) })
+            }
+        }
+
+        Text("Accent color", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp))
+        val accent by c.settings.accent.collectAsState(initial = "green")
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(Accents.all.size) { i ->
+                val a = Accents.all[i]
+                Box(
+                    Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(a.color)
+                        .clickable { scope.launch { c.settings.setAccent(a.key) } },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (accent == a.key) Icon(Icons.Default.Check, a.name, tint = Color.Black.copy(alpha = 0.75f))
+                }
             }
         }
 

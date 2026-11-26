@@ -27,6 +27,7 @@ data class HomeSection(
     val songs: List<Song> = emptyList(),
     val collections: List<MediaCollection> = emptyList(),
     val circle: Boolean = false,
+    val podcast: Boolean = false,
 )
 
 data class HomeData(val sections: List<HomeSection>)
