@@ -136,18 +136,19 @@ fun MediaCard(title: String, subtitle: String, artworkUrl: String, circle: Boole
 
 /** List row for albums / playlists / artists. */
 @Composable
-fun CollectionRow(item: MediaCollection, onClick: () -> Unit) {
+fun CollectionRow(item: MediaCollection, onClick: () -> Unit, trailing: (@Composable () -> Unit)? = null) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Artwork(item.artworkUrl, Modifier.size(56.dp), if (item.type == CollectionType.ARTIST) CircleShape else RoundedCornerShape(8.dp))
-        Column(Modifier.padding(start = 12.dp)) {
+        Column(Modifier.padding(start = 12.dp).weight(1f)) {
             Text(item.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
             if (item.subtitle.isNotBlank()) {
                 Text(item.subtitle, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        trailing?.invoke()
     }
 }
 

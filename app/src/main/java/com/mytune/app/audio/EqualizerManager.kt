@@ -1,5 +1,8 @@
 package com.mytune.app.audio
 
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
 import android.media.audiofx.Virtualizer
@@ -28,7 +31,7 @@ data class EqState(
  * App-wide equalizer on top of the system AudioEffect API, attached to the ExoPlayer audio session.
  * UI always shows five bands; devices with a different band count are mapped by frequency.
  */
-class EqualizerManager(private val settings: SettingsStore, private val scope: CoroutineScope) {
+class EqualizerManager(context: android.content.Context, private val settings: SettingsStore, private val scope: CoroutineScope) {
     companion object {
         const val MAX_DB = 12f
         val BAND_LABELS = listOf("60 Hz", "230 Hz", "910 Hz", "3.6 kHz", "14 kHz")
@@ -52,6 +55,11 @@ class EqualizerManager(private val settings: SettingsStore, private val scope: C
 
     private val _state = MutableStateFlow(EqState())
     val state: StateFlow<EqState> = _state.asStateFlow()
+
+    private val am = context.getSystemService(AudioManager::class.java)
+    private val _headphones = MutableStateFlow(false)
+    /** True while wired or wireless earphones are the audio output. The equalizer only works then. */
+    val headphones: StateFlow<Boolean> = _headphones.asStateFlow()
 
     private var eq: Equalizer? = null
     private var bass: BassBoost? = null
@@ -95,8 +103,28 @@ class EqualizerManager(private val settings: SettingsStore, private val scope: C
         save()
     }
 
+    private fun checkHeadphones() {
+        val types = setOf(
+            AudioDeviceInfo.TYPE_WIRED_HEADSET, AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_USB_HEADSET,
+            AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_HEARING_AID,
+            26, // TYPE_BLE_HEADSET (API 31)
+            27, // TYPE_BLE_SPEAKER
+            30, // TYPE_BLE_BROADCAST
+        )
+        _headphones.value = runCatching { am.getDevices(AudioManager.GET_DEVICES_OUTPUTS).any { it.type in types } }.getOrDefault(false)
+        apply()
+    }
+
+    init {
+        checkHeadphones()
+        am.registerAudioDeviceCallback(object : AudioDeviceCallback() {
+            override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) = checkHeadphones()
+            override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) = checkHeadphones()
+        }, android.os.Handler(android.os.Looper.getMainLooper()))
+    }
+
     private fun apply() {
-        val s = _state.value
+        val s = _state.value.let { it.copy(enabled = it.enabled && _headphones.value) }
         runCatching {
             eq?.let { e ->
                 e.enabled = s.enabled

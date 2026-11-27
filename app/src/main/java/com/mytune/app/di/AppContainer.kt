@@ -79,7 +79,7 @@ class AppContainer(private val app: Application) {
     val library = LibraryRepository(db.dao())
     val downloads = DownloadRepository(app, db.dao(), this)
     val resolver = StreamResolver(repository, db.dao(), settings)
-    val equalizer = com.mytune.app.audio.EqualizerManager(settings, appScope)
+    val equalizer = com.mytune.app.audio.EqualizerManager(app, settings, appScope)
     val player = PlayerController(app, appScope, library).also { pc ->
         pc.suggestionProvider = { id -> repository.suggestions(id, 20).getOrDefault(emptyList()) }
         pc.onSongStarted = { song -> appScope.launch(Dispatchers.IO) { settings.recordPlay(song.artist) } }

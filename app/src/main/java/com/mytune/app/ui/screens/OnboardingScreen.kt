@@ -9,6 +9,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -35,6 +37,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 private const val MIN_LANGS = 3
@@ -47,11 +52,24 @@ class OnboardingViewModel(private val c: AppContainer) : ViewModel() {
     /** Artists offered for the chosen languages (name -> resolved artist, null while unresolved / not found). */
     val offered = MutableStateFlow<List<PickedArtist>>(emptyList())
     val loading = MutableStateFlow(false)
+    val query = MutableStateFlow("")
+    /** Results of the artist search: every artist, whatever the country or language. */
+    val results = MutableStateFlow<List<PickedArtist>>(emptyList())
+    val searching = MutableStateFlow(false)
     val saving = MutableStateFlow(false)
 
     private val cache = HashMap<String, PickedArtist?>()
 
     init {
+        viewModelScope.launch {
+            query.debounce(350).distinctUntilChanged().collectLatest { q ->
+                if (q.isBlank()) { results.value = emptyList(); searching.value = false; return@collectLatest }
+                searching.value = true
+                results.value = c.repository.searchArtists(q.trim(), 24).getOrNull().orEmpty()
+                    .map { PickedArtist(it.id, it.title, it.artworkUrl) }
+                searching.value = false
+            }
+        }
         viewModelScope.launch {
             // Pre-fill when the user re-opens the page from Settings.
             val p = c.settings.prefsNow()
@@ -118,6 +136,9 @@ fun OnboardingScreen(c: AppContainer) {
     val picked by vm.picked.collectAsState()
     val offered by vm.offered.collectAsState()
     val loading by vm.loading.collectAsState()
+    val query by vm.query.collectAsState()
+    val results by vm.results.collectAsState()
+    val searching by vm.searching.collectAsState()
     val saving by vm.saving.collectAsState()
     val ready = langs.size >= MIN_LANGS && picked.size >= MIN_ARTISTS
     var countryMenu by remember { mutableStateOf(false) }
@@ -170,13 +191,28 @@ fun OnboardingScreen(c: AppContainer) {
                     if (langs.isEmpty()) "Pick your languages first, artists will appear here" else "Choose at least $MIN_ARTISTS",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = query, onValueChange = { vm.query.value = it }, singleLine = true,
+                    placeholder = { Text("Search any artist") },
+                    leadingIcon = { Icon(Icons.Default.Search, null) },
+                    trailingIcon = { if (query.isNotEmpty()) IconButton(onClick = { vm.query.value = "" }) { Icon(Icons.Default.Close, "Clear") } },
+                    shape = RoundedCornerShape(28.dp), modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(12.dp))
-                if (loading && offered.isEmpty()) {
+                if (query.isNotBlank() && searching && results.isEmpty()) {
+                    Box(Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                }
+                if (query.isNotBlank() && !searching && results.isEmpty()) {
+                    Text("No artists found", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                if (query.isBlank() && loading && offered.isEmpty()) {
                     Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 }
             }
             // Artist grid as rows of 3 (a LazyVerticalGrid cannot be nested inside a LazyColumn)
-            val rows = offered.chunked(3)
+            val shown = if (query.isBlank()) (picked + offered).distinctBy { it.id } else results
+            val rows = shown.chunked(3)
             items(rows.size) { r ->
                 Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
                     rows[r].forEach { a ->

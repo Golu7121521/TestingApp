@@ -39,6 +39,7 @@ import com.mytune.app.domain.*
 import com.mytune.app.ui.UiState
 import com.mytune.app.ui.components.*
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import kotlinx.coroutines.async
@@ -114,13 +115,24 @@ private val BROWSE = listOf(
 )
 
 @Composable
-fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
+fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit, focusRequest: Boolean = false, onFocusHandled: () -> Unit = {}) {
     val vm: SearchViewModel = viewModel(factory = viewModelFactory { initializer { SearchViewModel(c.repository, c.library) } })
     val query by vm.query.collectAsState()
     val results by vm.results.collectAsState()
     val history by vm.history.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf(R.string.tab_songs, R.string.tab_albums, R.string.tab_playlists, R.string.tab_artists)
+
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    LaunchedEffect(focusRequest) {
+        if (focusRequest) {
+            kotlinx.coroutines.delay(250)
+            runCatching { focus.requestFocus() }
+            keyboard?.show()
+            onFocusHandled()
+        }
+    }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Text(
@@ -141,7 +153,7 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                 }
             },
             shape = RoundedCornerShape(28.dp),
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(16.dp).focusRequester(focus),
         )
 
         when (val r = results) {
@@ -217,7 +229,7 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                                 0 -> if (data.songs.isEmpty()) item { EmptyText(R.string.no_results) } else songItems(data.songs, actions, c)
                                 1 -> collectionItems(data.albums, onOpen)
                                 2 -> collectionItems(data.playlists, onOpen)
-                                else -> collectionItems(data.artists, onOpen, artists = true)
+                                else -> collectionItems(data.artists, onOpen, artists = true, c = c)
                             }
                             item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                         }
@@ -228,7 +240,7 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
     }
 }
 
-private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (String, String) -> Unit, artists: Boolean = false) {
+private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (String, String) -> Unit, artists: Boolean = false, c: AppContainer? = null) {
     if (list.isEmpty()) {
         item { EmptyText(R.string.no_results) }
     } else {
@@ -236,7 +248,22 @@ private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (
             val item = list[i]
             if (artists) {
                 val openArtist = LocalOpenArtist.current
-                CollectionRow(item) { openArtist(item.id, item.title) }
+                val mine by c!!.settings.prefs.collectAsState(initial = UserPrefs())
+                val inList = mine.artists.any { it.id == item.id }
+                val scope = rememberCoroutineScope()
+                var menu by remember { mutableStateOf(false) }
+                CollectionRow(item, onClick = { openArtist(item.id, item.title) }, trailing = {
+                    Box {
+                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text(if (inList) "Remove from your artists" else "Add to your artists") },
+                                leadingIcon = { Icon(if (inList) Icons.Default.PersonRemove else Icons.Default.PersonAdd, null) },
+                                onClick = { menu = false; scope.launch { c.settings.toggleArtist(PickedArtist(item.id, item.title, item.artworkUrl)) } },
+                            )
+                        }
+                    }
+                })
             } else CollectionRow(item) { onOpen(item.type, item.id) }
         }
     }

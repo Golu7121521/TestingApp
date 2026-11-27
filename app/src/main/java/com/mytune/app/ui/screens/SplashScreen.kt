@@ -40,21 +40,9 @@ fun SplashScreen(onFinished: () -> Unit) {
         delay(250)
         onFinished()
     }
-    val primary = MaterialTheme.colorScheme.primary
     val container = MaterialTheme.colorScheme.primaryContainer
-
-    val logoScale = remember { Animatable(0.3f) }
     val textAlpha = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        logoScale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 180f))
-    }
-    LaunchedEffect(Unit) {
-        delay(450)
-        textAlpha.animateTo(1f, tween(500))
-    }
-    val inf = rememberInfiniteTransition(label = "splash")
-    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "spin")
-    val pulse by inf.animateFloat(0.9f, 1.15f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "pulse")
+    LaunchedEffect(Unit) { delay(450); textAlpha.animateTo(1f, tween(500)) }
 
     AnimatedVisibility(visible = visible, exit = fadeOut(tween(250))) {
         Box(
@@ -62,27 +50,40 @@ fun SplashScreen(onFinished: () -> Unit) {
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(170.dp).scale(logoScale.value), contentAlignment = Alignment.Center) {
-                    Canvas(Modifier.fillMaxSize().scale(pulse)) {
-                        drawCircle(primary.copy(alpha = 0.12f))
-                    }
-                    Canvas(Modifier.fillMaxSize().rotate(spin)) {
-                        drawArc(
-                            Brush.sweepGradient(listOf(Color.Transparent, primary)),
-                            startAngle = 0f, sweepAngle = 270f, useCenter = false,
-                            topLeft = Offset(6f, 6f), size = Size(size.width - 12f, size.height - 12f),
-                            style = Stroke(width = 8f, cap = StrokeCap.Round),
-                        )
-                    }
-                    Box(
-                        Modifier.size(104.dp).clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(container, primary))),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.size(64.dp)) }
-                }
+                AnimatedLogo(170.dp)
                 Spacer(Modifier.height(24.dp))
                 Text("MyTune", color = Color.White, fontSize = 34.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.alpha(textAlpha.value))
                 Text("Your music, your way", color = Color.White.copy(alpha = 0.6f), fontSize = 14.sp, modifier = Modifier.alpha(textAlpha.value))
             }
         }
+    }
+}
+
+/** The app logo: springs in, with a spinning ring and a pulsing glow. Used on the splash and in the Home header. */
+@Composable
+fun AnimatedLogo(size: androidx.compose.ui.unit.Dp) {
+    val primary = MaterialTheme.colorScheme.primary
+    val container = MaterialTheme.colorScheme.primaryContainer
+    val logoScale = remember { Animatable(0.3f) }
+    LaunchedEffect(Unit) { logoScale.animateTo(1f, spring(dampingRatio = 0.45f, stiffness = 180f)) }
+    val inf = rememberInfiniteTransition(label = "logo")
+    val spin by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(1600, easing = LinearEasing)), label = "spin")
+    val pulse by inf.animateFloat(0.9f, 1.15f, infiniteRepeatable(tween(800), RepeatMode.Reverse), label = "pulse")
+    val ring = (size.value * 0.05f).coerceAtLeast(2f)
+    Box(Modifier.size(size).scale(logoScale.value), contentAlignment = Alignment.Center) {
+        Canvas(Modifier.fillMaxSize().scale(pulse)) { drawCircle(primary.copy(alpha = 0.12f)) }
+        Canvas(Modifier.fillMaxSize().rotate(spin)) {
+            val w = ring.dp.toPx()
+            drawArc(
+                Brush.sweepGradient(listOf(Color.Transparent, primary)),
+                startAngle = 0f, sweepAngle = 270f, useCenter = false,
+                topLeft = Offset(w, w), size = Size(this.size.width - 2 * w, this.size.height - 2 * w),
+                style = Stroke(width = w, cap = StrokeCap.Round),
+            )
+        }
+        Box(
+            Modifier.size(size * 0.61f).clip(RoundedCornerShape(size * 0.18f)).background(Brush.linearGradient(listOf(container, primary))),
+            contentAlignment = Alignment.Center,
+        ) { Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.size(size * 0.38f)) }
     }
 }

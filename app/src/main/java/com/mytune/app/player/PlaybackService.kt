@@ -41,6 +41,8 @@ class PlaybackService : MediaSessionService() {
 
     private var session: MediaSession? = null
     private var likeJob: Job? = null
+    private var pressCount = 0
+    private val pressHandler = Handler(Looper.getMainLooper())
     private val likeCmd = SessionCommand(CMD_LIKE, Bundle.EMPTY)
     private val closeCmd = SessionCommand(CMD_CLOSE, Bundle.EMPTY)
 
@@ -96,6 +98,28 @@ class PlaybackService : MediaSessionService() {
                     return MediaSession.ConnectionResult.AcceptedResultBuilder(mediaSession)
                         .setAvailableSessionCommands(cmds)
                         .build()
+                }
+
+                // Earphone button: 1 press = play/pause, 2 = next, 3 = previous.
+                override fun onMediaButtonEvent(mediaSession: MediaSession, controllerInfo: MediaSession.ControllerInfo, intent: Intent): Boolean {
+                    val ev = if (android.os.Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, android.view.KeyEvent::class.java)
+                    else @Suppress("DEPRECATION") intent.getParcelableExtra<android.view.KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    if (ev == null) return false
+                    if (ev.keyCode != android.view.KeyEvent.KEYCODE_HEADSETHOOK && ev.keyCode != android.view.KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) return false
+                    if (ev.action == android.view.KeyEvent.ACTION_DOWN && ev.repeatCount == 0) {
+                        pressCount++
+                        pressHandler.removeCallbacksAndMessages(null)
+                        pressHandler.postDelayed({
+                            val p = mediaSession.player
+                            when (pressCount) {
+                                1 -> if (p.isPlaying) p.pause() else p.play()
+                                2 -> p.seekToNext()
+                                else -> p.seekToPrevious()
+                            }
+                            pressCount = 0
+                        }, 400)
+                    }
+                    return true
                 }
 
                 override fun onCustomCommand(

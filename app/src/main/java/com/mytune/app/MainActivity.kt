@@ -26,7 +26,10 @@ import com.mytune.app.ui.theme.MyTuneTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        enableEdgeToEdge(
+            statusBarStyle = androidx.activity.SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+            navigationBarStyle = androidx.activity.SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT),
+        )
         val container = (application as MyTuneApp).container
         container.player.connect()
         setContent {
@@ -34,6 +37,9 @@ class MainActivity : ComponentActivity() {
             val accent by container.settings.accent.collectAsState(initial = "green")
             // null until the first DataStore read finishes (covered by the splash screen)
             val onboarded by container.settings.onboarded.collectAsState(initial = null)
+            val ctx = LocalContext.current
+            // keep the launcher icon colour in sync with the accent
+            LaunchedEffect(accent) { com.mytune.app.ui.theme.IconManager.apply(ctx, accent) }
             var splashDone by rememberSaveable { mutableStateOf(false) }
             MyTuneTheme(theme, accent) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {

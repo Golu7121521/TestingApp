@@ -34,7 +34,10 @@ import com.mytune.app.audio.EqualizerManager
 @Composable
 fun EqualizerDialog(eq: EqualizerManager, onDismiss: () -> Unit) {
     LaunchedEffect(Unit) { eq.ensureLoaded() }
-    val st by eq.state.collectAsState()
+    val st0 by eq.state.collectAsState()
+    val phones by eq.headphones.collectAsState()
+    // Without earphones the equalizer is always off.
+    val st = st0.copy(enabled = st0.enabled && phones)
     val alpha = if (st.enabled) 1f else 0.45f
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
@@ -53,7 +56,11 @@ fun EqualizerDialog(eq: EqualizerManager, onDismiss: () -> Unit) {
                         Text("Equalizer", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                         Text(if (st.enabled) st.preset else "Off", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    Switch(checked = st.enabled, onCheckedChange = { eq.setEnabled(it) })
+                    Switch(checked = st.enabled, enabled = phones, onCheckedChange = { eq.setEnabled(it) })
+                }
+                if (!phones) {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Connect wired or Bluetooth earphones to use the equalizer. It stays off on the phone speaker.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -61,7 +68,7 @@ fun EqualizerDialog(eq: EqualizerManager, onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     EqualizerManager.PRESETS.forEach { p ->
-                        FilterChip(selected = st.enabled && st.preset == p.name, onClick = { eq.applyPreset(p) }, label = { Text(p.name) })
+                        FilterChip(selected = st.enabled && st.preset == p.name, enabled = phones, onClick = { eq.applyPreset(p) }, label = { Text(p.name) })
                     }
                 }
 

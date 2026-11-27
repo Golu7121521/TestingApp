@@ -87,6 +87,21 @@ class SettingsStore(context: Context, scope: CoroutineScope) {
         }
     }
 
+    /** Adds the artist to "Your Artists", or removes it when already there. */
+    suspend fun toggleArtist(a: PickedArtist) {
+        ds.edit {
+            val arr = runCatching { JSONArray(it[ARTISTS] ?: "[]") }.getOrDefault(JSONArray())
+            val out = JSONArray()
+            var found = false
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                if (o.optString("id") == a.id) found = true else out.put(o)
+            }
+            if (!found) out.put(JSONObject().put("id", a.id).put("name", a.name).put("img", a.image))
+            it[ARTISTS] = out.toString()
+        }
+    }
+
     /** Re-opens the onboarding page (keeps the old selection pre-filled). */
     suspend fun resetOnboarding() { ds.edit { it[ONBOARDED] = false } }
 

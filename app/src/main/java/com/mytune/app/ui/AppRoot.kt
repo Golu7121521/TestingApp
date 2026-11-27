@@ -116,6 +116,16 @@ fun AppRoot(c: AppContainer) {
     }
 
     LaunchedEffect(player.hasMedia) { if (!player.hasMedia) expand.snapTo(0f) }
+    // The full player is always dark: use light status bar icons while it covers the screen.
+    val view = androidx.compose.ui.platform.LocalView.current
+    val themeLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val playerOpen = expand.value > 0.5f && player.hasMedia
+    SideEffect {
+        (view.context as? android.app.Activity)?.window?.let {
+            androidx.core.view.WindowCompat.getInsetsController(it, view).isAppearanceLightStatusBars = themeLight && !playerOpen
+        }
+    }
+    var searchFocus by remember { mutableStateOf(false) }
     // Tapping any song starts playback and opens the Now Playing screen.
     LaunchedEffect(Unit) { c.player.openPlayer.collect { expand.animateTo(1f, tween(320)) } }
 
@@ -139,8 +149,8 @@ fun AppRoot(c: AppContainer) {
         CompositionLocalProvider(LocalBottomInset provides bottomInset, LocalOpenCollection provides open, LocalOpenArtist provides openArtist) {
             // Screens draw edge to edge, behind the transparent bottom bar.
             NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
-                composable(Routes.HOME) { HomeScreen(c, open, onSearch = { goTab(Routes.SEARCH) }) }
-                composable(Routes.SEARCH) { SearchScreen(c, open) }
+                composable(Routes.HOME) { HomeScreen(c, open, onSearch = { searchFocus = true; goTab(Routes.SEARCH) }) }
+                composable(Routes.SEARCH) { SearchScreen(c, open, focusRequest = searchFocus, onFocusHandled = { searchFocus = false }) }
                 composable(Routes.LIBRARY) { LibraryScreen(c, open, onDownloads = { nav.navigate(Routes.DOWNLOADS) }) }
                 composable(Routes.SETTINGS) { SettingsScreen(c) }
                 composable(Routes.DOWNLOADS) { DownloadsScreen(c, onBack = { nav.popBackStack() }) }

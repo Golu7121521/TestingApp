@@ -139,11 +139,7 @@ fun HomeScreen(c: AppContainer, onOpen: (String, String) -> Unit, onSearch: () -
         LazyColumn(Modifier.fillMaxSize()) {
             item {
                 Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
-                            .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primaryContainer, MaterialTheme.colorScheme.primary))),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Default.MusicNote, null, tint = Color.White, modifier = Modifier.size(24.dp)) }
+                    AnimatedLogo(46.dp)
                     Spacer(Modifier.width(10.dp))
                     Column {
                         Text(stringResource(R.string.app_name), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.ExtraBold)

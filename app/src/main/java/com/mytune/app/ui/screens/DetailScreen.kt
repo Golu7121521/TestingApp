@@ -102,6 +102,24 @@ class DetailViewModel(
         }
     }
 
+    /**
+     * Artist page: only the artist's own original songs. Songs by other artists (search fallback), lyric / remix /
+     * cover / slowed versions and repeated titles with different thumbnails are dropped.
+     */
+    private fun originalSongs(col: MediaCollection, hint: String): List<Song> {
+        val nm = hint.ifBlank { col.title }.trim()
+        fun norm(t: String) = t.lowercase()
+            .replace(Regex("[\\(\\[].*?[\\)\\]]"), " ")
+            .replace(Regex("\\b(lyrical|lyrics?|lyric video|official|video|audio|full song|song|version|hd|4k)\\b"), " ")
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        val bad = Regex("lyric|remix|\\bcover\\b|karaoke|slowed|reverb|lofi|lo-fi|instrumental|reprise|mashup|unplugged|\\b8d\\b|bass boosted|jukebox", RegexOption.IGNORE_CASE)
+        fun isArtists(s: Song) = (col.id.isNotBlank() && s.artistId == col.id) ||
+            s.artist.split(",", "&").any { it.trim().equals(nm, ignoreCase = true) }
+        val own = col.songs.filter { isArtists(it) }.ifEmpty { col.songs }
+        val clean = own.filter { !bad.containsMatchIn(it.title) }.ifEmpty { own }
+        return clean.distinctBy { norm(it.title) }
+    }
+
     fun load() {
         viewModelScope.launch {
             if (type == CollectionType.USER) {
@@ -117,7 +135,9 @@ class DetailViewModel(
                     CollectionType.PLAYLIST -> repo.playlist(id)
                     else -> repo.artist(id, name)
                 }
-                _state.value = result.fold({ UiState.Success(it) }, { UiState.Error(it.message) })
+                _state.value = result.fold({
+                    UiState.Success(if (type == CollectionType.ARTIST) it.copy(songs = originalSongs(it, name)) else it)
+                }, { UiState.Error(it.message) })
                 result.getOrNull()?.let { loadRelated(it) }
             }
         }
@@ -172,6 +192,19 @@ fun DetailScreen(c: AppContainer, type: String, id: String, name: String = "", o
                                 if (col.subtitle.isNotBlank()) {
                                     Spacer(Modifier.height(4.dp))
                                     Text(col.subtitle, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                                if (col.type == CollectionType.ARTIST) {
+                                    val mine by c.settings.prefs.collectAsState(initial = UserPrefs())
+                                    val inList = mine.artists.any { it.id == col.id }
+                                    Spacer(Modifier.height(12.dp))
+                                    FilledTonalButton(onClick = {
+                                        scope.launch { c.settings.toggleArtist(PickedArtist(col.id, col.title, col.artworkUrl)) }
+                                        Toast.makeText(ctx, if (inList) "Removed from your artists" else "Added to your artists", Toast.LENGTH_SHORT).show()
+                                    }) {
+                                        Icon(if (inList) Icons.Default.PersonRemove else Icons.Default.PersonAdd, null, Modifier.size(18.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(if (inList) "Remove from your artists" else "Add to your artists")
+                                    }
                                 }
                                 Spacer(Modifier.height(16.dp))
                                 // 3. Actions: add to library, download, shuffle, play
