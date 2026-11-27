@@ -264,7 +264,7 @@ private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (
                         }
                     }
                 })
-            } else CollectionRow(item) { onOpen(item.type, item.id) }
+            } else CollectionRow(item, onClick = { onOpen(item.type, item.id) })
         }
     }
 }
