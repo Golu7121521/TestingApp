@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -89,8 +90,7 @@ fun EqualizerDialog(eq: EqualizerManager, onDismiss: () -> Unit) {
     }
 }
 
-private fun Modifier.graphicsAlpha(a: Float) = this.then(Modifier.androidxAlpha(a))
-private fun Modifier.androidxAlpha(a: Float) = androidx.compose.ui.draw.alpha(a)
+private fun Modifier.graphicsAlpha(a: Float): Modifier = this.alpha(a)
 
 @Composable
 private fun LabeledSlider(label: String, value: Float, enabled: Boolean, onChange: (Float) -> Unit) {
