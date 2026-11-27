@@ -41,14 +41,16 @@ import com.mytune.app.ui.components.*
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import com.mytune.app.data.db.DownloadStatus
 import com.mytune.app.data.db.PlaylistInfo
 import com.mytune.app.data.repository.toSong
 
 @Composable
 fun LibraryScreen(c: AppContainer, onOpen: (String, String) -> Unit, onDownloads: () -> Unit) {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf(R.string.tab_downloads, R.string.tab_favorites, R.string.tab_playlists, R.string.tab_recents)
+    val pager = rememberPagerState(initialPage = 0, pageCount = { tabs.size })
     val favorites by c.library.favorites.collectAsState(initial = emptyList())
     val recents by c.library.recents.collectAsState(initial = emptyList())
     val downloads by c.downloads.items.collectAsState(initial = emptyList())
@@ -65,58 +67,63 @@ fun LibraryScreen(c: AppContainer, onOpen: (String, String) -> Unit, onDownloads
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(16.dp),
         )
-        ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-            tabs.forEachIndexed { i, res -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(res)) }) }
+        ScrollableTabRow(selectedTabIndex = pager.currentPage, edgePadding = 8.dp) {
+            tabs.forEachIndexed { i, res ->
+                Tab(selected = pager.currentPage == i, onClick = { scope.launch { pager.animateScrollToPage(i) } }, text = { Text(stringResource(res)) })
+            }
         }
         SongActionsHost(c) { actions ->
-            LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalBottomInset.current + 16.dp)) {
-                when (tab) {
-                    0 -> {
-                        item {
-                            TextButton(onClick = onDownloads, modifier = Modifier.padding(horizontal = 8.dp)) {
-                                Icon(Icons.Default.Download, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.manage_downloads))
-                            }
-                        }
-                        val done = downloads.filter { it.download.status == DownloadStatus.DONE && it.song != null }
-                            .map { it.song!!.toSong() }
-                        if (done.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(done, actions, c)
-                    }
-                    1 -> if (favorites.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(favorites, actions, c)
-                    2 -> {
-                        item {
-                            TextButton(onClick = { showCreate = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
-                                Icon(Icons.Default.Add, null)
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.new_playlist))
-                            }
-                        }
-                        if (playlists.isEmpty()) item { EmptyText(R.string.no_playlists) }
-                        items(playlists.size) { i ->
-                            val p = playlists[i]
-                            var menu by remember { mutableStateOf(false) }
-                            Row(
-                                Modifier.fillMaxWidth().clickable { onOpen(CollectionType.USER, p.id.toString()) }
-                                    .padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Icon(Icons.AutoMirrored.Filled.QueueMusic, null, Modifier.size(40.dp))
-                                Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                                    Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                    Text(stringResource(R.string.songs_count_fmt, p.songCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Swipe left / right to slide between Downloads, Favorites, Playlists and Recent
+            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
+                LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = LocalBottomInset.current + 16.dp)) {
+                    when (page) {
+                        0 -> {
+                            item {
+                                TextButton(onClick = onDownloads, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                    Icon(Icons.Default.Download, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.manage_downloads))
                                 }
-                                Box {
-                                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
-                                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                                        DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menu = false; renaming = p })
-                                        DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; deleting = p })
+                            }
+                            val done = downloads.filter { it.download.status == DownloadStatus.DONE && it.song != null }
+                                .map { it.song!!.toSong() }
+                            if (done.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(done, actions, c, showDelete = true)
+                        }
+                        1 -> if (favorites.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(favorites, actions, c)
+                        2 -> {
+                            item {
+                                TextButton(onClick = { showCreate = true }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                                    Icon(Icons.Default.Add, null)
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(stringResource(R.string.new_playlist))
+                                }
+                            }
+                            if (playlists.isEmpty()) item { EmptyText(R.string.no_playlists) }
+                            items(playlists.size) { i ->
+                                val p = playlists[i]
+                                var menu by remember { mutableStateOf(false) }
+                                Row(
+                                    Modifier.fillMaxWidth().clickable { onOpen(CollectionType.USER, p.id.toString()) }
+                                        .padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, null, Modifier.size(40.dp))
+                                    Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                                        Text(p.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text(stringResource(R.string.songs_count_fmt, p.songCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Box {
+                                        IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
+                                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.rename)) }, onClick = { menu = false; renaming = p })
+                                            DropdownMenuItem(text = { Text(stringResource(R.string.delete)) }, onClick = { menu = false; deleting = p })
+                                        }
                                     }
                                 }
                             }
                         }
+                        else -> if (recents.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(recents, actions, c)
                     }
-                    else -> if (recents.isEmpty()) item { EmptyText(R.string.empty_list) } else songItems(recents, actions, c)
                 }
             }
         }

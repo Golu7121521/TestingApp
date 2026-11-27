@@ -52,3 +52,12 @@ app/src/main/java/com/mytune/app/
   di               AppContainer (manual DI)
   ui               Compose screens, components, theme, navigation
 ```
+
+## What is new in 1.1.0
+
+* First launch: onboarding page (country, 3+ languages, 3+ artists). Re-open it from Settings -> "Languages & artists".
+* Personalised home feed (Just For You, Last Played, Your Artists, Trending, charts, artist playlists, albums, language rows). It follows the listening (artist weights in DataStore) and silently rebuilds after a few new plays, every 10 minutes and on pull-to-refresh.
+* Podcasts tab is built by `HomeFeed.podcasts()` (the API has no podcast endpoint, so shows/episodes are searched as songs, albums and playlists). There is no separate server in this project: all backend logic lives in `data/api`.
+* Equalizer (presets, bass, surround, 5 bands) in `audio/EqualizerManager` + `ui/components/EqualizerDialog`.
+* Launcher icon colour follows the accent colour (one `activity-alias` per accent, see `IconManager`).
+* Notification has Like and Close buttons. Close and swiping the app from Recents stop playback and end the process.

@@ -162,10 +162,14 @@ class SongActions(
     val download: (Song) -> Unit,
     val goToArtist: (Song) -> Unit,
     val share: (Song) -> Unit,
+    val deleteDownload: (Song) -> Unit,
 )
 
 /** Called to open an album / playlist / artist page; AppRoot also collapses the full player. */
 val LocalOpenCollection = staticCompositionLocalOf<(String, String) -> Unit> { { _, _ -> } }
+
+/** Opens an artist page: (artistId, artistName). The name is used as a fallback to find songs. */
+val LocalOpenArtist = staticCompositionLocalOf<(String, String) -> Unit> { { _, _ -> } }
 
 /** The shared three-dots menu: Play next, Add to queue, Liked Songs, Add to playlist, Equalizer, Download, Go to artist. */
 @Composable
@@ -175,7 +179,8 @@ fun ColumnScope.SongMenuItems(song: Song, actions: SongActions, onDismiss: () ->
     fun item(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color = Color.Unspecified, onClick: () -> Unit) {
         DropdownMenuItem(
             text = { Text(label) },
-            leadingIcon = { Icon(icon, null, tint = tint) },
+            // Never pass an Unspecified tint: Icon would then draw the raw black vector (invisible in dark mode).
+            leadingIcon = { if (tint == Color.Unspecified) Icon(icon, null) else Icon(icon, null, tint = tint) },
             onClick = { onDismiss(); onClick() },
         )
     }
@@ -188,13 +193,14 @@ fun ColumnScope.SongMenuItems(song: Song, actions: SongActions, onDismiss: () ->
     ) { actions.toggleLike(song) }
     item("Add to playlist", Icons.AutoMirrored.Filled.PlaylistAdd) { actions.addToPlaylist(song) }
     item("Equalizer", Icons.Default.Equalizer) { actions.equalizer() }
-    item("Download", Icons.Default.Download) { actions.download(song) }
+    if (song.id in actions.downloaded) item("Delete download", Icons.Default.Delete) { actions.deleteDownload(song) }
+    else item("Download", Icons.Default.Download) { actions.download(song) }
     item("Go to artist", Icons.Default.Person) { actions.goToArtist(song) }
     if (onRemove != null) item(stringResource(R.string.menu_remove), Icons.Default.Close) { onRemove() }
 }
 
 @Composable
-fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (() -> Unit)? = null) {
+fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (() -> Unit)? = null, onDelete: (() -> Unit)? = null) {
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth().clickable(onClick = onClick).padding(start = 16.dp, top = 6.dp, bottom = 6.dp),
@@ -214,6 +220,9 @@ fun SongRow(song: Song, actions: SongActions, onClick: () -> Unit, onRemove: (()
         if (song.durationSec > 0) {
             Text(formatTime(song.durationSec * 1000), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (onDelete != null) {
+            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, stringResource(R.string.delete), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
         Box {
             IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
             DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -229,6 +238,7 @@ fun LazyListScope.songItems(
     actions: SongActions,
     c: AppContainer,
     onRemove: ((Song) -> Unit)? = null,
+    showDelete: Boolean = false,
 ) {
     itemsIndexed(songs) { index, song ->
         SongRow(
@@ -236,6 +246,7 @@ fun LazyListScope.songItems(
             actions = actions,
             onClick = { c.player.play(songs, index) },
             onRemove = onRemove?.let { r -> { r(song) } },
+            onDelete = if (showDelete) ({ actions.deleteDownload(song) }) else null,
         )
     }
 }
@@ -248,10 +259,12 @@ fun SongActionsHost(c: AppContainer, content: @Composable (SongActions) -> Unit)
     val items by c.downloads.items.collectAsState(initial = emptyList())
     val done = remember(items) { items.filter { it.download.status == "DONE" }.map { it.download.songId }.toSet() }
     var picker by remember { mutableStateOf<Song?>(null) }
+    var showEq by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<Song?>(null) }
 
     val favs by c.library.favorites.collectAsState(initial = emptyList())
     val liked = remember(favs) { favs.map { it.id }.toSet() }
-    val openCollection = LocalOpenCollection.current
+    val openArtist = LocalOpenArtist.current
 
     val actions = SongActions(
         downloaded = done,
@@ -263,28 +276,18 @@ fun SongActionsHost(c: AppContainer, content: @Composable (SongActions) -> Unit)
             Toast.makeText(ctx, if (song.id in liked) "Removed from Liked Songs" else "Added to Liked Songs", Toast.LENGTH_SHORT).show()
         },
         addToPlaylist = { picker = it },
-        equalizer = {
-            val i = Intent(android.media.audiofx.AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-                putExtra(android.media.audiofx.AudioEffect.EXTRA_AUDIO_SESSION, com.mytune.app.player.PlaybackService.audioSessionId)
-                putExtra(android.media.audiofx.AudioEffect.EXTRA_CONTENT_TYPE, android.media.audiofx.AudioEffect.CONTENT_TYPE_MUSIC)
-                putExtra(android.media.audiofx.AudioEffect.EXTRA_PACKAGE_NAME, ctx.packageName)
-            }
-            try {
-                ctx.startActivity(i)
-            } catch (e: Exception) {
-                Toast.makeText(ctx, "No equalizer found on this device", Toast.LENGTH_SHORT).show()
-            }
-        },
+        equalizer = { showEq = true },
         download = {
             scope.launch { c.downloads.enqueue(it, c.settings.downloadQualityNow) }
             Toast.makeText(ctx, ctx.getString(R.string.download_started), Toast.LENGTH_SHORT).show()
         },
         goToArtist = { song ->
             val name = song.artist.split(",").firstOrNull()?.trim().orEmpty()
-            scope.launch {
+            if (song.artistId.isNotBlank()) {
+                openArtist(song.artistId, name)
+            } else scope.launch {
                 val hit = if (name.isBlank()) null else c.repository.searchArtists(name, 1).getOrNull()?.firstOrNull()
-                if (hit != null) openCollection(hit.type, hit.id)
-                else Toast.makeText(ctx, "Artist not found", Toast.LENGTH_SHORT).show()
+                if (hit != null) openArtist(hit.id, hit.title) else Toast.makeText(ctx, "Artist not found", Toast.LENGTH_SHORT).show()
             }
         },
         share = { song ->
@@ -294,9 +297,26 @@ fun SongActionsHost(c: AppContainer, content: @Composable (SongActions) -> Unit)
             }
             ctx.startActivity(Intent.createChooser(send, null))
         },
+        deleteDownload = { deleting = it },
     )
     content(actions)
     picker?.let { song -> PlaylistPickerDialog(c, song) { picker = null } }
+    if (showEq) EqualizerDialog(c.equalizer) { showEq = false }
+    deleting?.let { song ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete download?") },
+            text = { Text("\"${song.title}\" will be removed from this device. You can download it again any time.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    scope.launch { c.downloads.delete(song.id) }
+                    Toast.makeText(ctx, "Download deleted", Toast.LENGTH_SHORT).show()
+                    deleting = null
+                }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text(stringResource(R.string.cancel)) } },
+        )
+    }
 }
 
 @Composable

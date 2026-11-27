@@ -39,6 +39,8 @@ import com.mytune.app.domain.*
 import com.mytune.app.ui.UiState
 import com.mytune.app.ui.components.*
 import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -54,12 +56,8 @@ class SearchViewModel(private val repo: MusicRepository, private val library: co
     val query = MutableStateFlow("")
     val results = MutableStateFlow<UiState<SearchResults>?>(null)
     val history = library.history.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    val trendingSongs = MutableStateFlow<List<Song>>(emptyList())
-    val trendingPlaylists = MutableStateFlow<List<MediaCollection>>(emptyList())
 
     init {
-        viewModelScope.launch { repo.searchSongs("trending", 15).getOrNull()?.let { trendingSongs.value = it } }
-        viewModelScope.launch { repo.searchPlaylists("top charts", 15).getOrNull()?.let { trendingPlaylists.value = it } }
         viewModelScope.launch {
             // 400 ms debounce, as requested; collectLatest cancels stale searches.
             query.debounce(400).distinctUntilChanged().collectLatest { q ->
@@ -121,8 +119,6 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
     val query by vm.query.collectAsState()
     val results by vm.results.collectAsState()
     val history by vm.history.collectAsState()
-    val trendingSongs by vm.trendingSongs.collectAsState()
-    val trendingPlaylists by vm.trendingPlaylists.collectAsState()
     var tab by rememberSaveable { mutableIntStateOf(0) }
     val tabs = listOf(R.string.tab_songs, R.string.tab_albums, R.string.tab_playlists, R.string.tab_artists)
 
@@ -180,29 +176,6 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
                             }
                         }
                     }
-                    if (trendingSongs.isNotEmpty()) {
-                        item {
-                            Column {
-                                SectionHeader("Trending Songs")
-                                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    itemsIndexed(trendingSongs) { i, song -> MediaCard(song.title, song.artist, song.artworkUrl) { c.player.play(trendingSongs, i) } }
-                                }
-                            }
-                        }
-                    }
-                    if (trendingPlaylists.isNotEmpty()) {
-                        item {
-                            Column {
-                                SectionHeader("Charts & Channels")
-                                LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    items(trendingPlaylists.size) { i ->
-                                        val p = trendingPlaylists[i]
-                                        MediaCard(p.title, p.subtitle, p.artworkUrl) { onOpen(p.type, p.id) }
-                                    }
-                                }
-                            }
-                        }
-                    }
                     item { SectionHeader("Browse All") }
                     items(BROWSE.chunked(2).size) { row ->
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -228,18 +201,26 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
             is UiState.Error -> ErrorView(onRetry = { vm.retry() })
             is UiState.Success -> {
                 val data = r.data
-                ScrollableTabRow(selectedTabIndex = tab, edgePadding = 8.dp) {
-                    tabs.forEachIndexed { i, res -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(res)) }) }
+                val pager = rememberPagerState(initialPage = tab, pageCount = { tabs.size })
+                val scope = rememberCoroutineScope()
+                LaunchedEffect(pager.currentPage) { tab = pager.currentPage }
+                ScrollableTabRow(selectedTabIndex = pager.currentPage, edgePadding = 8.dp) {
+                    tabs.forEachIndexed { i, res ->
+                        Tab(selected = pager.currentPage == i, onClick = { scope.launch { pager.animateScrollToPage(i) } }, text = { Text(stringResource(res)) })
+                    }
                 }
                 SongActionsHost(c) { actions ->
-                    LazyColumn(Modifier.fillMaxSize()) {
-                        when (tab) {
-                            0 -> if (data.songs.isEmpty()) item { EmptyText(R.string.no_results) } else songItems(data.songs, actions, c)
-                            1 -> collectionItems(data.albums, onOpen)
-                            2 -> collectionItems(data.playlists, onOpen)
-                            else -> collectionItems(data.artists, onOpen)
+                    // Swipe left / right between Songs, Albums, Playlists and Artists (pages slide with the finger)
+                    HorizontalPager(state = pager, modifier = Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            when (page) {
+                                0 -> if (data.songs.isEmpty()) item { EmptyText(R.string.no_results) } else songItems(data.songs, actions, c)
+                                1 -> collectionItems(data.albums, onOpen)
+                                2 -> collectionItems(data.playlists, onOpen)
+                                else -> collectionItems(data.artists, onOpen, artists = true)
+                            }
+                            item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                         }
-                        item { Spacer(Modifier.height(LocalBottomInset.current + 16.dp)) }
                     }
                 }
             }
@@ -247,13 +228,16 @@ fun SearchScreen(c: AppContainer, onOpen: (String, String) -> Unit) {
     }
 }
 
-private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (String, String) -> Unit) {
+private fun LazyListScope.collectionItems(list: List<MediaCollection>, onOpen: (String, String) -> Unit, artists: Boolean = false) {
     if (list.isEmpty()) {
         item { EmptyText(R.string.no_results) }
     } else {
         items(list.size) { i ->
             val item = list[i]
-            CollectionRow(item) { onOpen(item.type, item.id) }
+            if (artists) {
+                val openArtist = LocalOpenArtist.current
+                CollectionRow(item) { openArtist(item.id, item.title) }
+            } else CollectionRow(item) { onOpen(item.type, item.id) }
         }
     }
 }

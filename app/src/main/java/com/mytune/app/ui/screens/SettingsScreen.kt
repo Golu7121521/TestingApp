@@ -93,7 +93,10 @@ fun SettingsScreen(c: AppContainer) {
                         .size(44.dp)
                         .clip(CircleShape)
                         .background(a.color)
-                        .clickable { scope.launch { c.settings.setAccent(a.key) } },
+                        .clickable {
+                            scope.launch { c.settings.setAccent(a.key) }
+                            com.mytune.app.ui.theme.IconManager.apply(ctx, a.key) // app icon follows the accent
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     if (accent == a.key) Icon(Icons.Default.Check, a.name, tint = Color.Black.copy(alpha = 0.75f))
@@ -101,7 +104,15 @@ fun SettingsScreen(c: AppContainer) {
             }
         }
 
+        Text("The app icon on your home screen changes colour with the accent (may take a few seconds).", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp))
+
         Spacer(Modifier.height(16.dp))
+        ListItem(
+            headlineContent = { Text("Languages & artists") },
+            supportingContent = { Text("Change what your home feed is built from") },
+            leadingContent = { Icon(Icons.Default.Tune, null) },
+            modifier = Modifier.clickable { scope.launch { c.settings.resetOnboarding() } },
+        )
         ListItem(
             headlineContent = { Text(stringResource(R.string.clear_cache)) },
             leadingContent = { Icon(Icons.Default.CleaningServices, null) },

@@ -49,6 +49,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import com.mytune.app.data.repository.Lyrics
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.core.graphics.drawable.toBitmap
 import androidx.media3.common.Player
 import androidx.palette.graphics.Palette
@@ -95,14 +97,14 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
             .fillMaxSize()
             .background(Brush.verticalGradient(listOf(bg, Color(0xFF0B0B0D))))
             .systemBarsPadding()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         CompositionLocalProvider(LocalContentColor provides Color.White) {
-            Box(Modifier.padding(top = 6.dp).size(width = 40.dp, height = 4.dp).clip(RoundedCornerShape(2.dp)).background(Color.White.copy(alpha = 0.35f)))
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.close)) }
-                Text(stringResource(R.string.now_playing), Modifier.weight(1f), textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium)
+            // Top bar: collapse on the left, three-dot menu on the right
+            Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, stringResource(R.string.close), Modifier.size(30.dp)) }
+                Spacer(Modifier.weight(1f))
                 Box {
                     IconButton(onClick = { moreMenu = true }) { Icon(Icons.Default.MoreVert, stringResource(R.string.more_options)) }
                     DropdownMenu(expanded = moreMenu, onDismissRequest = { moreMenu = false }) {
@@ -111,17 +113,24 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 }
             }
 
-            // Artwork takes whatever height is left, always square
-            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 8.dp), contentAlignment = Alignment.Center) {
+            // Big square artwork that takes the free height; it breathes a little with play / pause
+            BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().padding(vertical = 6.dp), contentAlignment = Alignment.Center) {
                 val side = minOf(maxWidth, maxHeight)
-                Artwork(s.artworkUrl, Modifier.size(side), RoundedCornerShape(24.dp))
+                val sc by animateFloatAsState(if (s.isPlaying) 1f else 0.92f, spring(dampingRatio = 0.6f, stiffness = 300f), label = "artScale")
+                Artwork(
+                    s.artworkUrl,
+                    Modifier.size(side).graphicsLayer { scaleX = sc; scaleY = sc }.shadow(24.dp, RoundedCornerShape(28.dp), clip = false),
+                    RoundedCornerShape(28.dp),
+                )
             }
 
+            Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text(s.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.ExtraBold)
                     Text(
-                        s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.7f),
+                        s.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, color = Color.White.copy(alpha = 0.75f),
+                        style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.clickable { actions.goToArtist(currentSong(s)) },
                     )
                 }
@@ -130,6 +139,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                         if (fav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                         stringResource(R.string.favorite),
                         tint = if (fav) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(28.dp),
                     )
                 }
             }
@@ -145,7 +155,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
             var dragging by remember { mutableStateOf<Float?>(null) }
             val dur = s.durationMs.coerceAtLeast(1L)
             val fraction = dragging ?: (s.positionMs.toFloat() / dur).coerceIn(0f, 1f)
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(6.dp))
             SeekBar(
                 fraction = fraction,
                 active = dragging != null,
@@ -160,53 +170,62 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 Text(formatTime(s.durationMs), style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f))
             }
 
-            // Transport controls
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            // Transport: shuffle | previous | PLAY | next | repeat
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { c.player.toggleShuffle() }) {
-                    Icon(Icons.Default.Shuffle, stringResource(R.string.shuffle), tint = if (s.shuffle) MaterialTheme.colorScheme.primary else Color.White)
+                    Icon(Icons.Default.Shuffle, stringResource(R.string.shuffle), tint = if (s.shuffle) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.8f))
                 }
-                IconButton(onClick = { c.player.previous() }, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Default.SkipPrevious, stringResource(R.string.previous), Modifier.size(36.dp))
+                IconButton(onClick = { c.player.previous() }, modifier = Modifier.size(56.dp)) {
+                    Icon(Icons.Default.SkipPrevious, stringResource(R.string.previous), Modifier.size(40.dp))
                 }
-                FilledIconButton(
-                    onClick = { c.player.togglePlay() },
-                    modifier = Modifier.size(68.dp),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = Color.White, contentColor = Color.Black),
+                Box(
+                    Modifier.size(76.dp).shadow(14.dp, CircleShape).clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.secondary, MaterialTheme.colorScheme.primary)))
+                        .clickable { c.player.togglePlay() },
+                    contentAlignment = Alignment.Center,
                 ) {
                     if (s.isBuffering && !s.isPlaying) {
-                        CircularProgressIndicator(Modifier.size(28.dp), color = Color.Black, strokeWidth = 3.dp)
+                        CircularProgressIndicator(Modifier.size(30.dp), color = MaterialTheme.colorScheme.onPrimary, strokeWidth = 3.dp)
                     } else {
                         Icon(
                             if (s.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                             stringResource(if (s.isPlaying) R.string.pause else R.string.play),
-                            Modifier.size(38.dp),
+                            Modifier.size(44.dp), tint = MaterialTheme.colorScheme.onPrimary,
                         )
                     }
                 }
-                IconButton(onClick = { c.player.next() }, modifier = Modifier.size(52.dp)) {
-                    Icon(Icons.Default.SkipNext, stringResource(R.string.next), Modifier.size(36.dp))
+                IconButton(onClick = { c.player.next() }, modifier = Modifier.size(56.dp)) {
+                    Icon(Icons.Default.SkipNext, stringResource(R.string.next), Modifier.size(40.dp))
                 }
                 IconButton(onClick = { c.player.cycleRepeat() }) {
                     Icon(
                         if (s.repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                         stringResource(R.string.repeat),
-                        tint = if (s.repeatMode == Player.REPEAT_MODE_OFF) Color.White else MaterialTheme.colorScheme.primary,
+                        tint = if (s.repeatMode == Player.REPEAT_MODE_OFF) Color.White.copy(alpha = 0.8f) else MaterialTheme.colorScheme.primary,
                     )
                 }
             }
 
-            // Extra actions: download, sleep timer, lyrics, add to playlist, queue
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 8.dp), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+            // Secondary actions in a rounded glass bar: download / delete, sleep timer, lyrics, playlist, equalizer, queue
+            Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 10.dp).clip(RoundedCornerShape(28.dp)).background(Color.White.copy(alpha = 0.09f)).padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically,
+            ) {
                 val status = dl?.status
                 IconButton(onClick = {
-                    if (status == null || status == DownloadStatus.FAILED) {
-                        scope.launch { c.downloads.enqueue(currentSong(s), c.settings.downloadQualityNow) }
-                        Toast.makeText(ctx, ctx.getString(R.string.download_started), Toast.LENGTH_SHORT).show()
+                    when (status) {
+                        null, DownloadStatus.FAILED -> {
+                            scope.launch { c.downloads.enqueue(currentSong(s), c.settings.downloadQualityNow) }
+                            Toast.makeText(ctx, ctx.getString(R.string.download_started), Toast.LENGTH_SHORT).show()
+                        }
+                        DownloadStatus.DONE -> actions.deleteDownload(currentSong(s))
+                        else -> {}
                     }
                 }) {
                     Icon(
                         if (status == DownloadStatus.DONE) Icons.Default.DownloadDone else Icons.Default.Download,
                         stringResource(R.string.menu_download),
+                        tint = if (status == DownloadStatus.DONE) MaterialTheme.colorScheme.primary else Color.White,
                         modifier = Modifier.alpha(if (status == null || status == DownloadStatus.DONE || status == DownloadStatus.FAILED) 1f else 0.5f),
                     )
                 }
@@ -230,6 +249,7 @@ fun PlayerScreen(c: AppContainer, onBack: () -> Unit) {
                 }
                 IconButton(onClick = { showLyrics = true }) { Icon(Icons.Default.Lyrics, "Lyrics") }
                 IconButton(onClick = { showPlaylist = true }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, stringResource(R.string.menu_add_playlist)) }
+                IconButton(onClick = { actions.equalizer() }) { Icon(Icons.Default.Equalizer, "Equalizer") }
                 IconButton(onClick = { showQueue = true }) { Icon(Icons.AutoMirrored.Filled.QueueMusic, stringResource(R.string.queue)) }
             }
         }
@@ -346,7 +366,7 @@ private fun LyricsSheet(c: AppContainer, s: PlayerState, onDismiss: () -> Unit) 
 
 private fun currentSong(s: PlayerState) = Song(
     id = s.mediaId.orEmpty(), title = s.title, artist = s.artist, album = s.album,
-    artworkUrl = s.artworkUrl, durationSec = s.durationMs / 1000,
+    artworkUrl = s.artworkUrl, durationSec = s.durationMs / 1000, artistId = s.artistId,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

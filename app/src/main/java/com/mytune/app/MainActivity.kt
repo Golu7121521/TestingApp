@@ -9,17 +9,18 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import com.mytune.app.ui.AppRoot
+import com.mytune.app.ui.screens.OnboardingScreen
+import com.mytune.app.ui.screens.SplashScreen
 import com.mytune.app.ui.theme.MyTuneTheme
 
 class MainActivity : ComponentActivity() {
@@ -31,10 +32,20 @@ class MainActivity : ComponentActivity() {
         setContent {
             val theme by container.settings.theme.collectAsState(initial = "system")
             val accent by container.settings.accent.collectAsState(initial = "green")
+            // null until the first DataStore read finishes (covered by the splash screen)
+            val onboarded by container.settings.onboarded.collectAsState(initial = null)
+            var splashDone by rememberSaveable { mutableStateOf(false) }
             MyTuneTheme(theme, accent) {
                 Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                    NotificationPermission()
-                    AppRoot(container)
+                    Box(Modifier.fillMaxSize()) {
+                        NotificationPermission()
+                        when (onboarded) {
+                            true -> AppRoot(container)
+                            false -> OnboardingScreen(container)
+                            null -> {}
+                        }
+                        if (!splashDone) SplashScreen { splashDone = true }
+                    }
                 }
             }
         }

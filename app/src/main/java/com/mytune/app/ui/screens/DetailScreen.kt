@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 class DetailViewModel(
     private val type: String,
     private val id: String,
+    private val name: String,
     private val repo: MusicRepository,
     private val library: com.mytune.app.data.repository.LibraryRepository,
 ) : ViewModel() {
@@ -57,7 +58,27 @@ class DetailViewModel(
 
     init { load() }
 
+    val albums = MutableStateFlow<List<MediaCollection>>(emptyList())
+
     private fun loadRelated(col: MediaCollection) {
+        if (col.type == CollectionType.ARTIST) {
+            // Artist page: albums of the artist and similar artists
+            albums.value = col.albums
+            if (col.similar.isNotEmpty()) relatedArtists.value = col.similar
+            val nm = name.ifBlank { col.title }
+            viewModelScope.launch {
+                if (col.albums.isEmpty() && nm.isNotBlank()) repo.searchAlbums(nm, 12).getOrNull()?.let { albums.value = it }
+                if (col.similar.isEmpty()) {
+                    val first = col.songs.firstOrNull() ?: return@launch
+                    repo.suggestions(first.id, 25).getOrNull()?.let { l ->
+                        relatedArtists.value = l.mapNotNull { sg -> sg.artist.split(",").firstOrNull()?.trim()?.takeIf { it.isNotBlank() && !it.equals(nm, true) } }
+                            .distinct().take(8).mapNotNull { a -> repo.searchArtists(a, 1).getOrNull()?.firstOrNull() }
+                            .filter { it.id != col.id }.distinctBy { it.id }
+                    }
+                }
+            }
+            return
+        }
         val first = col.songs.firstOrNull() ?: return
         viewModelScope.launch {
             val inList = col.songs.map { it.id }.toSet()
@@ -94,7 +115,7 @@ class DetailViewModel(
                 val result = when (type) {
                     CollectionType.ALBUM -> repo.album(id)
                     CollectionType.PLAYLIST -> repo.playlist(id)
-                    else -> repo.artist(id)
+                    else -> repo.artist(id, name)
                 }
                 _state.value = result.fold({ UiState.Success(it) }, { UiState.Error(it.message) })
                 result.getOrNull()?.let { loadRelated(it) }
@@ -109,14 +130,16 @@ class DetailViewModel(
 }
 
 @Composable
-fun DetailScreen(c: AppContainer, type: String, id: String, onBack: () -> Unit, onOpen: (String, String) -> Unit) {
+fun DetailScreen(c: AppContainer, type: String, id: String, name: String = "", onBack: () -> Unit, onOpen: (String, String) -> Unit) {
     val vm: DetailViewModel = viewModel(
         key = "detail_${type}_$id",
-        factory = viewModelFactory { initializer { DetailViewModel(type, id, c.repository, c.library) } },
+        factory = viewModelFactory { initializer { DetailViewModel(type, id, name, c.repository, c.library) } },
     )
     val state by vm.state.collectAsState()
     val related by vm.relatedSongs.collectAsState()
     val relatedArtists by vm.relatedArtists.collectAsState()
+    val artistAlbums by vm.albums.collectAsState()
+    val openArtist = LocalOpenArtist.current
     val myPlaylists by c.library.playlists.collectAsState(initial = emptyList<com.mytune.app.data.db.PlaylistInfo>())
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
@@ -180,17 +203,32 @@ fun DetailScreen(c: AppContainer, type: String, id: String, onBack: () -> Unit, 
                             }
                         }
                         if (col.songs.isEmpty()) item { EmptyText(R.string.empty_list) }
+                        if (col.type == CollectionType.ARTIST && col.songs.isNotEmpty()) item { SectionHeader("Top Songs") }
                         songItems(col.songs, actions, c, onRemove = removeAction)
+
+                        if (col.type == CollectionType.ARTIST && artistAlbums.isNotEmpty()) {
+                            item {
+                                Column {
+                                    SectionHeader("Albums")
+                                    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                        items(artistAlbums.size) { i ->
+                                            val a = artistAlbums[i]
+                                            MediaCard(a.title, a.subtitle, a.artworkUrl) { onOpen(a.type, a.id) }
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
                         // 4. Related artists
                         if (relatedArtists.isNotEmpty()) {
                             item {
                                 Column {
-                                    SectionHeader("Related Artists")
+                                    SectionHeader(if (col.type == CollectionType.ARTIST) "Similar Artists" else "Related Artists")
                                     LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                                         items(relatedArtists.size) { i ->
                                             val a = relatedArtists[i]
-                                            MediaCard(a.title, a.subtitle, a.artworkUrl, circle = true) { onOpen(a.type, a.id) }
+                                            MediaCard(a.title, a.subtitle, a.artworkUrl, circle = true) { openArtist(a.id, a.title) }
                                         }
                                     }
                                 }

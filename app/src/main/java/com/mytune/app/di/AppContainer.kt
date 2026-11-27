@@ -16,6 +16,7 @@ import com.mytune.app.player.StreamResolver
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -78,8 +79,10 @@ class AppContainer(private val app: Application) {
     val library = LibraryRepository(db.dao())
     val downloads = DownloadRepository(app, db.dao(), this)
     val resolver = StreamResolver(repository, db.dao(), settings)
+    val equalizer = com.mytune.app.audio.EqualizerManager(settings, appScope)
     val player = PlayerController(app, appScope, library).also { pc ->
         pc.suggestionProvider = { id -> repository.suggestions(id, 20).getOrDefault(emptyList()) }
+        pc.onSongStarted = { song -> appScope.launch(Dispatchers.IO) { settings.recordPlay(song.artist) } }
     }
 
     /** App-specific external storage: no storage permission required. */

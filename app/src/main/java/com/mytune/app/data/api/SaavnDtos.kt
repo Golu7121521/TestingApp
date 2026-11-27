@@ -38,6 +38,8 @@ data class CollectionDto(
     val artists: JsonElement? = null,
     val songs: List<SongDto>? = null,
     val topSongs: List<SongDto>? = null,
+    val topAlbums: List<CollectionDto>? = null,
+    val similarArtists: List<CollectionDto>? = null,
     val role: String? = null,
 )
 
@@ -57,6 +59,14 @@ private fun artistNames(el: JsonElement?): String {
         ?: return ""
     return arr.mapNotNull { ((it as? JsonObject)?.get("name") as? JsonPrimitive)?.contentOrNull }
         .joinToString(", ") { it.clean() }
+}
+
+private fun primaryArtistId(el: JsonElement?): String {
+    val arr = ((el as? JsonObject)?.get("primary") as? JsonArray)
+        ?: ((el as? JsonObject)?.get("all") as? JsonArray)
+        ?: (el as? JsonArray)
+        ?: return ""
+    return arr.firstNotNullOfOrNull { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.contentOrNull?.takeIf { v -> v.isNotBlank() } }.orEmpty()
 }
 
 internal fun SongDto.toSong(): Song? {
@@ -81,6 +91,7 @@ internal fun SongDto.toSong(): Song? {
         artworkUrl = image.best(),
         durationSec = duration?.contentOrNull?.toLongOrNull() ?: 0L,
         streamUrls = urls,
+        artistId = primaryArtistId(artists),
     )
 }
 
@@ -91,5 +102,9 @@ internal fun CollectionDto.toCollection(type: String): MediaCollection? {
         else -> artistNames(artists).ifBlank { description.clean() }
     }
     val tracks = (songs ?: topSongs).orEmpty().mapNotNull { it.toSong() }
-    return MediaCollection(cid, type, name.clean(), subtitle, image.best(), tracks)
+    return MediaCollection(
+        cid, type, name.clean(), subtitle, image.best(), tracks,
+        albums = topAlbums.orEmpty().mapNotNull { it.toCollection(CollectionType.ALBUM) },
+        similar = similarArtists.orEmpty().mapNotNull { it.toCollection(CollectionType.ARTIST) },
+    )
 }

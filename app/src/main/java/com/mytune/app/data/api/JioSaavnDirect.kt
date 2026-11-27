@@ -81,11 +81,17 @@ class JioSaavnDirect(private val http: OkHttpClient) : MusicRepository {
         )
     }
 
+    /** Song lists come either as a plain array or wrapped as {"songs":[...]}. */
+    private fun songsFrom(el: JsonElement?): List<Song> = songs(el.obj()?.get("songs") ?: el)
+
+    private fun collectionsFrom(el: JsonElement?, type: String): List<MediaCollection> =
+        (el.obj()?.get("albums") ?: el.obj()?.get("artists") ?: el).arr().orEmpty().mapNotNull { it.obj()?.let { o -> collection(o, type) } }
+
     private fun songs(el: JsonElement?): List<Song> = el.arr().orEmpty().mapNotNull { it.obj()?.let(::songDto)?.toSong() }
 
     private fun collection(o: JsonObject, type: String): MediaCollection? {
         val sub = o.str("subtitle") ?: o.str("description")
-        val tracks = songs(o["list"] ?: o["topSongs"] ?: o["songs"])
+        val tracks = songsFrom(o["list"] ?: o["topSongs"] ?: o["songs"])
         val dto = CollectionDto(
             id = o.str("id") ?: o.str("artistId"),
             name = o.str("title") ?: o.str("name"),
@@ -93,7 +99,11 @@ class JioSaavnDirect(private val http: OkHttpClient) : MusicRepository {
             image = img(o),
             role = sub,
         )
-        return dto.toCollection(type)?.copy(songs = tracks)
+        return dto.toCollection(type)?.copy(
+            songs = tracks,
+            albums = if (type == CollectionType.ARTIST) collectionsFrom(o["topAlbums"], CollectionType.ALBUM) else emptyList(),
+            similar = if (type == CollectionType.ARTIST) collectionsFrom(o["similarArtists"], CollectionType.ARTIST) else emptyList(),
+        )
     }
 
     private fun results(root: JsonElement, type: String): List<MediaCollection> =
@@ -131,8 +141,13 @@ class JioSaavnDirect(private val http: OkHttpClient) : MusicRepository {
         call("playlist.getDetails", "listid" to id, "n" to "100", "p" to "1").obj()?.let { collection(it, CollectionType.PLAYLIST) } ?: throw IOException("Playlist not found")
     }
 
-    override suspend fun artist(id: String) = safe {
-        call("artist.getArtistPageDetails", "artistId" to id, "n_song" to "30", "n_album" to "10").obj()?.let { collection(it, CollectionType.ARTIST) } ?: throw IOException("Artist not found")
+    override suspend fun artist(id: String, name: String) = safe {
+        val col = call("artist.getArtistPageDetails", "artistId" to id, "n_song" to "30", "n_album" to "10", "type" to "1")
+            .obj()?.let { collection(it, CollectionType.ARTIST) } ?: throw IOException("Artist not found")
+        // Some artists come back without songs: fill the page from a song search on the artist name.
+        val nm = name.ifBlank { col.title }
+        if (col.songs.isNotEmpty() || nm.isBlank()) col
+        else col.copy(songs = searchSongs(nm, 30).getOrDefault(emptyList()))
     }
 
     override suspend fun suggestions(id: String, limit: Int) = safe {

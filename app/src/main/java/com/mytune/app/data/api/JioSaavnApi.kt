@@ -43,8 +43,11 @@ class JioSaavnApi(private val api: JioSaavnService) : MusicRepository {
     override suspend fun playlist(id: String): Result<MediaCollection> =
         safe { api.playlist(id).data?.toCollection(CollectionType.PLAYLIST) ?: throw IOException("Playlist not found") }
 
-    override suspend fun artist(id: String): Result<MediaCollection> =
-        safe { api.artist(id).data?.toCollection(CollectionType.ARTIST) ?: throw IOException("Artist not found") }
+    override suspend fun artist(id: String, name: String): Result<MediaCollection> = safe {
+        val col = api.artist(id).data?.toCollection(CollectionType.ARTIST) ?: throw IOException("Artist not found")
+        if (col.songs.isNotEmpty() || name.isBlank()) col
+        else col.copy(songs = api.searchSongs(name, 30).data?.results.orEmpty().mapNotNull { it.toSong() })
+    }
 
     override suspend fun suggestions(id: String, limit: Int): Result<List<Song>> =
         safe { api.suggestions(id, limit).data.orEmpty().mapNotNull { it.toSong() } }

@@ -71,8 +71,8 @@ object Routes {
     const val LIBRARY = "library"
     const val SETTINGS = "settings"
     const val DOWNLOADS = "downloads"
-    const val DETAIL = "detail/{type}/{id}"
-    fun detail(type: String, id: String) = "detail/$type/${Uri.encode(id)}"
+    const val DETAIL = "detail/{type}/{id}?name={name}"
+    fun detail(type: String, id: String, name: String = "") = "detail/$type/${Uri.encode(id)}?name=${Uri.encode(name)}"
 }
 
 private data class NavItem(val route: String, val label: Int, val icon: androidx.compose.ui.graphics.vector.ImageVector)
@@ -110,7 +110,14 @@ fun AppRoot(c: AppContainer) {
         nav.navigate(Routes.detail(type, id))
     }
 
+    val openArtist: (String, String) -> Unit = { id, name ->
+        scope.launch { expand.animateTo(0f, tween(250)) }
+        nav.navigate(Routes.detail(CollectionType.ARTIST, id, name))
+    }
+
     LaunchedEffect(player.hasMedia) { if (!player.hasMedia) expand.snapTo(0f) }
+    // Tapping any song starts playback and opens the Now Playing screen.
+    LaunchedEffect(Unit) { c.player.openPlayer.collect { expand.animateTo(1f, tween(320)) } }
 
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val fullHeight = maxHeight
@@ -129,7 +136,7 @@ fun AppRoot(c: AppContainer) {
         }
         val dragModifier = Modifier.draggable(dragState, Orientation.Vertical, onDragStopped = { settle(it) })
 
-        CompositionLocalProvider(LocalBottomInset provides bottomInset, LocalOpenCollection provides open) {
+        CompositionLocalProvider(LocalBottomInset provides bottomInset, LocalOpenCollection provides open, LocalOpenArtist provides openArtist) {
             // Screens draw edge to edge, behind the transparent bottom bar.
             NavHost(nav, startDestination = Routes.HOME, modifier = Modifier.fillMaxSize()) {
                 composable(Routes.HOME) { HomeScreen(c, open, onSearch = { goTab(Routes.SEARCH) }) }
@@ -142,18 +149,19 @@ fun AppRoot(c: AppContainer) {
                     arguments = listOf(
                         navArgument("type") { type = NavType.StringType },
                         navArgument("id") { type = NavType.StringType },
+                        navArgument("name") { type = NavType.StringType; defaultValue = "" },
                     ),
                 ) { entry ->
                     DetailScreen(
                         c,
                         type = entry.arguments?.getString("type").orEmpty(),
                         id = entry.arguments?.getString("id").orEmpty(),
+                        name = entry.arguments?.getString("name").orEmpty(),
                         onBack = { nav.popBackStack() },
                         onOpen = open,
                     )
                 }
             }
-        }
 
         // Mini player + bottom navigation, floating over the content
         Column(Modifier.align(Alignment.BottomCenter).onSizeChanged { bottomBarPx = it.height }) {
@@ -236,15 +244,19 @@ fun AppRoot(c: AppContainer) {
                         PlayerScreen(c, onBack = { scope.launch { expand.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 420f)) } })
                     }
                     // Mini row fades out as the panel grows
-                    MiniPlayerContent(
-                        player,
-                        onToggle = { c.player.togglePlay() },
-                        onNext = { c.player.next() },
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .graphicsLayer { alpha = (1f - e / 0.25f).coerceIn(0f, 1f) }
-                            .clickable(enabled = e < 0.1f) { scope.launch { expand.animateTo(1f, tween(320)) } },
-                    )
+                    // Only composed while the panel is (almost) collapsed. A transparent mini row left on top of the
+                    // full player used to swallow taps (its Next button sat under the 3-dot menu and skipped songs).
+                    if (e < 0.3f) {
+                        MiniPlayerContent(
+                            player,
+                            onToggle = { c.player.togglePlay() },
+                            onNext = { c.player.next() },
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .graphicsLayer { alpha = (1f - e / 0.25f).coerceIn(0f, 1f) }
+                                .clickable(enabled = e < 0.1f) { scope.launch { expand.animateTo(1f, tween(320)) } },
+                        )
+                    }
                 }
             }
         }
@@ -252,6 +264,7 @@ fun AppRoot(c: AppContainer) {
         // Registered last so it wins over the NavHost's own back handling: one back press collapses the player.
         BackHandler(enabled = expand.value > 0f) {
             scope.launch { expand.animateTo(0f, spring(dampingRatio = 0.9f, stiffness = 420f)) }
+        }
         }
     }
 }

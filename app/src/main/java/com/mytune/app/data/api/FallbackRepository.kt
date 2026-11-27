@@ -19,7 +19,7 @@ class FallbackRepository(private val primary: MusicRepository, private val secon
     override suspend fun song(id: String) = either<com.mytune.app.domain.Song>({ it.streamUrls.isNotEmpty() }) { it.song(id) }
     override suspend fun album(id: String) = either<com.mytune.app.domain.MediaCollection>({ it.songs.isNotEmpty() }) { it.album(id) }
     override suspend fun playlist(id: String) = either<com.mytune.app.domain.MediaCollection>({ it.songs.isNotEmpty() }) { it.playlist(id) }
-    override suspend fun artist(id: String) = either<com.mytune.app.domain.MediaCollection>({ it.songs.isNotEmpty() }) { it.artist(id) }
+    override suspend fun artist(id: String, name: String) = either<com.mytune.app.domain.MediaCollection>({ it.songs.isNotEmpty() }) { it.artist(id, name) }
     override suspend fun suggestions(id: String, limit: Int) = either<List<com.mytune.app.domain.Song>>({ it.isNotEmpty() }) { it.suggestions(id, limit) }
     override suspend fun home(): Result<HomeData> = buildHome()
 }

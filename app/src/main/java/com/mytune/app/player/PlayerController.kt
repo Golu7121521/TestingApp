@@ -33,6 +33,7 @@ data class PlayerState(
     val artist: String = "",
     val album: String = "",
     val artworkUrl: String = "",
+    val artistId: String = "",
     val isPlaying: Boolean = false,
     val isBuffering: Boolean = false,
     val positionMs: Long = 0,
@@ -45,6 +46,7 @@ data class PlayerState(
 )
 
 private const val EXTRA_DURATION = "dur"
+private const val EXTRA_ARTIST_ID = "artistId"
 
 fun Song.toMediaItem(): MediaItem = MediaItem.Builder()
     .setMediaId(id)
@@ -55,18 +57,19 @@ fun Song.toMediaItem(): MediaItem = MediaItem.Builder()
             .setArtist(artist)
             .setAlbumTitle(album)
             .setArtworkUri(if (artworkUrl.isBlank()) null else Uri.parse(artworkUrl))
-            .setExtras(Bundle().apply { putLong(EXTRA_DURATION, durationSec) })
+            .setExtras(Bundle().apply { putLong(EXTRA_DURATION, durationSec); putString(EXTRA_ARTIST_ID, artistId) })
             .build()
     )
     .build()
 
-private fun MediaItem.toSong() = Song(
+fun MediaItem.toSong() = Song(
     id = mediaId,
     title = mediaMetadata.title?.toString().orEmpty(),
     artist = mediaMetadata.artist?.toString().orEmpty(),
     album = mediaMetadata.albumTitle?.toString().orEmpty(),
     artworkUrl = mediaMetadata.artworkUri?.toString().orEmpty(),
     durationSec = mediaMetadata.extras?.getLong(EXTRA_DURATION) ?: 0L,
+    artistId = mediaMetadata.extras?.getString(EXTRA_ARTIST_ID).orEmpty(),
 )
 
 /** UI-side handle to the PlaybackService (via MediaController). Must be used from the main thread. */
@@ -81,6 +84,13 @@ class PlayerController(
     /** Epoch millis when the sleep timer fires, or null. */
     private val _sleepEnd = MutableStateFlow<Long?>(null)
     val sleepEnd: StateFlow<Long?> = _sleepEnd.asStateFlow()
+
+    /** Fires whenever the user starts playback of a list; AppRoot opens the Now Playing screen. */
+    private val _openPlayer = kotlinx.coroutines.flow.MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val openPlayer: kotlinx.coroutines.flow.SharedFlow<Unit> = _openPlayer
+
+    /** Set by AppContainer: called for every song that starts (feeds the personalised home feed). */
+    var onSongStarted: ((Song) -> Unit)? = null
 
     private var controller: MediaController? = null
     private var future: ListenableFuture<MediaController>? = null
@@ -120,6 +130,7 @@ class PlayerController(
             mediaItem?.let {
                 val song = it.toSong()
                 scope.launch(Dispatchers.IO) { library.addRecent(song) }
+                onSongStarted?.invoke(song)
             }
         }
 
@@ -188,6 +199,7 @@ class PlayerController(
             artist = md?.artist?.toString().orEmpty(),
             album = md?.albumTitle?.toString().orEmpty(),
             artworkUrl = md?.artworkUri?.toString().orEmpty(),
+            artistId = md?.extras?.getString(EXTRA_ARTIST_ID).orEmpty(),
             isPlaying = p.isPlaying,
             isBuffering = p.playbackState == Player.STATE_BUFFERING,
             positionMs = p.currentPosition,
@@ -202,6 +214,7 @@ class PlayerController(
 
     fun play(songs: List<Song>, startIndex: Int = 0, shuffle: Boolean = false) {
         if (songs.isEmpty()) return
+        _openPlayer.tryEmit(Unit)
         withController { c ->
             c.shuffleModeEnabled = shuffle
             c.setMediaItems(songs.map { it.toMediaItem() }, startIndex.coerceIn(0, songs.lastIndex), 0L)
