@@ -13,13 +13,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
     }
 
     // Build only one APK: arm64-v8a. No universal APK is produced.
+    // (Don't also set ndk abiFilters here; Gradle rejects using both.)
     splits {
         abi {
             isEnable = true
